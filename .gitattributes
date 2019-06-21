@@ -1,3 +1,0 @@
-* linguist-vendored
-*.mb linguist-vendored=false
-*.* linguist-language=Basic
