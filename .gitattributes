@@ -1,1 +1,3 @@
-*.* linguist-language=sql
+* linguist-vendored
+*.mb linguist-vendored=false
+*.* linguist-language=mapbasic
