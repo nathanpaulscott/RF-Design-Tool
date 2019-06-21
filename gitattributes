@@ -1,0 +1,3 @@
+* linguist-vendored
+*.mbp linguist-vendored=false
+*.mb linguist-vendored=false
