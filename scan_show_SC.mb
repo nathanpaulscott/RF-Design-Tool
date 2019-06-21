@@ -1,0 +1,621 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub scan_show_SC_sub
+Declare Sub scan_pre_show_SC_sub
+Declare Sub scan_choose_data_type_sub
+Declare Sub scan_import_3G_scan_sub
+Declare Sub scan_set_3G_scan_assoc_sub
+Declare Sub add_nbr_sub
+Declare Sub del_nbr_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+
+
+
+
+'---------------------------------------------------
+' Makes some adustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub scan_pre_show_SC_sub
+Dim host_val, input_filename As String
+Dim i_win_id As String
+Dim i, j, k, x, y, z As Integer
+Dim need_to_exit As Logical
+
+
+
+	need_to_exit = False
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+OnError Goto closed1
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		Fetch First From nbrs_RFDT
+		host_val = nbrs_RFDT.cell
+	End If
+	
+point1:
+	
+
+	'This tests for and makes sure scan_3G is open
+	'------------------------------------------------	
+OnError Goto closed4
+	If TableInfo(scan_3G, TAB_INFO_NAME) <> "" Then
+		If user_path_scan_3G = "not set" Then
+			input_filename = TableInfo(scan_3G, TAB_INFO_TABFILE)
+			user_path_scan_3G = PathToDirectory$(input_filename)
+		End If
+	Else
+point4:
+		input_filename = FileOpenDlg("","Scan_3G","TAB","Please select the 3G scan table...")
+		If input_filename = "" Then
+			Exit Sub
+		End If
+		user_path_scan_3G = PathToDirectory$(input_filename)
+		Open Table "scan_3G"
+	End If
+
+	'This tests to make sure the table for scan variable is set
+	'--------------------------------------------------------------
+	For j = 1 to 10
+		If sys(j) = "" Then
+			Call scan_set_3G_scan_assoc_sub
+			need_to_exit = True
+			Exit For
+		ElseIf table_for_3G_scan = cells_sys(j) AND NOT table_for_3G_scan = "" Then
+			Exit For
+		End If
+	Next
+
+	'This makes sure we have chosen EcIo or RSCP, once a selection has been made, it will not prompt again, you change it through the right click menu"
+	'--------------------------------------------------
+	If 	NOT EcIo_or_RSCP = Any("EcIo","RSCP") Then
+		EcIo_or_RSCP = "RSCP"
+	End If
+
+	If need_to_exit Then
+		'needs to exit sub as we get an error due to the user clicking in the dialog, need to get them to reclick
+		Note "As you just changed system data, please reselect the cell again"	
+		Exit Sub
+	End If
+
+	Call check_tables_sub
+
+	Call scan_show_SC_sub
+
+OnError Goto closed2
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+	End If
+point2:
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+	Exit Sub
+
+
+'----------------------------------------
+Closed1:
+Resume point1
+
+Closed2:
+host_val = "nul"
+Resume point2
+
+Closed4:
+Resume point4
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this lets the user click on a cell and it shows a thermatic map of the that cells SC RSCP or EcIo
+'---------------------------------------------------
+Sub scan_show_SC_sub
+Dim x, y, x2, y2, size0, size1 As Float
+Dim num_layer, host_SC, num_rows, blank_space_num, host_row_id, nbr_row_id, count, i, j, k, i_found, i_row_id, i_win_id, sysind_selected As Integer
+Dim val1, val2, val3, table_selected_alias, nbr, cell_data_alias as Alias
+Dim sel, sel2, sel3 as object
+Dim layer_name, tabname, line_deleted_flag, finished_flag, layer1, found_blank, match_val, match_rxlev, nbr_val, host_cell, table_selected, sitex, namex, cellx, pnx, bsicx, zcrsx, typex, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, latx, lonx As String
+Dim c_click, select_ok As Logical
+Dim table_name_full As String
+Dim layer_type As Integer
+
+
+
+OnError GoTo general_error
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+	' this checks that the front window is a mapper
+	'---------------------------------------------------
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the point where the user clicked.
+	'---------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	c_click = CommandInfo(CMD_INFO_CTRL)
+
+	' the user is using the point-mode tool (this is set in the dialog in main_sub), determine how many objects are at the chosen point.
+	'---------------------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+	If i_found = 0 Then
+		'do nothing
+	Else
+		'If the CTRL key was held down while clicking, we show the cell info only
+		'-----------------------------------------------------------------------
+		If c_click = True Then
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+
+				' this tests to see which table is open and then which has been selected
+				'-------------------------------------
+				select_ok = False
+				For j = 1 to 10
+					If sys(j) = "" Then
+						Exit For
+					ElseIf table_selected = cells_sys(j) Then
+						select_ok = True
+						Exit For
+					End If
+				Next
+
+				
+				' Fetch the row of the object the user clicked on.
+				'------------------------------------------------------
+				If select_ok = True Then
+					Fetch rec i_row_id From table_selected
+						cell_data_alias = table_selected + ".Site"
+						sitex =  cell_data_alias
+						cell_data_alias = table_selected + ".Sitename"
+						namex = cell_data_alias
+						cell_data_alias = table_selected + ".Cell"
+						cellx = cell_data_alias
+						cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+						pnx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_BSIC"
+						bsicx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_Cnt"
+						zcrsx = cell_data_alias
+						cell_data_alias = table_selected + ".HT"
+						htx = cell_data_alias
+						cell_data_alias = table_selected + ".AZ"
+						azx = cell_data_alias
+						cell_data_alias = table_selected + ".MDT"
+						mdtx = cell_data_alias
+						cell_data_alias = table_selected + ".EDT"
+						edtx = cell_data_alias
+						cell_data_alias = table_selected + ".STATUS"
+						statusx = cell_data_alias
+						cell_data_alias = table_selected + ".Comment"
+						commentx = cell_data_alias
+						cell_data_alias = table_selected + ".ANT_HBW"
+						hbwx = cell_data_alias
+						cell_data_alias = table_selected + ".OBJ_SIZE"
+						sizex = cell_data_alias
+						cell_data_alias = table_selected + ".Type"
+						typex = cell_data_alias
+
+					Dialog Title "View Cells Parameters" width 180 height 290	 Position 20,40
+					Control GroupBox
+					Title "Cell Details" 
+					Position 10, 10 Width 160 Height 55
+					Control StaticText
+					Title "Site:" Position 15, 20
+					Control StaticText
+					Title sitex Position 75, 20
+					Control StaticText
+					Title "Site Name:" Position 15, 35
+					Control StaticText
+					Title namex Position 75, 35
+					Control StaticText
+					Title "Cell ID:" Position 15, 50
+					Control StaticText
+					Title cellx Position 75, 50
+					Control StaticText
+					Title "Pci/Sc/Pn/Bcch:" Position 15, 75
+					Control StaticText
+					Title pnx Position 75, 75 
+					Control StaticText
+					Title "Zcrs/Bsic:" Position 15, 90
+					Control StaticText
+					Title bsicx Position 75, 90
+					Control StaticText
+					Title "Cnt:" Position 110, 90
+					Control StaticText
+					Title zcrsx Position 125, 90
+					Control StaticText
+					Title "Azimuth (deg):" Position 15, 105
+					Control StaticText
+					Title azx Position 75, 105
+					Control StaticText
+					Title "Ant HBW (deg):" Position 15, 120
+					Control StaticText
+					Title hbwx Position 75, 120
+					Control StaticText
+					Title "Object Size (m):" Position 15, 135
+					Control StaticText
+					Title sizex Position 75, 135
+					Control StaticText
+					Title "Height (m/ft):" Position 15, 150
+					Control StaticText
+					Title htx Position 75, 150
+					Control StaticText
+					Title "MDT (deg):" Position 15, 165
+					Control StaticText
+					Title mdtx Position 75, 165
+					Control StaticText
+					Title "EDT (deg):" Position 15, 180
+					Control StaticText
+					Title edtx Position 75, 180
+					Control StaticText
+					Title "Status:" Position 15, 195
+					Control StaticText
+					Title statusx Position 75, 195
+					Control StaticText
+					Title "Comments:" Position 15, 210
+					Control StaticText
+					Title Commentx Position 75, 210
+					Control StaticText
+					Title "Type:" Position 15, 225
+					Control StaticText
+					Title typex Position 75, 225
+
+					Control OKButton
+					Position 60, 250
+
+					If CommandInfo(CMD_INFO_DLG_OK) = True Then
+						Exit Sub
+					End If
+				End If
+			Next
+
+		' This is regular mode
+		'---------------------------------------------------
+		Else
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			Set Map Redraw Off
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				If table_selected = table_for_3G_scan Then			'we need to process
+					'This deletes any previous per SC RSCP/EcIo plots in the mapper => NOTE: it removes all files from the hard drive
+					'----------------------------------------------------------------------------------------------------------------------
+					k = FrontWindow()
+					j = WindowID(k)
+					num_layer = MapperInfo(j, Mapper_Info_Layers)          'j will always be the active mapper window id
+					If scan_tab_delete_flag Then
+						For x = 1 to num_layer
+							If x > MapperInfo(j, Mapper_Info_Layers) Then
+								Exit For
+							End If
+							layer_name = LayerInfo(j,x,Layer_Info_Name)
+							layer_type = LayerInfo(j,x,Layer_Info_Type)
+							If layer_type = 0 AND Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_SC") > 0 AND (Instr(1,layer_name,"_EcIo") > 0 OR Instr(1,layer_name,"_RSCP") > 0) Then   'we have a previous SC layer
+								table_name_full = user_path_scan_3G & layer_name
+								Close Table layer_name
+								If FileExists(table_name_full & ".TAB") Then
+									Kill table_name_full & ".tab"	 
+									If FileExists(table_name_full & ".dat") Then
+										Kill table_name_full & ".dat"	 
+									End If 
+									If FileExists(table_name_full & ".id") Then
+										Kill table_name_full & ".id"	 
+									End If 
+									If FileExists(table_name_full & ".map") Then
+										Kill table_name_full & ".map"	 
+									End If 
+									If FileExists(table_name_full & ".ind") Then
+										Kill table_name_full & ".ind"	 
+									End If 
+								End If
+								If FileExists(table_name_full & ".csv") Then
+									Kill table_name_full & ".csv"	 
+								End If 
+							End If
+						Next
+					Else
+						'This turns off the display of any previous EcIo or RSCP plots
+						'----------------------------------------------------------------
+						For x = 1 to num_layer
+							layer_name = LayerInfo(j,x,Layer_Info_Name)
+							If Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_SC") > 0 AND (Instr(1,layer_name,"_EcIo") > 0 OR Instr(1,layer_name,"_RSCP") > 0) Then   'we have a previous SC layer
+								Set Map Layer layer_name Display Off
+							End If
+						Next
+					End If
+
+					'gets the index of the table selected
+					'-------------------------------------
+					For j = 1 to 10
+						If sys(j) = "" Then
+							Exit For
+						ElseIf table_selected = cells_sys(j) Then
+							sysind_selected = j
+							Exit For
+						End If
+					Next
+
+					' Get the row ID number of the object that was a hit.
+					'------------------------------------------------------
+					i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+					'if the point clicked on contains an object of the table cells_sys(sysind_selected), we process it
+					'---------------------------------------------------
+					host_row_id = i_row_id
+
+					Call prepare_nbr_sub
+
+					Select * From table_selected Where rowid = i_row_id into query1 NoSelect
+					Commit Table query1 As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+					Close Table query1
+					Open Table pf_user_path & "nbrs_RFDT.TAB"
+					Add Map Layer nbrs_RFDT
+
+					' this changes the display properties of the host object in the nbrs_RFDT table
+					'--------------------------------------
+					Fetch First from nbrs_RFDT
+						sel = nbrs_RFDT.obj
+						x = centroidx(nbrs_RFDT.obj)
+						y = centroidy(nbrs_RFDT.obj)
+						size0 = nbrs_RFDT.Obj_Size
+						host_SC = nbrs_RFDT.PCI_SC_BCCH_PN
+						host_cell = nbrs_RFDT.cell
+						sitex =  nbrs_RFDT.Site
+						namex = nbrs_RFDT.Sitename
+						cellx = nbrs_RFDT.Cell
+						pnx = nbrs_RFDT.PCI_SC_BCCH_PN
+						bsicx = nbrs_RFDT.ZCRS_BSIC
+						azx = nbrs_RFDT.AZ
+						hbwx = nbrs_RFDT.ANT_type
+						mdtx = nbrs_RFDT.MDT
+						edtx = nbrs_RFDT.EDT
+						htx = nbrs_RFDT.HT
+						commentx = nbrs_RFDT.Comment
+						lonx = nbrs_RFDT.LON
+						latx = nbrs_RFDT.LAT
+
+					Alter Object sel 
+						Info OBJ_INFO_BRUSH, brush_host(sysind_selected)
+						Info OBJ_INFO_PEN, pen_host(sysind_selected)
+					Update nbrs_RFDT
+						set obj = sel where rowid = 1
+
+					' this is the engine for going through the sys(x) scan data and making a thermatic map of that particular SC
+					'----------------------------------------------------------------------------------------------------------------
+					If EcIo_or_RSCP = "RSCP" Then
+						Select LONGITUDE, LATITUDE, RSCP_1 From scan_3G where scan_3G.SC_1 = host_SC into query1 NoSelect
+
+						If TableInfo(query1,Tab_Info_Nrows) = 0 Then
+							Close Table query1
+							Exit Sub
+						End If
+
+						tabname = "CELL_" & cellx & "_SC" & host_SC & "_RSCP"
+
+						' need to do a check here to see if this table is already open, if so, close it first
+						'---------------------------------------------
+OnError GoTo closed1
+						If TableInfo(tabname, TAB_INFO_NAME) <> "" Then
+							run command "Close Table " & tabname
+						End  If
+returnpoint1:
+OnError GoTo general_error
+
+						Commit table query1 As user_path_scan_3G & tabname & ".TAB" TYPE NATIVE Charset "WindowsLatin1"
+						Close Table query1
+						Open Table user_path_scan_3G + tabname + ".TAB"
+
+						'This adds the Site Specific Data to the table (for model calibration)
+						'-------------------------------------------------------------------
+						Alter Table tabname (Add Site Char(100), Sitename Char(100), Cell Char(100), SC Char(100), Site_Lon Char(100), Site_Lat Char(100), Az Char(100), Ant_type Char(100), MDT Char(100), EDT Char(100), Ht Char(100), Comment Char(300) order LONGITUDE, LATITUDE, RSCP_1)
+						Update tabname 
+							Set LONGITUDE = CentroidX(obj)
+						Update tabname 
+							Set LATITUDE = CentroidY(obj)
+						Update tabname
+							Set Site = sitex, Sitename = namex, Cell = cellx, SC = pnx, Site_Lon = lonx, Site_Lat = latx, Az = azx, Ant_type = hbwx, MDT = mdtx, EDT = edtx, Ht = htx, Comment = commentx
+							Where Rowid = 1
+						Commit Table tabname
+
+						Run Command "Add Map Layer " & tabname
+
+						k = FrontWindow()
+						j = WindowID(k)
+
+						shade window j 1 with RSCP_1 ignore 0 ranges apply color use all Symbol (35,13684944,24)  
+'							-110: -100 Brush (2,13684944,16777215) Pen (1,2,0) Symbol (35,13684944,24) ,
+'							-100: -90 Brush (2,128,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+'							-90: -80 Brush (2,255,16777215) Pen (1,2,0) Symbol (35,255,24) ,
+'							-80: -70 Brush (2,65280,16777215) Pen (1,2,0) Symbol (35,65280,24) ,
+'							-70: -60 Brush (2,16776960,16777215) Pen (1,2,0) Symbol (35,16776960,24) ,
+'							-60: -50 Brush (2,16744448,16777215) Pen (1,2,0) Symbol (35,16744448,24) ,
+'							-50: -40 Brush (2,16711680,16777215) Pen (1,2,0) Symbol (35,16711680,24) ,
+'							-40: 0 Brush (2,8388608,16777215) Pen (1,2,0) Symbol (35,8388608,24) 
+
+							-130: -125 Brush (2,D_GREY,16777215) Pen (1,2,0) Symbol (35,D_GREY,24) ,
+							-125: -120 Brush (2,GREY,16777215) Pen (1,2,0) Symbol (35,GREY,24) ,
+							-120: -105 Brush (2,RED,16777215) Pen (1,2,0) Symbol (35,RED,24) ,
+							-105: -95 Brush (2,PINK,16777215) Pen (1,2,0) Symbol (35,PINK,24) ,
+							-95: -85 Brush (2,YELLOW,16777215) Pen (1,2,0) Symbol (35,YELLOW,24) ,
+							-85: -75 Brush (2,GREEN,16777215) Pen (1,2,0) Symbol (35,GREEN,24) ,
+							-75: -65 Brush (2,D_GREEN,16777215) Pen (1,2,0) Symbol (35,D_GREEN,24) ,
+							-65: -55 Brush (2,BLUE,16777215) Pen (1,2,0) Symbol (35,BLUE,24) ,
+							-55: -45 Brush (2,L_BLUE,16777215) Pen (1,2,0) Symbol (35,L_BLUE,24), 
+							-45: 0 Brush (2,LL_BLUE,16777215) Pen (1,2,0) Symbol (35,LL_BLUE,24) 
+
+							default Brush (2,16777215,16777215) Pen (1,2,0) 
+						set legend window j layer prev display on shades on symbols off lines off count on title auto Font ("Arial",0,9,0) subtitle auto Font ("Arial",0,8,0) ascending off ranges Font ("Arial",0,8,0) 
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,  
+							auto display on  
+
+						If scan_save_cw_flag Then
+							'This exports the specific SC data into a .csv file
+							'-------------------------------------
+							Export tabname Into user_path_scan_3G & tabname & ".csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+						End If
+
+					ElseIf EcIo_or_RSCP = "EcIo" Then
+						Select LONGITUDE, LATITUDE, EcIo_1 From scan_3G Where scan_3G.SC_1 = host_SC into query1 NoSelect
+
+						If TableInfo(query1,TAB_INFO_NROWS) = 0 Then
+							Close Table query1
+							Exit Sub
+						End If
+
+						tabname = "CELL_" & cellx & "_SC" & host_SC & "_EcIo"
+
+						' need to do a check here to see if this table is already open, if so, close it first
+						'---------------------------------------------
+OnError GoTo closed2
+						If TableInfo(tabname, TAB_INFO_NAME) <> "" Then
+							Run Command "Close Table " & tabname
+						End  If
+returnpoint2:
+OnError GoTo general_error
+
+						Commit table query1 As user_path_scan_3G & tabname & ".TAB" TYPE NATIVE Charset "WindowsLatin1"
+						Close Table query1
+						Open Table user_path_scan_3G & tabname & ".TAB"
+
+						'This adds the Site Specific Data to the table
+						'-------------------------------------------------------------------
+						Alter Table tabname (Add Site Char(100),Sitename Char(100),Cell Char(100), SC Char(100), Site_Lon Char(100), Site_Lat Char(100), Az Char(100), Ant_type Char(100), MDT Char(100), EDT Char(100), Ht Char(100), Comment Char(300) order LONGITUDE, LATITUDE, EcIo_1)
+						Update tabname 
+							Set LONGITUDE = CentroidX(obj)
+						Update tabname 
+							Set LATITUDE = CentroidY(obj)
+						Update tabname
+							Set Site = sitex, Sitename = namex, Cell = cellx, SC = pnx, Site_Lon = lonx, Site_Lat = latx, Az = azx, Ant_type = hbwx, MDT = mdtx, EDT = edtx, Ht = htx, Comment = commentx
+							Where Rowid = 1
+						Commit Table tabname
+
+						Run Command "Add Map Layer " & tabname
+
+						k = FrontWindow()
+						j = WindowID(k)
+
+						shade window j 1 with EcIo_1 ignore 0 ranges apply color use all Symbol (35,13684944,24)  
+
+'							0: -6 Brush (2,D_BLUE,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+'							-6: -9 Brush (2,BLUE,16777215) Pen (1,2,0) Symbol (35,255,24) ,
+'							-9: -12 Brush (2,GREEN,16777215) Pen (1,2,0) Symbol (35,65280,24) ,
+'							-12: -15 Brush (2,YELLOW,16777215) Pen (1,2,0) Symbol (35,16776960,24) ,
+'							-15: -18 Brush (2,ORANGE,16777215) Pen (1,2,0) Symbol (35,16744448,24) ,
+'							-18: -20 Brush (2,RED,16777215) Pen (1,2,0) Symbol (35,16711680,24) ,
+'							-20: -22 Brush (2,D_RED,16777215) Pen (1,2,0) Symbol (35,8388608,24) ,
+'							-22 :-100 Brush (2,D_RED,16777215) Pen (1,2,0) Symbol (35,13684944,24) 
+
+							0: -6 Brush (2,BLUE,16777215) Pen (1,2,0) Symbol (35,BLUE,24) ,
+							-6: -9 Brush (2,D_GREEN,16777215) Pen (1,2,0) Symbol (35,D_GREEN,24) ,
+							-9: -12 Brush (2,GREEN,16777215) Pen (1,2,0) Symbol (35,GREEN,24) ,
+							-12: -15 Brush (2,YELLOW,16777215) Pen (1,2,0) Symbol (35,YELLOW,24) ,
+							-15: -18 Brush (2,PINK,16777215) Pen (1,2,0) Symbol (35,PINK,24) ,
+							-18: -24 Brush (2,RED,16777215) Pen (1,2,0) Symbol (35,RED,24) ,
+							-24: -50 Brush (2,GREY,16777215) Pen (1,2,0) Symbol (35,GREY,24) ,
+							-50 :-100 Brush (2,D_GREY,16777215) Pen (1,2,0) Symbol (35,D_GREY,24) 
+
+							default Brush (2,16777215,16777215) Pen (1,2,0) 
+						set legend window j layer prev display on shades on symbols off lines off count on title auto Font ("Arial",0,9,0) subtitle auto Font ("Arial",0,8,0) ascending off ranges Font ("Arial",0,8,0) 
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on ,
+							auto display on  
+					End If
+					Exit For ' this gets out of the search loop as you have found the top sys(x) sector and coloured it
+				End If
+			Next
+		End If
+	End If
+
+returnpoint3:
+
+Exit Sub
+
+
+' Error handlers here
+'------------------------------------------
+
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+general_error:
+note "There was a problem, the error code is: " + error$()
+Resume returnpoint3
+
+End Sub
+
+'------------------------------------

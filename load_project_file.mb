@@ -1,0 +1,807 @@
+' you need to fix the system and tables names import to be more stable, it should save and read the sys numbers
+
+' You have the same type of code in the check tables sub, you need to consolidate, it is messy now.  Look at the end of this sub and the check tables sub
+' remove the questions about move or import from the check tables sub, it is shit
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub load_project_file_sub
+Declare Sub load_project_file_display_only_sub
+Declare Sub load_project_file_status_only_sub
+Declare Sub load_project_file_templates_only_sub
+Declare Sub load_project_file_settings_only_sub
+Declare Sub check_tables_sub
+Declare Sub prepare_cr_load_pf_sub
+Declare Sub prepare_nbr_sub
+Declare Sub initial_dialog_sub
+Declare Sub set_qd_templates_sub
+Declare Sub toolbar_sub
+Declare Sub x_factor2_sub
+
+
+
+
+'---------------------------------------------------
+' this sets the object display properties
+'---------------------------------------------------
+Sub load_project_file_display_only_sub
+Dim i, temp_id As Integer
+
+
+	load_display_only = True
+
+	Call load_project_file_sub
+	
+	For i = 1 to 10
+		temp_id = (i-1)*20+1
+		Alter Control temp_id Value sym_on_air(i)
+		temp_id = (i-1)*20+2
+		Alter Control temp_id Value sym_not_on_air(i)
+		temp_id = (i-1)*20+3
+		Alter Control temp_id Value pen_on_air(i)
+		temp_id = (i-1)*20+4
+		Alter Control temp_id Value brush_on_air(i)
+		temp_id = (i-1)*20+5
+		Alter Control temp_id Value pen_not_on_air(i)
+		temp_id = (i-1)*20+6
+		Alter Control temp_id Value brush_not_on_air(i)
+		temp_id = (i-1)*20+7
+		Alter Control temp_id Value font_for_cells(i)
+		temp_id = (i-1)*20+8
+		Alter Control temp_id Value font_for_sites(i)
+		temp_id = (i-1)*20+9
+		Alter Control temp_id Value pen_nbr(i)
+		temp_id = (i-1)*20+10
+		Alter Control temp_id Value brush_nbr(i)
+		temp_id = (i-1)*20+11
+		Alter Control temp_id Value pen_connector(i)
+		temp_id = (i-1)*20+12
+		Alter Control temp_id Value pen_host(i)
+		temp_id = (i-1)*20+13
+		Alter Control temp_id Value brush_host(i)
+	Next
+	If draw_cells_type = "pies" Then
+		Alter Control 200 Value 1
+	ElseIf draw_cells_type = "hexagons" Then
+		Alter Control 200 Value 2
+	ElseIf draw_cells_type = "footprints" Then
+		Alter Control 200 Value 3
+	End If
+	Alter Control 201 Value omni_factor
+	Alter Control 202 Value Z_x
+	Alter Control 203 Value Z_y
+
+	load_display_only = False
+
+End Sub
+'---------------------------------------------------
+
+
+
+'---------------------------------------------------
+' this loads settings from another project file
+'---------------------------------------------------
+Sub load_project_file_settings_only_sub
+
+
+	load_settings_only = True
+	Call load_project_file_sub
+	load_settings_only = False
+
+End Sub
+'---------------------------------------------------
+
+
+
+'---------------------------------------------------
+' this sets the object display properties
+'---------------------------------------------------
+Sub load_project_file_status_only_sub
+Dim status_chosen As Integer
+
+
+	load_status_only = True
+	Call load_project_file_sub
+	
+	status_chosen = ReadControlValue(1000)
+	Alter Control 1000
+	Title From Variable status_value()
+	Value status_chosen
+
+	load_status_only = False
+
+End Sub
+'---------------------------------------------------
+
+
+
+'---------------------------------------------------
+' this sets the site templates properties
+'---------------------------------------------------
+Sub load_project_file_templates_only_sub
+Dim template_chosen As Integer
+
+
+	load_templates_only = True
+	Call load_project_file_sub
+	
+	template_chosen = ReadControlValue(1000)
+	Alter Control 1000
+	Title From Variable t_names()
+	Value template_chosen
+
+	load_templates_only = False
+
+End Sub
+'---------------------------------------------------
+
+
+'###############################################################################################################################
+'###############################################################################################################################
+'###############################################################################################################################
+'###############################################################################################################################
+
+'---------------------------------------------------
+' this sets the object display properties
+'---------------------------------------------------
+Sub load_project_file_sub
+Dim a_s, var_name_old, var_name, var_type, var_val, line_data, pf_filename_test, pf_filename_temp, pf_user_path_temp, temp_string As String
+Dim a, b, c, d, e, f, g, h, i, j, k, pos(10), length_line, s(7) As Integer
+Dim var As Alias
+Dim in_mapper, no_mapper_flag, read_flag_names, read_flag_display, read_flag_status, read_flag_pos, read_flag_nlmax, rft_outer, rft_name, rft_sector As Logical
+Dim i_win_id, i_num_layer As Integer
+
+	
+
+returnpoint1:
+	no_mapper_flag = False
+
+Onerror Goto no_mapper_error
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+no_mapper_return:
+		i_num_layer = 0
+		no_mapper_flag = True
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		i_num_layer = MapperInfo(i_win_id, Mapper_Info_Layers)
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+OnError Goto general_error1
+
+	read_flag_names = False
+	read_flag_display = False
+	read_flag_status = False
+	read_flag_pos = False
+	rft_outer = False
+	rft_name = False
+	rft_sector = False
+
+
+	'This decides whether to do a full load or just partial data load, then gets the filename
+	'------------------------------------------------------------------------------------------
+	If NOT load_settings_only
+		AND NOT load_templates_only 
+		AND NOT load_display_only 
+		AND NOT load_status_only 
+	Then
+		' we are loading all info from the project file
+		'-----------------------------------------------
+		pf_filename = FileOpenDlg("","","pro","Please select a project file...")
+		If pf_filename = "" Then
+			Exit Sub
+		End If
+		pf_user_path = PathToDirectory$(pf_filename)
+		pf_filename_temp = pf_filename
+
+	Else  
+		' we are only reading specific info (display settings etc)
+		'-----------------------------------------------------
+		pf_filename_temp = FileOpenDlg("","","pro","Please select a project file...")
+		pf_filename_test = left$(pf_filename_temp,len(pf_filename_temp)-4) + ".pro"
+		If pf_filename_temp = "" Then
+			Exit Sub
+		End If
+
+	End If
+
+	
+	'This opens it for reading
+	'--------------------------------
+	Open File pf_filename_temp For Input As #1
+	Do While Not EOF(1)
+		Line Input #1, line_data
+		line_data = LTrim$(line_data)                  ' this removes spaces from the beginning of the line		
+		line_data = RTrim$(line_data)					  ' this removes spaces from the end of the line
+		length_line = len(line_data)
+
+		'This reads the project settings, they are ordered into sections with headers and footers
+		'--------------------------------------------------------------
+		'This is the Table info section
+		'-------------------------------------		
+		If 	NOT load_settings_only 
+			AND NOT load_templates_only
+			AND NOT load_display_only
+			AND NOT load_status_only
+			AND (line_data = "Table Names And Locations" Or read_flag_names) 
+		Then
+			If line_data = "Table Names and Locations" Then 
+				read_flag_names = True
+				s(1) = 1
+				s(2) = 1				
+				s(3) = 1
+				s(4) = 1
+				s(5) = 1
+				s(6) = 1
+				s(7) = 1
+
+			ElseIf line_data = "End of Section" Then
+				read_flag_names = False
+
+			ElseIf read_flag_names And Left$(line_data,10) <> "----------" Then
+				If left$(line_data,6) = "System" Then
+					sys(s(1)) = right$(line_data,length_line - 8)				
+					s(1) = s(1) + 1
+				ElseIf left$(line_data,16) = "Cells Table Name" Then
+					cells_sys(s(2)) = right$(line_data,length_line - 18)				
+					s(2) = s(2) + 1
+				ElseIf left$(line_data,16) = "Sites Table Name" Then
+					sites_sys(s(3)) = right$(line_data,length_line - 18)				
+					s(3) = s(3) + 1
+				ElseIf left$(line_data,16) = "Cells Map Status" Then			'this reads and sets the cells map status
+					cells_map_status(s(4)) = right$(line_data,length_line - 18)				
+					If i_num_layer > 0 AND sys(s(1)-1) <> "" Then
+						in_mapper = False
+						For j = 1 to i_num_layer
+							If LayerInfo(i_win_id, j, LAYER_INFO_NAME) = cells_sys(s(2)-1) Then
+								in_mapper = True
+								If Not cells_map_status(s(4)) Then        'Then it is in the mapper but shouldn't be
+									Remove Map Layer cells_sys(s(2)-1)
+								End If
+							End If
+						Next
+						If Not in_mapper Then			'the table is not in the mapper so we add it
+OnError Goto not_open1
+							Add Map Layer cells_sys(s(2)-1)
+not_open1_returnpoint:
+OnError Goto general_error1
+						End If
+					End If
+					s(4) = s(4) + 1
+				ElseIf left$(line_data,20) = "Cells Display Status" Then		'this reads and sets the cells display status
+					cells_display_status(s(5)) = right$(line_data,length_line - 22)				
+					If i_num_layer > 0  AND sys(s(1)-1) <> "" Then
+						For j = 1 to i_num_layer
+							If LayerInfo(i_win_id, j, LAYER_INFO_NAME) = cells_sys(s(2)-1) Then
+								If cells_display_status(s(5)) Then
+									Set Map Layer j Display Graphic
+								Else
+									Set Map Layer j Display Off
+								End If
+							End If
+						Next
+					End If
+					s(5) = s(5) + 1
+				ElseIf left$(line_data,16) = "Sites Map Status" Then			'this reads and sets the sites map status
+					sites_map_status(s(6)) = right$(line_data,length_line - 18)				
+					If i_num_layer > 0  AND sys(s(1)-1) <> "" Then
+						in_mapper = False
+						For j = 1 to i_num_layer
+							If LayerInfo(i_win_id, j, LAYER_INFO_NAME) = sites_sys(s(2)-1) Then
+								in_mapper = True
+								If Not sites_map_status(s(6)) Then        'Then it is in the mapper but shouldn't be
+									Remove Map Layer sites_sys(s(2)-1)
+								End If
+							End If
+						Next
+						If Not in_mapper Then			'the table is not in the mapper so we add it
+OnError Goto not_open2
+							Add Map Layer sites_sys(s(2)-1)
+not_open2_returnpoint:
+OnError Goto general_error1
+						End If
+					End If
+					s(6) = s(6) + 1
+				ElseIf left$(line_data,20) = "Sites Display Status" Then			'this reads and sets the sites display status
+					sites_display_status(s(7)) = right$(line_data,length_line - 22)				
+					If i_num_layer > 0  AND sys(s(1)-1) <> "" Then
+						For j = 1 to i_num_layer
+							If LayerInfo(i_win_id, j, LAYER_INFO_NAME) = sites_sys(s(2)-1) Then
+								If sites_display_status(s(7)) Then
+									Set Map Layer j Display Graphic
+								Else
+									Set Map Layer j Display Off
+								End If
+							End If
+						Next
+					End If
+					s(7) = s(7) + 1
+				End If
+			End If
+				
+		'This is the display props section
+		'-------------------------------------					
+		ElseIf NOT load_templates_only 
+				AND	NOT load_status_only 
+				AND (line_data = "Display Properties" Or read_flag_display)
+		Then
+			If line_data = "Display Properties" Then 
+				read_flag_display = True
+			ElseIf line_data = "End of Section" Then
+				read_flag_display = False
+			ElseIf read_flag_display And Left$(line_data,10) <> "----------" Then
+				pos(7) = InStr(1,line_data,Chr$(32))
+				pos(8) = InStr(pos(7)+1,line_data,Chr$(32))	
+				var_type = mid$(line_data, pos(7)+1, pos(8)-pos(7)-1)
+				var_val =	right$(line_data,length_line - pos(8))
+				var_name = left$(line_data,pos(7)-1)
+
+				For i = 1 to 10
+					If var_name = "sym_on_air(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(pos(3)+1,line_data,Chr$(44))
+						pos(5) = InStr(pos(4)+1,line_data,Chr$(44))
+						pos(6) = InStr(pos(5)+1,line_data,Chr$(44))
+						pos(7) = InStr(1,line_data,Chr$(41))
+						pos(7) = InStr(pos(7)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						temp_string = mid$(line_data, pos(4)+1, pos(5)-pos(4)-1)
+						temp_string = Left$(temp_string,Len(temp_string) - 1)
+						temp_string = Right$(temp_string,Len(temp_string) - 1)
+ 						d = val(mid$(line_data, pos(5)+1, pos(6)-pos(5)-1))
+						e = val(mid$(line_data, pos(6)+1, pos(7)-pos(6)-1))
+						If pos(4) > 0 Then			'it is a truetype fontsymbol
+							sym_on_air(i) = MakeFontSymbol(a,b,c,temp_string,d,e)
+						Else  				'its an old style symbol
+							pos(1) = InStr(1,line_data,Chr$(40))
+							pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+							pos(2) = InStr(1,line_data,Chr$(44))
+							pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+							pos(4) = InStr(1,line_data,Chr$(41))
+							pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+							a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+							b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+							c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+							sym_on_air(i) = MakeSymbol(a,b,c)   'this is the old way
+						End If
+						Exit For
+					ElseIf var_name = "sym_not_on_air(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(pos(3)+1,line_data,Chr$(44))
+						pos(5) = InStr(pos(4)+1,line_data,Chr$(44))
+						pos(6) = InStr(pos(5)+1,line_data,Chr$(44))
+						pos(7) = InStr(1,line_data,Chr$(41))
+						pos(7) = InStr(pos(7)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						temp_string = mid$(line_data, pos(4)+1, pos(5)-pos(4)-1)
+						temp_string = Left$(temp_string,Len(temp_string) - 1)
+						temp_string = Right$(temp_string,Len(temp_string) - 1)
+ 						d = val(mid$(line_data, pos(5)+1, pos(6)-pos(5)-1))
+						e = val(mid$(line_data, pos(6)+1, pos(7)-pos(6)-1))
+						If pos(4) > 0 Then			'it is a truetype fontsymbol
+							sym_not_on_air(i) = MakeFontSymbol(a,b,c,temp_string,d,e)
+						Else  				'its an old style symbol
+							pos(1) = InStr(1,line_data,Chr$(40))
+							pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+							pos(2) = InStr(1,line_data,Chr$(44))
+							pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+							pos(4) = InStr(1,line_data,Chr$(41))
+							pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+							a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+							b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+							c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+							sym_not_on_air(i) = MakeSymbol(a,b,c)   'this is the old way
+						End If
+						Exit For
+					ElseIf var_name = "pen_on_air(" & i & ")"  Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						pen_on_air(i) = MakePen(a,b,c)
+						Exit For
+					ElseIf var_name = "brush_on_air(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						brush_on_air(i) = MakeBrush(a,b,c)
+						Exit For
+					ElseIf var_name = "pen_not_on_air(" & i & ")"  Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						pen_not_on_air(i) = MakePen(a,b,c)
+						Exit For
+					ElseIf var_name = "brush_not_on_air(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						brush_not_on_air(i) = MakeBrush(a,b,c)
+						Exit For
+					ElseIf var_name = "font_for_cells(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(pos(3)+1,line_data,Chr$(44))
+						pos(5) = InStr(pos(4)+1,line_data,Chr$(44))
+						pos(6) = InStr(1,line_data,Chr$(41))
+						pos(6) = InStr(pos(6)+1,line_data,Chr$(41))				' need this to get past the first )
+						a_s = mid$(line_data, pos(1)+2, pos(2)-pos(1)-3)
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						d = val(mid$(line_data, pos(4)+1, pos(5)-pos(4)-1))
+						e = val(mid$(line_data, pos(5)+1, pos(6)-pos(5)-1))
+						font_for_cells(i) = MakeFont(a_s,b,c,d,e)
+						Exit For
+					ElseIf var_name = "font_for_sites(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(pos(3)+1,line_data,Chr$(44))
+						pos(5) = InStr(pos(4)+1,line_data,Chr$(44))
+						pos(6) = InStr(1,line_data,Chr$(41))
+						pos(6) = InStr(pos(6)+1,line_data,Chr$(41))				' need this to get past the first )
+						a_s = mid$(line_data, pos(1)+2, pos(2)-pos(1)-3)
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						d = val(mid$(line_data, pos(4)+1, pos(5)-pos(4)-1))
+						e = val(mid$(line_data, pos(5)+1, pos(6)-pos(5)-1))
+						font_for_sites(i) = MakeFont(a_s,b,c,d,e)
+						Exit For
+					ElseIf var_name = "pen_nbr(" & i & ")"  Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						pen_nbr(i) = MakePen(a,b,c)
+						Exit For
+					ElseIf var_name = "brush_nbr(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						brush_nbr(i) = MakeBrush(a,b,c)
+						Exit For
+					ElseIf var_name = "pen_connector(" & i & ")"  Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						pen_connector(i) = MakePen(a,b,c)
+						Exit For
+					ElseIf var_name = "pen_host(" & i & ")"  Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						pen_host(i) = MakePen(a,b,c)
+						Exit For
+					ElseIf var_name = "brush_host(" & i & ")" Then
+						pos(1) = InStr(1,line_data,Chr$(40))
+						pos(1) = InStr(pos(1)+1,line_data,Chr$(40))           ' need this to get past the first (
+						pos(2) = InStr(1,line_data,Chr$(44))
+						pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+						pos(4) = InStr(1,line_data,Chr$(41))
+						pos(4) = InStr(pos(4)+1,line_data,Chr$(41))				' need this to get past the first )
+						a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+						b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+						c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+						brush_host(i) = MakeBrush(a,b,c)
+						Exit For
+					ElseIf var_name = "draw_cells_type" Then
+						draw_cells_type = var_val
+						Exit For
+					ElseIf var_name = "omni_factor" Then
+						omni_factor = var_val
+						Exit For
+					ElseIf var_name = "Z_x" Then
+						Z_x = var_val
+						Exit For
+					ElseIf var_name = "Z_y" Then
+						Z_y = var_val
+						Exit For
+					End If
+				Next
+			End If			
+
+
+
+		'This is the status section
+		'-----------------------------------
+		ElseIf NOT load_templates_only 
+				AND NOT load_display_only 
+				AND	(line_data = "Status Definitions" Or read_flag_status) 
+		Then
+			If line_data = "Status Definitions" Then 
+				read_flag_status = True
+				For i = 1 to 100
+					status_value(i) = ""
+				Next
+				i = 1
+			ElseIf line_data = "End of Section" Then
+				read_flag_status = False
+			ElseIf read_flag_status = True and Left$(line_data,10) <> "----------" Then
+				status_value(i) = line_data
+				i = i + 1
+			End If
+
+		'This is the templates section 		=> rft = read flag templates
+		'--------------------------------------------------------------------
+		ElseIf NOT load_status_only 
+				AND NOT load_display_only 
+				AND	(line_data = "Template Definitions" OR rft_outer)
+		Then
+
+			'Now we are in the template reading section
+			'-------------------------------------------------
+			If line_data = "Template Definitions" Then
+				rft_outer = True
+				For i = 1 to 20
+					t_names(i) = ""
+				Next
+				For i = 1 to 1320
+					t_values(i) = ""
+				Next
+				i = 0
+			ElseIf line_data = "End of Section" Then
+				rft_outer = False
+
+				'This updates the right click quick design menu as we have new vals for the templates
+				'---------------------------------------------------------------------------------------
+				Call set_qd_templates_sub
+
+			ElseIf line_data = "Template"
+					OR rft_name
+					OR rft_sector 
+			Then 
+				'Now we are in the specific template reading section
+				'-----------------------------------------------------
+				If line_data = "Template" Then
+					rft_name = True
+					i = i + 1
+					j = 1
+				ElseIf line_data = "End Of Template" Then  'here we exit from 1 template
+					rft_sector = False
+					rft_name = False
+				ElseIf rft_name AND Left$(line_data,10) <> "----------" Then
+					t_names(i) = line_data
+					rft_name = False
+					rft_sector = True
+				ElseIf rft_sector AND Left$(line_data,10) <> "----------" Then
+					t_values((i-1)*66 + j) = line_data
+					j = j + 1
+				End If
+			End If
+
+		'This is the toolbar position section
+		'---------------------------------------
+		ElseIf NOT load_templates_only 
+				AND NOT load_display_only
+				AND	(line_data = "Toolbar Position" Or read_flag_pos) 
+		Then
+			If line_data = "Toolbar Position" Then 
+				read_flag_pos = True
+				i = 1
+			ElseIf line_data = "End of Section" Then
+				read_flag_pos = False
+			ElseIf read_flag_pos = True and Left$(line_data,10) <> "----------" Then
+				If i = 1 Then
+					toolbar_position_x = line_data
+					i = 2
+				ElseIf i = 2 then
+					toolbar_position_y = line_data
+				End If
+			End If
+
+		'This is the NL max size section
+		'------------------------------------
+		ElseIf NOT load_templates_only 
+				AND NOT load_display_only
+				AND	(line_data = "NL Max Size" Or read_flag_nlmax) 
+		Then
+			If line_data = "NL Max Size" Then 
+				read_flag_nlmax = True
+				i = 1
+			ElseIf line_data = "End of Section" Then
+				read_flag_nlmax = False
+			ElseIf read_flag_nlmax = True and Left$(line_data,10) <> "----------" Then
+				g_nl_max_size(i) = Val(line_data)
+				i = i + 1
+			End If
+		End If
+	Loop
+
+	Close File #1
+
+
+'It doesn't add all the available tables to the mapper if they are no on it
+
+	' This section looks at the files and locations specified in the project file and 
+	' makes sure they are open and that any files open with the same names are closed first
+	'------------------------------------------------------------------------------------
+	If NOT load_templates_only 
+		AND NOT load_display_only
+		AND NOT load_status_only
+		AND NOT load_settings_only
+	Then
+		Call prepare_nbr_sub
+		check_map_display = True 
+		Call check_tables_sub         'This checks the status of the different tables (if they are open and if they are visible)
+		check_map_display = False
+
+		'This closes any erroneous files and opens the correct versions from the pf_user_path directory
+		'---------------------------------------------------------------------------------------
+		For i = 10 to 1 Step -1
+			If sys(i) <> "" AND is_open_sites_sys(i) = "Off" Then
+				' this then checks to see if the .tab, .map, .dat, .ind, .id exist in the project dir for the cells and sites tables of sys(1)
+				'------------------------------------------------------------------------
+				If 	FileExists(pf_user_path + sites_sys(i) + ".tab") = True AND
+					FileExists(pf_user_path + sites_sys(i) + ".map") = True AND
+					FileExists(pf_user_path + sites_sys(i) + ".ind") = True AND
+					FileExists(pf_user_path + sites_sys(i) + ".dat") = True AND
+					FileExists(pf_user_path + sites_sys(i) + ".id") = True Then
+
+					Open Table pf_user_path + sites_sys(i)
+					Set Table sites_sys(i) Fastedit On
+					is_open_sites_sys(i) = "On"
+
+					If no_mapper_flag = True Then				' if there was no mapper open or in front, a new one is created, otherwise it uses the existing one
+						Map From sites_sys(i)
+						no_mapper_flag = False
+					Else
+						Add Map Layer sites_sys(i)
+					End If
+	
+					temp_string = "Site"        'doing this as sometimes get an error when MI tries to create labels for the col. Site_Id even though Site is specified!?!?!?
+					Run Command "Set Map Layer " & sites_sys(i) & " Label Position Right " & font_for_sites(i) & " With " & temp_string & " Auto On Overlap On Duplicates Off Offset 8 Parallel Off"
+
+				Else       ' there are no valid sys(i) files in the project directory => we need to import
+					Note "There are no valid " & sys(i) & " tables in the project working directory, either move the files there or create a new project."
+					Call initial_dialog_sub
+					Exit Sub
+				End If
+
+			End If
+
+			If sys(i) <> "" AND is_open_cells_sys(i) = "Off" Then           ' check if the file is specified in the project file
+				' this then checks to see if the .tab, .map, .dat, .ind, .id exist in the project dir for the cells and sites tables of sys(1)
+				'------------------------------------------------------------------------
+				If 	FileExists(pf_user_path & cells_sys(i) + ".tab") = True AND
+					FileExists(pf_user_path & cells_sys(i) + ".map") = True AND
+					FileExists(pf_user_path & cells_sys(i) + ".ind") = True AND
+					FileExists(pf_user_path & cells_sys(i) + ".dat") = True AND 
+					FileExists(pf_user_path & cells_sys(i) + ".id") = True Then
+
+					Open Table pf_user_path + cells_sys(i)
+					Set Table cells_sys(i) Fastedit On
+					is_open_cells_sys(i) = "On"
+
+					If no_mapper_flag = True Then				' if there was no mapper open or in front, a new one is created, otherwise it uses the existing one
+						Map From cells_sys(i)
+						no_mapper_flag = False
+					Else
+						Add Map Layer cells_sys(i)
+					End If
+
+					temp_string = "PCI_SC_BCCH_PN"      
+					Run Command "Set Map Layer " & cells_sys(i) & " Label Position Center " & font_for_cells(i) & " With " & temp_string & " Auto Off Overlap On Duplicates On Offset 0 Parallel Off"
+
+				Else       ' there are no valid sys(i) files in the project directory => we need to import
+					Note "There are no valid " & sys(i) & " tables in the project working directory, either move the files there or create a new project."
+					Call initial_dialog_sub
+					Exit Sub
+				End If
+			
+			End If
+
+			'This is for location protection on external versions
+			'-----------------------------------------------------
+			'This is causing crashes
+			Call x_factor2_sub
+
+		Next
+		enable_toolbar = True                  ' now the toolbar is enabled as a project file has been imported
+		Call toolbar_sub
+	End If
+
+OnError Goto no_mapper_error2
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+no_mapper_return2:
+		Set ProgressBars On
+		Set Event Processing On
+	Else
+		Set ProgressBars On
+		Set Map Redraw On
+		Set Event Processing On
+	End If
+returnpoint2:
+
+Exit Sub
+
+
+'Error Handlers
+'-----------------
+not_open1:
+Resume not_open1_returnpoint
+
+not_open2:
+Resume not_open2_returnpoint
+
+no_mapper_error:
+Resume no_mapper_return
+
+no_mapper_error2:
+Resume no_mapper_return2
+
+general_error1:
+Note "There was an error loading the project, details are... " + error$()
+If Ask("Do you want to try again or continue?","Try Again","Continue") = True Then
+	Resume returnpoint1
+Else
+	Resume returnpoint2
+End if
+
+
+End Sub
+'---------------------------------------------------

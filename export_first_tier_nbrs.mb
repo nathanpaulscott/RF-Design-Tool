@@ -1,0 +1,195 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub export_first_tier_nbrs_sub
+Declare Sub ft_export_global_sub
+Declare Sub ft_export_area_sub
+Declare Sub ft_sub (ByVal table_to_use As String, ByVal sys_source As Integer, ByVal sys_target As Integer, ByVal single_cell As Logical, ByVal draw_cell As Logical, ByVal export_ft As Logical, first_tier_cells() As String)
+
+
+'---------------------------------------------------
+' this lets the user export all or a subset of the first tier nbrs to a .csv file
+'---------------------------------------------------
+Sub export_first_tier_nbrs_sub
+Dim data As String
+Dim i, j As Integer
+
+
+'	Set ProgressBars On
+'	Set Map Redraw On
+'	Set Event Processing On
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "First Tier NL Export" width 280 height 90
+
+	Control StaticText
+	Title "NOTE: it takes around 1-2s per site to process"
+	Position 10,10
+
+	Control Button
+	Title "Export First Tier NL for ALL Cells"
+	Calling ft_export_global_sub
+	Position 10, 25 Width 120
+
+	Control Button
+	Title "Export First Tier NL for an Area"
+	Calling ft_export_area_sub
+	Position 140, 25 Width 120
+
+	Control CheckBox
+	Title "  Indicate which First Tier Nbrs are NOT in the currently loaded NL"
+	Value g_ft_indicate_not_in_nl
+	Into g_ft_indicate_not_in_nl
+	Position 15,46
+	ID 1
+
+	Control OKButton
+	Position 50, 65
+	Control CancelButton
+	Position 180, 65
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Exit Sub
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+' this lets the user export all of the first tier nbrs to a .csv file
+'---------------------------------------------------
+Sub ft_export_global_sub
+Dim ftc(100) As String
+Dim i, j, k As Integer
+
+
+	g_ft_indicate_not_in_nl = ReadControlValue(1)
+
+	Print Chr$(12)
+	Print "Calculating the exporting the First Tier NL.  Please Wait...."
+	For i = 1 to 10
+		If g_ft_source_sysind(i) Then
+			For j = 1 to 10
+				If g_ft_target_sysind(j) Then
+					Call ft_sub(cells_sys(i),i,j,False,False,True,ftc)
+				End If
+			Next
+		End If
+	Next
+	Print Chr$(12)
+	Print "Done exporting."
+
+	If g_ft_indicate_not_in_nl Then
+		Note "Done.  The First Tier Nbrs have been exported and the nbrs not appearing in the loaded NL have been put in the CR table."
+	End If
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this lets the user export a subset of the first tier nbrs to a .csv file
+'---------------------------------------------------
+Sub ft_export_area_sub
+Dim filename, filename_short As String
+Dim ftc(100) As String
+Dim i, j, k As Integer
+Dim close_at_end As Logical
+Dim temp_o As Object
+Dim col_a As alias
+
+
+
+	g_ft_indicate_not_in_nl = ReadControlValue(1)
+
+	close_at_end = True
+
+	filename = FileOpenDlg("","","tab","Please select the tab file with the area to process...")
+	If filename = "" Then
+		Exit Sub
+	End If
+
+	filename_short = PathToTableName$(filename)
+
+OnError GoTo file_open_error
+	If TableInfo(filename_short, TAB_INFO_NAME) <> "" Then
+		close_at_end = False
+		Close Table filename_short
+	End If
+returnpoint1:
+OnError Goto 0
+
+	Open Table filename
+
+	If TableInfo(filename_short,TAB_INFO_NROWS) = 0 Then
+		Note "There are no objects in the selected table>  Exiting...."
+		Exit Sub		
+	End If
+	col_a = filename_short & ".obj"
+	Fetch First From filename_short
+	temp_o = col_a
+
+	If TableInfo(filename_short,TAB_INFO_NROWS) = 1 Then
+		Goto start_proc		
+	End If
+	Fetch Next From filename_short
+	Do While NOT EOT(filename_short)
+		temp_o = Combine(temp_o,col_a)	
+		Fetch Next From filename_short
+	Loop	
+
+start_proc:
+	Print Chr$(12)
+	Print "Calculating the exporting the First Tier NL.  Please Wait...."
+	For i = 1 to 10
+		If g_ft_source_sysind(i) Then
+			Select * From cells_sys(i) Where obj Within temp_o Into query1
+			If SelectionInfo(SEL_INFO_NROWS) = 0 Then
+				Close Table query1 
+				Goto skip_sys
+			End If
+			For j = 1 to 10
+				If g_ft_target_sysind(j) Then
+					Call ft_sub(query1,i,j,False,False,True,ftc)
+				End If
+			Next
+			Close Table query1 
+		End If
+skip_sys:
+	Next
+	Print Chr$(12)
+	Print "Done exporting."
+
+	If close_at_end Then
+		Close Table filename_short
+	End If
+
+	If g_ft_indicate_not_in_nl Then
+		Note "Done.  The First Tier Nbrs have been exported to '..\first_tier_cell.csv'"
+	End If
+
+Exit Sub
+'----------------------
+file_open_error:
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+

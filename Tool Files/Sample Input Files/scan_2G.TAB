@@ -1,0 +1,55 @@
+!table
+!version 300
+!charset WindowsLatin1
+
+Definition Table
+  File "2g scan data input file sample.txt"
+  Type ASCII Delimiter 09 Titles Charset "WindowsLatin1"
+  Fields 47
+    _remember_tems_doesn_t_export_l Char (3) ;
+    _COL2 Char (6) ;
+    _COL3 Char (7) ;
+    _COL4 Char (9) ;
+    _COL5 Char (8) ;
+    _COL6 Char (6) ;
+    _COL7 Char (6) ;
+    _COL8 Char (7) ;
+    _COL9 Char (6) ;
+    _COL10 Char (6) ;
+    _COL11 Char (7) ;
+    _COL12 Char (6) ;
+    _COL13 Char (6) ;
+    _COL14 Char (7) ;
+    _COL15 Char (6) ;
+    _COL16 Char (6) ;
+    _COL17 Char (7) ;
+    _COL18 Char (6) ;
+    _COL19 Char (6) ;
+    _COL20 Char (7) ;
+    _COL21 Char (6) ;
+    _COL22 Char (6) ;
+    _COL23 Char (7) ;
+    _COL24 Char (6) ;
+    _COL25 Char (6) ;
+    _COL26 Char (7) ;
+    _COL27 Char (6) ;
+    _COL28 Char (6) ;
+    _COL29 Char (7) ;
+    _COL30 Char (6) ;
+    _COL31 Char (6) ;
+    _COL32 Char (7) ;
+    _COL33 Char (7) ;
+    _COL34 Char (7) ;
+    _COL35 Char (8) ;
+    _COL36 Char (7) ;
+    _COL37 Char (7) ;
+    _COL38 Char (8) ;
+    _COL39 Char (7) ;
+    _COL40 Char (7) ;
+    _COL41 Char (8) ;
+    _COL42 Char (7) ;
+    _COL43 Char (7) ;
+    _COL44 Char (8) ;
+    _COL45 Char (7) ;
+    _COL46 Char (7) ;
+    _COL47 Char (8) ;

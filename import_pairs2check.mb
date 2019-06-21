@@ -1,0 +1,155 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub import_pairs2check_sub
+Declare Sub check_pairs2check_sub
+Declare Sub date_check_sub
+Declare Sub toolbar_sub
+
+
+'---------------------------------------------------
+' this imports a list of nbr pairs to check => same format as the import nbrlist sub
+'---------------------------------------------------
+Sub import_pairs2check_sub
+Dim sector1, center, endpnt, bore, site1 As Object
+Dim radio_temp_s, temp01, temp11, temp0, temp1, no_3G_flag, statusx, input_filename, s_title As String	 
+Dim radio_temp, row_0, i_win_id, i, j, k, k_old, count, num_sc As Integer
+Dim table_selected_alias, cell_data_alias As Alias
+Dim table_selected, cell_data As String
+Dim s_temp As String
+Dim sys_s As String
+
+
+
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+	Call check_pairs2check_sub 					'checks to see if table nbrlist is open, if so it closes it.
+	If pairs2check_statusflag Then
+		Close table pairs2check
+	End If
+
+	'this imports a tab delimited .csv file with the correct column headers and data => has to have: Host_Cell, Host_SysInd, Nbr_Cell, Nbr_SysInd....
+	'----------------------------------------------------------------------------------
+	input_filename = FileOpenDlg("","","csv","Please select the .csv file with Pairs to Review...")
+	If input_filename = "" Then
+		Exit Sub
+	End If
+	user_path_pairs2check = PathToDirectory$(input_filename)
+
+	'---------------------------------------
+
+	Print Chr$(12)
+	Print "Please Wait, Preparing for Import..."
+
+	Register Table input_filename  TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_pairs2check + "pairs2checkx.tab"
+	Open Table user_path_pairs2check + "pairs2checkx.tab"
+	Commit Table pairs2checkx As user_path_pairs2check + "pairs2check.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Open Table user_path_pairs2check + "pairs2check.tab"
+	Close Table pairs2checkx
+	If FileExists(user_path_pairs2check + "pairs2checkx.tab") = True Then
+		Kill user_path_pairs2check + "pairs2checkx.tab"
+	End If
+
+OnError Goto 0
+	Create Index On pairs2check (Host_Cell)
+	Create Index On pairs2check (Host_Sys)
+	Create Index On pairs2check (Nbr_Cell_1)
+	Create Index On pairs2check (Nbr_Sys_1)
+	Create Index On pairs2check (Nbr_Cell_2)
+	Create Index On pairs2check (Nbr_Sys_2)
+	Commit Table pairs2check
+
+	header_cnt = TableInfo(pairs2check, TAB_INFO_NCOLS) - 6
+	For i = 1 to header_cnt
+		j = i + 6
+		s_temp = "COL" + j
+		pairs2check_fields(i) = ColumnInfo(pairs2check, s_temp, COL_INFO_NAME)
+	Next
+
+	Alter Table pairs2check
+		(Modify Host_Cell Char(50), Host_Sys Char(20), Nbr_Cell_1 Char(50), Nbr_Sys_1 Char(20), Nbr_Cell_2 Char(50), Nbr_Sys_2 Char(20))
+	For i = 1 to header_cnt
+		Alter Table pairs2check 
+			(Modify pairs2check_fields(i) Char(20))
+	Next
+	Commit Table pairs2check
+
+	Select * From pairs2check Into query1 Group By Host_Sys
+	Fetch First From query1
+	Do While NOT EOT(query1)
+		sys_s = query1.Host_Sys
+		For i = 1 to 10
+			If sys(i) = "" Then
+				Note "The input file has an undefined system in Host_Sys, fix it and try again, exiting..."
+				Close Table query1
+				Goto returnpoint1
+			ElseIf sys(i) = sys_s Then
+				Exit For
+			End If	
+		Next
+		Fetch Next From query1
+	Loop
+	Close table query1
+
+	Select * From pairs2check Into query1 Group By Nbr_Sys_1
+	Fetch First From query1
+	Do While NOT EOT(query1)
+		sys_s = query1.Nbr_Sys_1
+		For i = 1 to 10
+			If sys(i) = "" Then
+				Note "The input file has an undefined system in Nbr_Sys_1, fix it and try again, exiting..."
+				Close Table query1
+				Goto returnpoint1
+			ElseIf sys(i) = sys_s Then
+				Exit For
+			End If	
+		Next
+		Fetch Next From query1
+	Loop
+	Close table query1
+
+	Select * From pairs2check Into query1 Group By Nbr_Sys_2
+	Fetch First From query1
+	Do While NOT EOT(query1)
+		sys_s = query1.Nbr_Sys_2
+		For i = 1 to 10
+			If sys(i) = "" Then
+				Note "The input file has an undefined system in Nbr_Sys_2, fix it and try again, exiting..."
+				Close Table query1
+				Goto returnpoint1
+			ElseIf sys(i) = sys_s Then
+				Exit For
+			End If	
+		Next
+		Fetch Next From query1
+	Loop
+	Close table query1
+
+	pairs2check_pointer = 0
+	
+	enable_pairs2check_arrows = true
+	Call toolbar_sub
+
+	Print Chr$(12)
+	Print "Import Successful"
+
+returnpoint1:
+
+Exit Sub
+'----------------------------------
+'Error Handlers
+'-------------------
+error1:
+Note "There is a problem with your input file, please check your input file and adjust"
+Close Table pairs2check
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+

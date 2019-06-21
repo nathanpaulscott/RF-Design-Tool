@@ -1,0 +1,304 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub define_status_sub
+Declare Sub add_status_sub
+Declare Sub remove_status_sub
+Declare Sub reset_status_sub
+Declare Sub load_project_file_status_only_sub
+Declare Sub default_status_sub
+
+
+
+'---------------------------------------------------
+' this is the engine for status definition mode
+'---------------------------------------------------
+Sub define_status_sub
+Dim i As Integer
+
+
+	'This creates the edit dialog for status editing
+	'--------------------------------------------
+	Dialog Title "Status Definition" width 300 height 305 Position 20,40
+
+	Control StaticText
+	Title "Currently Defined Status Values" Position 10, 10
+
+	Control Listbox
+	ID 1000
+	Title From Variable status_value()
+	Value 1
+	Position 10, 25 Width 190 Height 200
+
+	Control Button	
+	Title "&Add Status"
+	Calling add_status_sub
+	Position 210, 30 Width 80
+
+	Control EditText
+	ID 1001
+	Value "" Position 210, 45 Width 80
+
+	Control Button	
+	Title "&Remove Status"
+	Calling remove_status_sub
+	Position 210, 70 Width 80
+
+	Control Button	
+	Title "&Load Defaults"
+	Calling reset_status_sub
+	Position 210, 120 Width 80
+
+	Control Button	
+	Title "&Load From a Project File"
+	Calling load_project_file_status_only_sub
+	Position 205, 140 Width 90
+
+	Control OKButton
+	Position 120, 265
+
+	If CommandInfo(CMD_INFO_DLG_OK) = True Then
+		Exit Sub
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for remove status
+'---------------------------------------------------
+Sub add_status_sub
+Dim i, status_chosen As Integer
+Dim status_string, ask_string, status_new As String
+
+
+
+	
+	status_new = ReadControlValue(1001)
+
+	If len(status_new) = 0 Then
+		Exit Sub
+	End If
+
+	'This adds the new status on to the end of the current list
+	'-----------------------------------------------------------
+	i = 1
+	Do While status_value(i) <> ""
+		i = i + 1
+	Loop
+	i = i  			' now i represents the position of the nfirst blank space in the array
+
+	status_value(i) = status_new
+
+	status_chosen = ReadControlValue(1000)
+	Alter Control 1000
+	Title From Variable status_value()
+	Value status_chosen
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for remove status
+'---------------------------------------------------
+Sub remove_status_sub
+Dim i, status_chosen As Integer
+Dim ask_string As String
+
+
+
+	status_chosen = ReadControlValue(1000)
+	
+	If status_chosen = 0 or status_value(status_chosen) = "" Then
+		Exit Sub
+	End If
+
+	ask_string = "Are you sure you want to remove the status:   "+status_value(status_chosen)+" ?"
+	If 	Ask(ask_string,"Yes","Cancel") = False Then
+		Exit Sub
+	End If
+
+	'This shifts all status values up one in the list if they were behind the removed status value
+	'--------------------------------------------------------------------
+	i = 1
+	Do While status_value(i) <> ""
+		If i >= status_chosen Then
+			status_value(i) = status_value(i+1)
+		End If
+		i = i + 1
+	Loop
+
+	Alter Control 1000
+	Title From Variable status_value()
+	Value status_chosen
+	
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for resetting status
+'---------------------------------------------------
+Sub reset_status_sub
+Dim i, status_chosen As Integer
+
+
+	If Ask("Do you want to add the default values to this list or reset to default values only?","Add","Reset") Then
+		For i = 1 to 100
+			If status_value(i) = "On-Air" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "On-Air"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Fault" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Fault"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Integrated" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Integrated"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "SITAC OK" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "SITAC OK"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Waiting SITAC" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Waiting SITAC"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Need Rehunt" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Need Rehunt"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Planned" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Planned"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Audited" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Audited"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Candidate" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Candidate"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Decommissioned" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Decommissioned"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "TBD" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "TBD"				
+				Exit For
+			End If
+		Next
+		For i = 1 to 100
+			If status_value(i) = "Other" Then
+				Exit For
+			ElseIf status_value(i) = "" Then
+				status_value(i) = "Other"				
+				Exit For
+			End If
+		Next
+	Else
+		Call default_status_sub
+	End If
+
+	status_chosen = ReadControlValue(1000)
+	Alter Control 1000
+	Title From Variable status_value()
+	Value status_chosen
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine reseting to default
+'---------------------------------------------------
+Sub default_status_sub
+Dim i As Integer
+
+
+	'This resets the status_value array
+	'--------------------------------------
+	For i = 1 to 100
+		status_value(i) = ""
+	Next
+
+	status_value(1) = "On-Air"
+	status_value(2) = "Fault"
+	status_value(3) = "Integrated"
+	status_value(4) = "SITAC OK"
+	status_value(5) = "Waiting SITAC"
+	status_value(6) = "Need Rehunt"
+	status_value(7) = "Planned"
+	status_value(8) = "Audited"
+	status_value(9) = "Candidate"
+	status_value(9) = "Decommissioned"
+	status_value(10) = "TBD"
+	status_value(10) = "Other"
+
+End Sub
+'---------------------------------------------------
+

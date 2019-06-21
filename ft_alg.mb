@@ -1,0 +1,1222 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub ft_sub (ByVal table_to_use As String, ByVal sys_source As Integer, ByVal sys_target As Integer, ByVal single_cell As Logical, ByVal draw_cell As Logical, ByVal export_ft As Logical, first_tier_cells() As String)
+Declare Sub ft_prep_sub(ByVal table_to_use As String)
+Declare Function calc_bearing(ByVal x1 As Float, ByVal y1 As Float, ByVal x2 As Float, ByVal y2 As Float) As Float
+Declare Function polar_2_cart_x(ByVal x1 As Float, ByVal y1 As Float, ByVal angle As Float, ByVal length As Float) As Float
+Declare Function polar_2_cart_y(ByVal x1 As Float, ByVal y1 As Float, ByVal angle As Float, ByVal length As Float) As Float
+Declare Function calc_centroid_dist(ByVal d1 As Float, ByVal d2 As Float, ByVal a1 As Float, ByVal a2 As Float) As Float
+Declare Function calc_angle_delta(ByVal a1 As Float, ByVal a2 As Float) As Float
+Declare Function calc_mid_az(ByVal a1 As Float, ByVal a2 As Float) As Float
+Declare Function is_between_angles(ByVal a1 As Float, ByVal a2 As Float, ByVal a3 As Float) As Logical
+Declare Function calc_new_angle(ByVal a1 As Float, ByVal d As Float) As Float
+
+
+
+
+
+'---------------------------------------------------
+' this checks if tables to be used in the following sub are open, if so, it closes them
+'-----------------------------------------------------------------------------------
+Sub ft_prep_sub (ByVal table_to_use As String)
+
+If table_to_use <> "query1" Then
+OnError GoTo closed1
+	If TableInfo(query1, TAB_INFO_NAME) <> "" Then
+		Close Table query1
+	End  If	 
+returnpoint1:
+End If
+If table_to_use <> "query2" Then
+OnError GoTo closed2
+	If TableInfo(query2, TAB_INFO_NAME) <> "" Then
+		Close Table query2
+	End  If	 
+returnpoint2:
+End If
+If table_to_use <> "query3" Then
+OnError GoTo closed3
+	If TableInfo(query3, TAB_INFO_NAME) <> "" Then
+		Close Table query3
+	End  If	 
+returnpoint3:
+End If
+If table_to_use <> "query4" Then
+OnError GoTo closed4
+	If TableInfo(query4, TAB_INFO_NAME) <> "" Then
+		Close Table query4
+	End  If	 
+returnpoint4:
+End If
+OnError GoTo closed5
+	If TableInfo(query100, TAB_INFO_NAME) <> "" Then
+		Close Table query100
+	End  If	 
+returnpoint5:
+OnError GoTo closed6
+	If TableInfo(query101, TAB_INFO_NAME) <> "" Then
+		Close Table query101
+	End  If	 
+returnpoint6:
+OnError GoTo closed7
+	If TableInfo(query102, TAB_INFO_NAME) <> "" Then
+		Close Table query102
+	End  If	 
+returnpoint7:
+OnError GoTo closed8
+	If TableInfo(query103, TAB_INFO_NAME) <> "" Then
+		Close Table query103
+	End  If	 
+returnpoint8:
+OnError GoTo closed9
+	If TableInfo(query104, TAB_INFO_NAME) <> "" Then
+		Close Table query104
+	End  If	 
+returnpoint9:
+OnError GoTo closed10
+	If TableInfo(query105, TAB_INFO_NAME) <> "" Then
+		Close Table query105
+	End  If	 
+returnpoint10:
+OnError GoTo closed11
+	If TableInfo(query5, TAB_INFO_NAME) <> "" Then
+		Close Table query5
+	End  If	 
+returnpoint11:
+OnError GoTo closed12
+	If TableInfo(query6, TAB_INFO_NAME) <> "" Then
+		Close Table query6
+	End  If	 
+returnpoint12:
+OnError GoTo closed13
+	If TableInfo(query7, TAB_INFO_NAME) <> "" Then
+		Close Table query7
+	End  If	 
+returnpoint13:
+OnError GoTo closed14
+	If TableInfo(query8, TAB_INFO_NAME) <> "" Then
+		Close Table query8
+	End  If	 
+returnpoint14:
+OnError GoTo closed15
+	If TableInfo(query9, TAB_INFO_NAME) <> "" Then
+		Close Table query9
+	End  If	 
+returnpoint15:
+OnError GoTo closed16
+	If TableInfo(FT_Cand, TAB_INFO_NAME) <> "" Then
+		Close Table FT_Cand
+	End  If	 
+returnpoint16:
+
+
+
+
+	Exit Sub
+'----------------------------
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+closed3:
+Resume returnpoint3
+
+closed4:
+Resume returnpoint4
+
+closed5:
+Resume returnpoint5
+
+closed6:
+Resume returnpoint6
+
+closed7:
+Resume returnpoint7
+
+closed8:
+Resume returnpoint8
+
+closed9:
+Resume returnpoint9
+
+closed10:
+Resume returnpoint10
+
+closed11:
+Resume returnpoint11
+
+closed12:
+Resume returnpoint12
+
+closed13:
+Resume returnpoint13
+
+closed14:
+Resume returnpoint14
+
+closed15:
+Resume returnpoint15
+
+closed16:
+Resume returnpoint16
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'--------------------------------------------------------------------------------------------
+' this is the first tier nbr and best server object creation algorithm
+' you call this sub with a cells table or a selection from a cells table (even just one cell)
+' for the single cell case, it will write the first tier cells to the ourput array
+' it will only process those cells in the input table
+' for the export case, it will write all ft nbrs to an output file (for all source cells in the input selection
+' for the draw case, it will also draw the cell footprints for each cell in the input selection 
+' NOTE: a new special case has been defined = single cell + draw cell => in this case, it will only calc the footprint object for the single cell
+'-----------------------------------------------------------------------------------------------------------------
+Sub ft_sub (ByVal table_to_use As String, ByVal sys_source As Integer, ByVal sys_target As Integer, ByVal single_cell As Logical, ByVal draw_cell As Logical, ByVal export_ft As Logical, first_tier_cells() As String)
+Dim i, j, k, x, y, z, row_i As Integer
+Dim roc_f, roc_test_f, cutter_length, ang4, ang5, ang6 As Float
+Dim pie_site(1000) As String
+Dim pie_lon(1000), pie_lat(1000), pie_ang(1000), pie_dist(1000), pie_roc_up(1000), pie_roc_dn(1000) As Float			'these are for the closest nbr site found in each pie
+Dim site_obj_x(1000), site_obj_y(1000) As Float										'these are for the per site best server approx region
+Dim ft_s_site(1000), ft_cell(1000) As String												'these are for the first tier sites and first tier cells output
+Dim ft_s_lon(1000), ft_s_lat(1000), ft_s_dist(1000), ft_s_ang(1000), ft_s_roc_up(1000), ft_s_roc_dn(1000) As Float
+Dim num_rows, row_count, num_ft_sites, num_ft_cells, num_pies, num_pnts, big_gap_pie_count As Integer
+Dim pie_init_ang, pie_ang_start, pie_ang_stop, test_ang, test_dist As Float
+Dim max_dist, max_dist_site, min_dist_site, min_gap_dist As Float
+Dim source_o, source_o_cell, source_cutter, target_o, target_o_cell, target_cutter, temp_o, temp_o_cell, cell_cutter  As Object
+Dim source_ang(30), target_ang(30) As Float
+Dim source_ang_cnt, target_ang_cnt As Integer
+Dim temp_p As Pen
+Dim temp_f As Float
+Dim temp_s As String
+Dim col_a, col_b, col_c, col_d As Alias
+Dim sitex, cellx, statusx As String
+Dim data As String
+Dim single_cell_id As string
+Dim ft_ibs_site(1000) As String
+Dim ft_ibs_ang(1000), ft_ibs_dist(1000), ft_ibs_lat(1000), ft_ibs_lon(1000) As Float
+Dim ft_ibs_proc As Logical
+Dim num_ibs, next_rec As Integer
+
+
+
+
+	num_pies = 360 / g_pie_width
+	If g_big_gap_angle / g_pie_width - Fix(g_big_gap_angle / g_pie_width) > 0 Then
+		big_gap_pie_count = Fix(g_big_gap_angle / g_pie_width) + 1
+	Else
+		big_gap_pie_count = g_big_gap_angle / g_pie_width
+	End If
+
+	Call ft_prep_sub(table_to_use)
+
+	If export_ft Then
+OnError Goto file_open_error1
+		Open File pf_user_path & "first_tier_cells.csv" For Output As #1
+Onerror Goto general_error_start
+		If g_ft_indicate_not_in_nl Then
+			data = """Host_Cell"",""Host_Sys"",""Nbr_Cell"",""Nbr_Sys"",""Is_In_NL"""
+		Else
+			data = """Host_Cell"",""Host_Sys"",""Nbr_Cell"",""Nbr_Sys"""
+		End If
+		print #1, data
+	End If
+OnError Goto file_open_error2
+	Open File pf_user_path & "first_tier_log.csv" For Output As #2
+Onerror Goto general_error_start
+
+	'###############################################################################################################################################
+	'NOTE: we need to create 3 sets of queries => 1 for the selection to process, which is a subset of the source table (can be one cell to the whole source table), => 2 the whole source table and => 3 the whole target table
+	'###############################################################################################################################################
+	'query100 is the selected part of the source sys table only, grouped by Site
+	'query101 is the selected part of the source sys table only
+	'query102 is the whole source sys table grouped by Site
+	'query103 is the whole source sys table
+	'query104 is the whole target sys table grouped by Site
+	'query105 is the whole target sys table
+	'query2 is the whole target sys table ordered by site and sorted by distance to the source site
+	'--------------------------------------------------------------------------------------------
+	If single_cell Then
+		If ft_only_onair_flag Then
+			col_a = table_to_use & ".Site"
+			col_b = table_to_use & ".Status"
+			Select * From table_to_use Where col_b = "On-Air" And rowid = 1 Into query100 Group By col_a
+		Else
+			col_a = table_to_use & ".Site"
+			Select * From table_to_use Where rowid = 1 Into query100 Group By col_a
+		End If
+	Else
+		If ft_only_onair_flag Then
+			col_a = table_to_use & ".Site"
+			col_b = table_to_use & ".Status"
+			Select * From table_to_use Where col_b = "On-Air" Into query100 Group By col_a
+		Else
+			col_a = table_to_use & ".Site"
+			Select * From table_to_use Into query100 Group By col_a
+		End If
+	End If
+
+	If single_cell Then
+		If ft_only_onair_flag Then
+			col_a = table_to_use & ".Site"
+			col_b = table_to_use & ".Cell"
+			col_c = table_to_use & ".Az"
+			col_d = table_to_use & ".Status"
+			Select * From table_to_use Where col_d = "On-Air" And rowid = 1 Into query101 Order By col_a, col_b, col_c
+		Else
+			col_a = table_to_use & ".Site"
+			col_b = table_to_use & ".Cell"
+			col_c = table_to_use & ".Az"
+			Select * From table_to_use Where rowid = 1 Into query101 Order By col_a, col_b, col_c
+		End If
+	Else
+		If ft_only_onair_flag Then
+			col_a = table_to_use & ".Site"
+			col_b = table_to_use & ".Cell"
+			col_c = table_to_use & ".Az"
+			col_d = table_to_use & ".Status"
+			Select * From table_to_use Where col_d = "On-Air" Into query101 Order By col_a, col_b, col_c
+		Else
+			col_a = table_to_use & ".Site"
+			col_b = table_to_use & ".Cell"
+			col_c = table_to_use & ".Az"
+			Select * From table_to_use Into query101 Order By col_a, col_b, col_c
+		End If
+	End If
+
+	If ft_only_onair_flag Then
+		col_a = sites_sys(sys_source) & ".Site"
+		col_b = sites_sys(sys_source) & ".Status"
+		Select * From sites_sys(sys_source) Where col_b = "On-Air" Into query102
+	Else
+		col_a = sites_sys(sys_source) & ".Site"
+		Select * From sites_sys(sys_source) Into query102
+	End If
+
+	If ft_only_onair_flag Then
+		col_a = cells_sys(sys_source) & ".Site"
+		col_b = cells_sys(sys_source) & ".Cell"
+		col_c = cells_sys(sys_source) & ".Az"
+		col_d = cells_sys(sys_source) & ".Status"
+		Select * From cells_sys(sys_source) Where col_d = "On-Air" Into query103 Order By col_a, col_b, col_c
+	Else
+		col_a = cells_sys(sys_source) & ".Site"
+		col_b = cells_sys(sys_source) & ".Cell"
+		col_c = cells_sys(sys_source) & ".Az"
+		Select * From cells_sys(sys_source) Into query103 Order By col_a, col_b, col_c
+	End If
+
+	If ft_only_onair_flag Then
+		col_a = sites_sys(sys_target) & ".Site"
+		col_b = sites_sys(sys_target) & ".Status"
+		Select * From sites_sys(sys_target) Where col_b = "On-Air" Into query104
+	Else
+		col_a = sites_sys(sys_target) & ".Site"
+		Select * From sites_sys(sys_target) Into query104
+	End If
+
+	If ft_only_onair_flag Then
+		col_a = cells_sys(sys_target) & ".Site"
+		col_b = cells_sys(sys_target) & ".Cell"
+		col_c = cells_sys(sys_target) & ".Az"
+		col_d = cells_sys(sys_target) & ".Status"
+		Select * From cells_sys(sys_target) Where col_d = "On-Air" Into query105 Order By col_a, col_b, col_c
+	Else
+		col_a = cells_sys(sys_target) & ".Site"
+		col_b = cells_sys(sys_target) & ".Cell"
+		col_c = cells_sys(sys_target) & ".Az"
+		Select * From cells_sys(sys_target) Into query105 Order By col_a, col_b, col_c
+	End If
+
+Onerror Goto general_error
+
+	'First we do some basic checks
+	'-----------------------------------
+	num_rows = TableInfo(query100,TAB_INFO_NROWS)
+	If num_rows = 0 Then		'there are no sites to be processed (maybe the site selected is not on-air)
+		Print Chr$(12)
+		Print "There are no selected cells to be processed (possibly the selected cell is NOT 'On-Air' and the only process On-Air sites is ON, exiting....."
+		goto get_outa_here
+	End If
+
+	If single_cell Then
+		Fetch First From query101
+		single_cell_id = query101.Cell
+	End If
+
+	'This creates the FT_Cand table to hold the FT cand sites
+	'-----------------------------------------------------------
+	Create Table "FT_Cand" (Site Char(100), LON Decimal(12,6), LAT Decimal(12,6), Type Char(10), Dist Float, Ang Float) File pf_user_path & "FT_Cand.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table FT_Cand FastEdit On
+	Create Index On FT_Cand(Site)
+	Create Index On FT_Cand(Type)	
+	Create Index On FT_Cand(Dist)	
+	Create Index On FT_Cand(Ang)	
+	Insert Into FT_Cand Select Site, LON, LAT, Type, "-9999", "-9999" From query104
+	Create Map For FT_Cand
+	Update FT_Cand Set Obj = CreateCircle(LON,LAT,g_ibs_prop_range/1000)
+	Commit Table FT_Cand
+
+	'First we do the first tier and triangle analysis algorithm
+	'--------------------------------------------------------------
+	row_count = 0
+	Fetch First From query100
+	Do While NOT EOT(query100)
+		temp_p = MakePen(Round(Rnd(1)*20,1)/4, 2, RGB(Round(Rnd(1)*255,1),Round(Rnd(1)*255,1),Round(Rnd(1)*255,1)))
+' temp_p = MakePen(1, 2, RGB(Round(Rnd(1)*255,1),Round(Rnd(1)*255,1),Round(Rnd(1)*255,1)))
+		pie_site(1) = query100.Site
+		pie_lon(1) = query100.LON
+		pie_lat(1) = query100.LAT
+		num_pnts = 1
+
+		row_count = row_count + 1
+		Print Chr$(12)
+		Print "Processing site " & row_count & " of " & num_rows & " sites From the " & cells_sys(sys_source) & " table"
+
+'these statements are for testing to limit the set to process
+'-------------------------------------------------------------
+'If query100.rowid > 10 Then
+'goto get_outa_here
+'End If
+'If Left$(pie_site(1),2) <> "JL" Then       '0680L2100" Then
+'	Goto skip_site
+'End If
+
+		'This statement MUST be run from the mapbasic window because it has a function in the col list of a select statement
+		'We select only the essential cols from the query104 table, add the dist to the selected site and order by the dist
+		'-----------------------------------------------------------------------------------------------------------------------
+		Update FT_Cand Set Dist = Distance(pie_lon(1),pie_lat(1),FT_Cand.LON,FT_Cand.LAT,"m"), Ang = calc_bearing(pie_lon(1),pie_lat(1),FT_Cand.LON,FT_Cand.LAT)
+		Commit Table FT_Cand
+
+		Select * From FT_Cand Where FT_Cand.Type = "Macro" And Dist < g_ignore_dist0 Into query2 Order By query2.Dist
+
+		'Get the closest nbr site
+		'---------------------------
+		Fetch Rec 2 From query2
+			pie_site(2) = query2.Site
+			pie_lon(2) = query2.LON
+			pie_lat(2) = query2.LAT
+			pie_ang(2) = calc_bearing(pie_lon(1),pie_lat(1),pie_lon(2),pie_lat(2))
+			pie_dist(2) = Distance(pie_lon(1),pie_lat(1),pie_lon(2),pie_lat(2),"m")
+		num_pnts = 2
+		min_dist_site = Maximum(g_min_dist0,pie_dist(2))		'this is the min_dist to be used for calcs in the site
+		Close Table query2			
+
+		'calc some important parameters
+		'-------------------------------
+		pie_init_ang = pie_ang(2)
+		max_dist =  Maximum(g_ignore_dist1,min_dist_site*10)
+		roc_f = min_dist_site*g_roc_perc/100/10
+
+		'go through each pie to find the closes nbr site per pie
+		'pie_x(1) is always the origin, 
+		'pie_x(2) is always the closest nbr site, 
+		'pie_x(3 and up) are always the closest sites in pie 1 to num_pies - 1,
+		'pie_x(num_pies+2) is always the same as pie_x(2)
+		'basically if we want to know what is the closest nbr site in pie N, we get the array val for pie_x(N+2)
+		'NOTE: if a pie has no min nbr site, then the pie_x array has blank values for that pie
+		'------------------------------------------------------------------------------------------------------
+		'This calcs the pie angles and determines which pie each cell is in
+		'----------------------------------------------------------------------
+		For i = 1 to num_pies
+			'This calcs the pie angles
+			'-----------------------------
+
+
+
+			pie_ang_start = calc_new_angle(pie_init_ang,g_pie_width*(i-1))
+			pie_ang_stop = calc_new_angle(pie_init_ang,g_pie_width*i)
+
+			'This goes through the sorted list and checks if the rec is the min is in the pie, if so it saves the vals and exits,
+			'if it gets to the max dist with no match, it exits and goes to the next pie
+			'-----------------------------------------------------------------------------------------------------------------------------
+			If i < num_pies Then
+				Select * From FT_Cand Where is_between_angles(pie_ang_start,pie_ang_stop,FT_Cand.Ang) And FT_Cand.Type = "Macro" And FT_Cand.Dist < Minimum(g_ignore_dist0,max_dist) And FT_Cand.Site <> pie_site(1) And FT_Cand.Site <> pie_site(2) Into query2 Order By query2.Dist
+				If TableInfo(query2, TAB_INFO_NROWS) = 0 Then
+					Close Table query2
+					Goto no_match
+				Else
+					Fetch First From query2
+						pie_site(i+2) = query2.Site
+						pie_lon(i+2) = query2.LON
+						pie_lat(i+2) = query2.LAT
+						pie_dist(i+2) = query2.Dist
+						pie_ang(i+2) = query2.Ang
+					Close Table query2
+					Goto found_candidate
+				End If				
+			ElseIf i = num_pies Then
+				pie_site(i+2) = pie_site(2)
+				pie_lon(i+2) = pie_lon(2)
+				pie_lat(i+2) = pie_lat(2)
+				pie_ang(i+2) = pie_ang(2)
+				pie_dist(i+2) = pie_dist(2)
+				Goto found_candidate
+			End If
+no_match:
+			pie_site(i+2) = ""
+			pie_lon(i+2) = 0
+			pie_lat(i+2) = 0
+			pie_ang(i+2) = 0
+			pie_dist(i+2) = 0
+found_candidate:
+		Next
+		
+		'This goes through the pie vals and sets the pie_roc_up and pie_roc_dn for each pie site
+		'------------------------------------------------------------------------------------------
+		For i = 0 to num_pies
+			If pie_site(i+2) = "" Then
+				Goto skip_pie_roc_adjust
+			End If
+
+			'sets the pie_roc_up val
+			'-------------------------
+			min_gap_dist = g_border_dist
+			For j = 1 to big_gap_pie_count
+				If i+j > num_pies Then
+					If pie_dist(i+j-num_pies+1) < min_gap_dist And pie_dist(i+j-num_pies+1) <> 0 Then
+						min_gap_dist = pie_dist(i+j-num_pies+1)
+					End If
+				Else
+					If pie_dist(i+2+j) < min_gap_dist And pie_dist(i+2+j) <> 0 Then
+						min_gap_dist = pie_dist(i+2+j)
+					End If
+				End If
+			Next
+			pie_roc_up(i+2) = roc_f*Maximum(1,min_gap_dist/min_dist_site)		'relative to min ft_site dist
+
+			'sets the pie_roc_dn val
+			'-------------------------
+			min_gap_dist = g_border_dist
+			For j = 1 to big_gap_pie_count
+				If i-j < 0 Then		'we are going back into the top end of the pie array
+					If pie_dist(i-j+num_pies+2) < min_gap_dist And pie_dist(i-j+num_pies+2) <> 0 Then
+						min_gap_dist = pie_dist(i-j+num_pies+2)
+
+					End If
+				Else
+					If pie_dist(i+2-j) < min_gap_dist And pie_dist(i+2-j) <> 0 Then
+						min_gap_dist = pie_dist(i+2-j)
+					End If
+				End If
+			Next
+			pie_roc_dn(i+2) = roc_f*Maximum(1,min_gap_dist/min_dist_site/6)			'relative to min ft_site dist
+skip_pie_roc_adjust:
+		Next
+
+
+		'This now goes through the min nbr site array and determines 
+		'1) the first tier nbr sites,
+		'2)the points for the site approx coverage area region (which is the centroid of the triangle formed between the origin and each 2 adjacent nbr sites)
+		'this alg looks at the ROC for each new nbr site in each pie, if the abs(ROC) is within limits, it adds the new nbr site to the first tier list, if a ROC is -ve and out of limits, it goes back through the first tier sites and deletes them until it gets one where the ROC to this new site is within limits
+		'-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+		ft_s_site(1) = pie_site(2)
+		ft_s_lon(1) = pie_lon(2)
+		ft_s_lat(1) = pie_lat(2)
+		ft_s_ang(1) = pie_ang(2)
+		ft_s_dist(1) = pie_dist(2)
+		ft_s_roc_up(1) = pie_roc_up(2)
+		ft_s_roc_dn(1) = pie_roc_dn(2)
+		num_ft_sites = 1
+		For i = 1 to num_pies
+			If pie_site(i+2) = "" Then		'its a no match at this pie, either way we skip the pie
+				Goto skip_pie
+			End If
+			roc_test_f = (pie_dist(i+2) - Maximum(g_min_dist0,ft_s_dist(num_ft_sites))) / Maximum(1e-10,calc_angle_delta(ft_s_ang(num_ft_sites),pie_ang(i+2)))
+			If (roc_test_f >= 0 And roc_test_f <= ft_s_roc_up(num_ft_sites)) Or (roc_test_f < 0 And Abs(roc_test_f) <= pie_roc_dn(i+2)) Then
+				ft_s_site(num_ft_sites+1) = pie_site(i+2)
+				ft_s_lon(num_ft_sites+1) = pie_lon(i+2)
+				ft_s_lat(num_ft_sites+1) = pie_lat(i+2)
+				ft_s_ang(num_ft_sites+1) = pie_ang(i+2)
+				ft_s_dist(num_ft_sites+1) = pie_dist(i+2)
+				ft_s_roc_up(num_ft_sites+1) = pie_roc_up(i+2)
+				ft_s_roc_dn(num_ft_sites+1) = pie_roc_dn(i+2)
+				If i < num_pies Then				'do not increment for the last one, it is already there in the first position, just use it at the end as a test
+					num_ft_sites = num_ft_sites + 1
+				End If
+			ElseIf roc_test_f < 0 Then		'the new point has a closer distance and the abs(ROC) is not meeting the thd => this point replaces the previous and retest
+				'Get a previous site2, current site2 is not compatable
+				'--------------------------------------------------------
+				For j = 1 to num_ft_sites - 1
+					num_ft_sites = num_ft_sites - 1		'we just shift the ft pointer back by one to use the previous ft site data
+					roc_test_f = (pie_dist(i+2) - Maximum(g_min_dist0,ft_s_dist(num_ft_sites))) / Maximum(1e-10,calc_angle_delta(ft_s_ang(num_ft_sites),pie_ang(i+2)))
+					If (roc_test_f >= 0 And roc_test_f <= ft_s_roc_up(num_ft_sites)) Or (roc_test_f < 0 And Abs(roc_test_f) <= pie_roc_dn(i+2)) Then
+						ft_s_site(num_ft_sites+1) = pie_site(i+2)
+						ft_s_lon(num_ft_sites+1) = pie_lon(i+2)
+						ft_s_lat(num_ft_sites+1) = pie_lat(i+2)
+						ft_s_ang(num_ft_sites+1) = pie_ang(i+2)
+						ft_s_dist(num_ft_sites+1) = pie_dist(i+2)
+						ft_s_roc_up(num_ft_sites+1) = pie_roc_up(i+2)
+						ft_s_roc_dn(num_ft_sites+1) = pie_roc_dn(i+2)
+						If i < num_pies Then				'do not increment for the last one, it is already there in the first position, just use it at the end as a test
+							num_ft_sites = num_ft_sites + 1
+						End If
+						Exit For
+					End If
+				Next
+			End If
+skip_pie:
+		Next
+
+		'Puts the first ft site at the last pos + 1 also
+		'--------------------------------------------------
+		ft_s_site(num_ft_sites+1) = pie_site(2)
+		ft_s_lon(num_ft_sites+1) = pie_lon(2)
+		ft_s_lat(num_ft_sites+1) = pie_lat(2)
+		ft_s_ang(num_ft_sites+1) = pie_ang(2)
+		ft_s_dist(num_ft_sites+1) = pie_dist(2)
+		ft_s_roc_up(num_ft_sites+1) = pie_roc_up(2)
+		ft_s_roc_dn(num_ft_sites+1) = pie_roc_dn(2)
+
+		'at this point the ft_xx(n) arrays hold the first tier sites data and num_ft_sites has the number of ft sites
+
+
+
+'#######################################################################
+'#######################################################################
+		'This code is all to draw the best server regions
+		'-----------------------------------------------------------
+		If draw_cell Then
+			If g_draw_triangles Then			'this is mainly for testing
+				num_pnts = 0
+				For i = 1 to num_ft_sites
+					If calc_angle_delta(ft_s_ang(i),ft_s_ang(i+1)) > 120 Then            'g_big_gap_angle Then
+						site_obj_x(num_pnts+1) = pie_lon(1)
+						site_obj_y(num_pnts+1) = pie_lat(1)
+						num_pnts = num_pnts + 1
+						site_obj_x(num_pnts+1) = ft_s_lon(i)
+						site_obj_y(num_pnts+1) = ft_s_lat(i)
+						num_pnts = num_pnts + 1
+						ang5 = calc_mid_az(ft_s_ang(i),ft_s_ang(i+1))
+						site_obj_x(num_pnts+1) = polar_2_cart_x(pie_lon(1),pie_lat(1),ang5,ft_s_dist(i)+(ft_s_dist(i+1)+ft_s_dist(i))/2)
+						site_obj_y(num_pnts+1) = polar_2_cart_y(pie_lon(1),pie_lat(1),ang5,ft_s_dist(i)+(ft_s_dist(i+1)+ft_s_dist(i))/2)
+						num_pnts = num_pnts + 1
+						site_obj_x(num_pnts+1) = ft_s_lon(i+1)
+						site_obj_y(num_pnts+1) = ft_s_lat(i+1)
+						num_pnts = num_pnts + 1
+					Else
+						site_obj_x(num_pnts+1) = pie_lon(1)
+						site_obj_y(num_pnts+1) = pie_lat(1)
+						num_pnts = num_pnts + 1
+						site_obj_x(num_pnts+1) = ft_s_lon(i)
+						site_obj_y(num_pnts+1) = ft_s_lat(i)
+						num_pnts = num_pnts + 1
+						site_obj_x(num_pnts+1) = ft_s_lon(i+1)
+						site_obj_y(num_pnts+1) = ft_s_lat(i+1)
+						num_pnts = num_pnts + 1
+					End If
+				Next
+			Else
+				'This is the code to calc the best server region points for each site
+				'-----------------------------------------------------------------------
+				num_pnts = 0
+				For i = 1 to num_ft_sites
+					If calc_angle_delta(ft_s_ang(i),ft_s_ang(i+1)) > 120 Then            'g_big_gap_angle Then
+						ang4 = calc_mid_az(ft_s_ang(i),calc_mid_az(ft_s_ang(i),ft_s_ang(i+1)))
+						ang5 = calc_mid_az(ft_s_ang(i),ft_s_ang(i+1))
+						temp_f = g_area_red_factor * calc_centroid_dist(ft_s_dist(i),(ft_s_dist(i+1)+ft_s_dist(i))/2,ft_s_ang(i),ang5)
+						site_obj_x(num_pnts+1) = polar_2_cart_x(pie_lon(1),pie_lat(1),ang4,temp_f)
+						site_obj_y(num_pnts+1) = polar_2_cart_y(pie_lon(1),pie_lat(1),ang4,temp_f)
+						num_pnts = num_pnts + 1
+
+						ang4 = calc_mid_az(calc_mid_az(ft_s_ang(i),ft_s_ang(i+1)),ft_s_ang(i+1))
+						ang5 = calc_mid_az(ft_s_ang(i),ft_s_ang(i+1))
+						temp_f = g_area_red_factor * calc_centroid_dist((ft_s_dist(i+1)+ft_s_dist(i))/2,ft_s_dist(i+1),ang5,ft_s_ang(i+1))
+						site_obj_x(num_pnts+1) = polar_2_cart_x(pie_lon(1),pie_lat(1),ang4,temp_f)
+						site_obj_y(num_pnts+1) = polar_2_cart_y(pie_lon(1),pie_lat(1),ang4,temp_f)
+						num_pnts = num_pnts + 1
+					Else
+						temp_f = g_area_red_factor * calc_centroid_dist(ft_s_dist(i),ft_s_dist(i+1),ft_s_ang(i),ft_s_ang(i+1))
+						ang4 = calc_mid_az(ft_s_ang(i),ft_s_ang(i+1))
+						site_obj_x(num_pnts+1) = polar_2_cart_x(pie_lon(1),pie_lat(1),ang4,temp_f)
+						site_obj_y(num_pnts+1) = polar_2_cart_y(pie_lon(1),pie_lat(1),ang4,temp_f)
+						num_pnts = num_pnts + 1
+					End If
+				Next
+			End If
+			Create Region Into Variable temp_o 0
+			For k = 1 to num_pnts
+				Alter Object temp_o Node Add (site_obj_x(k),site_obj_y(k))
+			Next
+
+
+			'This breaks the best server regions for each site into per cell best server regions
+			'-------------------------------------------------------------------------------------
+			'Gets all the cells from the source cells site
+			'-----------------------------------------------
+			Select * From query103 Where query103.Site = pie_site(1) Into query3 Order By query103.Az
+			If TableInfo(query3,TAB_INFO_NROWS) = 0 Then
+				Close Table query3
+				Goto skip_site
+			End If
+			source_ang_cnt = 1
+			Fetch First From query3
+			Do While NOT EOT(query3)
+				source_ang_cnt = source_ang_cnt + 1
+				source_ang(source_ang_cnt) = query3.Az
+				Fetch Next From query3
+			Loop
+			source_ang(1) = source_ang(source_ang_cnt)
+			source_ang(source_ang_cnt+1) = source_ang(2)
+
+	
+			'NOTE: for the source_ang array, source_ang_cnt=2 => is for the first cell, j=3 is for the 2nd cell => j=N is for the N-1th cell
+			'NOTE: for the cutter and temp_o_cell arrays, j=N is for the Nth cell of the site
+			'-----------------------------------------------------------------------------------------
+			j = 2
+			k = 0		'k is used as a counter only
+			Fetch First From query3
+			Do While NOT EOT(query3)
+				ang4 = calc_mid_az(source_ang(j-1),source_ang(j))
+				ang5 = source_ang(j)
+				ang6 = calc_mid_az(source_ang(j),source_ang(j+1))
+				cellx = query3.Cell
+				statusx = query3.Status
+				row_i = query3.RowId
+				If TableInfo(query3,TAB_INFO_NROWS) = 1 Then
+					temp_o_cell = temp_o
+					If Area(temp_o_cell,"sq km") = 0 Then
+						temp_o = CreateCircle(pie_lon(1),pie_lat(1),1)
+						temp_o = ConvertToRegion(temp_o)
+						temp_o_cell = temp_o		
+					End If
+				Else
+					Create Region Into Variable cell_cutter 0
+					Alter Object cell_cutter Node Add (pie_lon(1),pie_lat(1))
+					Alter Object cell_cutter Node Add (polar_2_cart_x(pie_lon(1),pie_lat(1),ang4,100000),polar_2_cart_y(pie_lon(1),pie_lat(1),ang4,100000))
+					Alter Object cell_cutter Node Add (polar_2_cart_x(pie_lon(1),pie_lat(1),ang5,100000),polar_2_cart_y(pie_lon(1),pie_lat(1),ang5,100000))
+					Alter Object cell_cutter Node Add (polar_2_cart_x(pie_lon(1),pie_lat(1),ang6,100000),polar_2_cart_y(pie_lon(1),pie_lat(1),ang6,100000))
+					temp_o_cell = Overlap(temp_o,cell_cutter)		
+					If Area(temp_o_cell,"sq km") = 0 Then
+						temp_o = CreateCircle(pie_lon(1),pie_lat(1),1)
+						temp_o = ConvertToRegion(temp_o)
+						temp_o_cell = Overlap(temp_o,cell_cutter)		
+					End If
+				End If
+				If statusx = "On-Air" then
+					Alter Object temp_o_cell
+					Info OBJ_INFO_PEN, pen_on_air(sys_source)
+					Info OBJ_INFO_Brush, brush_on_air(sys_source)
+				Else
+					Alter Object temp_o_cell
+					Info OBJ_INFO_PEN, pen_not_on_air(sys_source)
+					Info OBJ_INFO_Brush, brush_not_on_air(sys_source)
+				End If	
+'###################################################
+'this is for testing
+'				Alter Object temp_o_cell
+'				Info OBJ_INFO_PEN, temp_p
+'				Info OBJ_INFO_Brush, brush_not_on_air(sys_source)
+'###################################################
+				If single_cell Then				'then we should not update the cells table, just the table_to_use (query101)
+					If single_cell_id = cellx Then
+						Update query101 Set obj = temp_o_cell
+						Exit Do
+					End If
+				Else					'regular case, just update the cells table
+					Update query3 Set obj = temp_o_cell Where ROWID = row_i
+				End If
+				j = j + 1
+				k = k + 1
+				If k = 50 Then
+					Commit Table table_to_use
+					k = 0
+				End If
+				Fetch Next From query3
+			Loop
+		End If
+'#######################################################################
+'#######################################################################
+
+
+
+
+'#######################################################################
+		'This code is to get the ft cells and write them to the output file
+		'also to check if they are in the current NL (if required)
+		'and to add them to the current NL if required
+		'-------------------------------------------------------------------------
+		'ft_cell(1) has the source cell, ft_cell(i+n) have the first tier cells
+		'draw circles for both the source and target, radius = 2/3 the separation of these 2 sites.  Then split with cutter objects into pies.
+		'if there is overlap, the cand cell is a first tier cell
+		'------------------------------------------------------------------------------------
+		If single_cell Or export_ft Then
+			If NOT draw_cell Then		'if not drawing this command was not run
+				Select * From query103 Where query103.Site = pie_site(1) Into query3
+				If TableInfo(query3,TAB_INFO_NROWS) = 0 Then
+					Close Table query3
+					Goto skip_site
+				End If
+				source_ang_cnt = 1
+				Fetch First From query3
+				Do While NOT EOT(query3)
+					source_ang_cnt = source_ang_cnt + 1
+					source_ang(source_ang_cnt) = query3.Az
+					Fetch Next From query3
+				Loop
+				source_ang(1) = source_ang(source_ang_cnt)
+				source_ang(source_ang_cnt+1) = source_ang(2)
+			End If		
+
+			'////////////////////////////////////////////////////////////////////////
+			'This selects all IBS sites within the dist of the farthest FT site
+			'it puts them in query6, this will then be checked during the cell algorithm
+			'-----------------------------------------------------------------------------
+			max_dist_site = 0
+			For i = 2 to num_ft_sites
+				If ft_s_dist(i) > max_dist_site Then
+					max_dist_site = ft_s_dist(i)
+				End If
+			Next
+			Select * From FT_Cand Where FT_Cand.Type = "Non-Macro" And Dist < max_dist_site Into query6 Order By query6.Dist
+			num_ibs = TableInfo(query6,TAB_INFO_NROWS)
+	
+			'This draws the polygon around the center using each of the FT site locations, then tests if the ibs sites fall within this polygon
+			'---------------------------------------------------------------------------------------------------------------------------------------
+			If num_ibs > 0 Then
+				site_obj_x(1) = ft_s_lon(1)
+				site_obj_y(1) = ft_s_lat(1)
+				num_pnts = 1
+				For i = 2 to num_ft_sites
+					If calc_angle_delta(ft_s_ang(i-1),ft_s_ang(i)) > 120 Then            'g_big_gap_angle Then
+						ang5 = calc_mid_az(ft_s_ang(i-1),ft_s_ang(i))
+						site_obj_x(num_pnts+1) = polar_2_cart_x(pie_lon(1),pie_lat(1),ang5,ft_s_dist(i-1)+(ft_s_dist(i)+ft_s_dist(i-1))/2)
+						site_obj_y(num_pnts+1) = polar_2_cart_y(pie_lon(1),pie_lat(1),ang5,ft_s_dist(i-1)+(ft_s_dist(i)+ft_s_dist(i-1))/2)
+						num_pnts = num_pnts + 1
+						site_obj_x(num_pnts+1) = ft_s_lon(i)
+						site_obj_y(num_pnts+1) = ft_s_lat(i)
+						num_pnts = num_pnts + 1
+					Else
+						site_obj_x(num_pnts+1) = ft_s_lon(i)
+						site_obj_y(num_pnts+1) = ft_s_lat(i)
+						num_pnts = num_pnts + 1
+					End If
+				Next
+				Create Region Into Variable temp_o 0
+				For k = 1 to num_pnts
+					Alter Object temp_o Node Add (site_obj_x(k),site_obj_y(k))
+				Next
+			End If
+			'////////////////////////////////////////////////////////////////////////
+
+			j = 2
+			Fetch First From query3
+			Do While NOT EOT(query3)
+				ft_cell(1) = query3.Cell
+				num_ft_cells = 1
+				For	i = 1 to num_ft_sites 		
+					'draw the source test object
+					'------------------------------
+					source_o = CreateCircle(pie_lon(1),pie_lat(1),(0.51+0.49*g_cell_overlap_factor)*ft_s_dist(i)/1000)
+					source_o = ConvertToRegion(source_o)
+
+					'NOTE: for the source_ang array, source_ang_cnt=2 => is for the first cell, j=3 is for the 2nd cell => j=N is for the N-1th cell
+					'-----------------------------------------------------------------------------------------
+					ang4 = calc_mid_az(source_ang(j-1),source_ang(j))
+					ang5 = source_ang(j)
+					ang6 = calc_mid_az(source_ang(j),source_ang(j+1))
+					If TableInfo(query3,TAB_INFO_NROWS) > 1 Then			'if it is not we just leave it as the base circle
+						Create Region Into Variable source_cutter 0
+						Alter Object source_cutter Node Add (pie_lon(1),pie_lat(1))
+						Alter Object source_cutter Node Add (polar_2_cart_x(pie_lon(1),pie_lat(1),ang4,100000),polar_2_cart_y(pie_lon(1),pie_lat(1),ang4,100000))
+						Alter Object source_cutter Node Add (polar_2_cart_x(pie_lon(1),pie_lat(1),ang5,100000),polar_2_cart_y(pie_lon(1),pie_lat(1),ang5,100000))
+						Alter Object source_cutter Node Add (polar_2_cart_x(pie_lon(1),pie_lat(1),ang6,100000),polar_2_cart_y(pie_lon(1),pie_lat(1),ang6,100000))
+						source_o_cell = Overlap(source_o,source_cutter)
+						If num_ibs > 0 Then
+							temp_o_cell = Overlap(temp_o,source_cutter)
+						End If
+					Else		'omni case
+						source_o_cell = source_o
+						If num_ibs > 0 Then
+							temp_o_cell = temp_o
+						End If
+					End If
+
+					'@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+					'This adds the co-site cells to the ft_cells array (doesn't need to test for these cells)
+					'-------------------------------------------------------------------------------------------
+					Select * From query3 Where NOT query3.Cell = ft_cell(1) Into query9
+					If TableInfo("query9",TAB_INFO_NROWS) > 0 Then
+						Fetch First From query9
+						Do While Not EOT(query9)
+							num_ft_cells = num_ft_cells + 1
+							ft_cell(num_ft_cells) = query9.Cell
+							If export_ft Then
+								If g_ft_indicate_not_in_nl Then
+									Select * From nbrs_DB Where nbrs_DB.Host_Cell = ft_cell(1) And nbrs_DB.Host_Sys = sys_source And nbrs_DB.Nbr_Cell = ft_cell(num_ft_cells) And nbrs_DB.Nbr_Sys = sys_target Into query5
+									If TableInfo("query5",TAB_INFO_NROWS) > 0 Then
+										data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """,""Y"""
+										Close Table query5
+									Else
+										data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """,""N"""
+										Close Table query5
+									End If
+								Else
+									data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """"
+								End If
+								print #1, data
+							End If
+							Fetch Next From query9
+						Loop
+					End If
+					Close Table query9
+					'@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+					'////////////////////////////////////////////////////////////////////////
+					'tests for first tier IBS cells
+					'get the ibs cells for this host if there are any, if it finds an IBS that meets the criteria, it adds it to the ft_cell array
+					'----------------------------------------------------------------------------------------------------------------------------------
+					If num_ibs > 0 Then
+						Select * From query6 Where query6.Obj Within temp_o_cell Into query7
+						If TableInfo(query7,TAB_INFO_NROWS) > 0 Then
+							Fetch First From query7
+							Do While Not EOT(query7)
+								sitex = query7.Site
+								Select * From query105 Where query105.Site = sitex Into query8
+								If TableInfo(query8,TAB_INFO_NROWS) > 0 Then
+									Fetch First From query8
+									Do While Not EOT(query8)
+										num_ft_cells = num_ft_cells + 1
+										ft_cell(num_ft_cells) = query8.Cell
+
+										'Export ibs ft cells
+										'----------------------
+										If export_ft Then
+											If g_ft_indicate_not_in_nl Then
+												Select * From nbrs_DB Where nbrs_DB.Host_Cell = ft_cell(1) And nbrs_DB.Host_Sys = sys_source And nbrs_DB.Nbr_Cell = ft_cell(num_ft_cells) And nbrs_DB.Nbr_Sys = sys_target Into query5
+												If TableInfo("query5",TAB_INFO_NROWS) > 0 Then
+													data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """,""Y"""
+													Close Table query5
+												Else
+													data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """,""N"""
+													Close Table query5
+												End If
+											Else
+												data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """"
+											End If
+											print #1, data
+										End If
+										Fetch Next From query8
+									Loop
+								End If
+								Close Table query8
+								Fetch Next From query7
+							Loop
+						End If
+						Close Table query7
+					End If
+					'////////////////////////////////////////////////////////////////////////						
+
+					'######################################################################################
+					'this tests the regular ft candidate cells for addition to the ft_cells array
+					'draw the target test object
+					'------------------------------
+					'first does the circle
+					'------------------------------
+					target_o = CreateCircle(ft_s_lon(i),ft_s_lat(i),(0.51+0.49*g_cell_overlap_factor)*ft_s_dist(i)/1000)
+					target_o = ConvertToRegion(target_o)
+
+					'then determines the target angles for the cells
+					'---------------------------------------------------
+					Select * From query105 Where query105.Site = ft_s_site(i) Into query4
+					If TableInfo(query4,TAB_INFO_NROWS) = 0 Then
+						Goto skip_ft_cand_site
+					End If
+
+					target_ang_cnt = 1
+					Fetch First From query4
+					Do While NOT EOT(query4)
+						target_ang(target_ang_cnt + 1) = query4.Az
+						target_ang_cnt = target_ang_cnt + 1
+						Fetch Next From query4
+					Loop
+					target_ang(1) = target_ang(target_ang_cnt)
+					target_ang(target_ang_cnt+1) = target_ang(2)
+
+					'NOTE: for the target_ang array, target_ang_cnt = 2 => is for the first cell, j=3 is for the 2nd cell => j=N is for the N-1th cell
+					'-----------------------------------------------------------------------------------------
+					z = 2
+					Fetch First From query4
+					Do While NOT EOT(query4)
+						ang4 = calc_mid_az(target_ang(z-1),target_ang(z))
+						ang5 = target_ang(z)
+						ang6 = calc_mid_az(target_ang(z),target_ang(z+1))
+						If TableInfo(query4,TAB_INFO_NROWS) > 1 Then				'if not we just use the base circle
+							Create Region Into Variable target_cutter 0
+							Alter Object target_cutter Node Add (ft_s_lon(i),ft_s_lat(i))
+							Alter Object target_cutter Node Add (polar_2_cart_x(ft_s_lon(i),ft_s_lat(i),ang4,100000),polar_2_cart_y(ft_s_lon(i),ft_s_lat(i),ang4,100000))
+							Alter Object target_cutter Node Add (polar_2_cart_x(ft_s_lon(i),ft_s_lat(i),ang5,100000),polar_2_cart_y(ft_s_lon(i),ft_s_lat(i),ang5,100000))
+							Alter Object target_cutter Node Add (polar_2_cart_x(ft_s_lon(i),ft_s_lat(i),ang6,100000),polar_2_cart_y(ft_s_lon(i),ft_s_lat(i),ang6,100000))
+							target_o_cell = Overlap(target_o,target_cutter)		
+						Else		'omni case
+							target_o_cell = target_o
+						End If
+
+						'Do the test between the source and target objects
+						'-----------------------------------------------------
+						If Area(Overlap(source_o_cell,target_o_cell),"sq km") > 0 Then
+							num_ft_cells = num_ft_cells + 1
+							ft_cell(num_ft_cells) = query4.Cell
+							If export_ft Then
+								If g_ft_indicate_not_in_nl Then
+									Select * From nbrs_DB Where nbrs_DB.Host_Cell = ft_cell(1) And nbrs_DB.Host_Sys = sys_source And nbrs_DB.Nbr_Cell = ft_cell(num_ft_cells) And nbrs_DB.Nbr_Sys = sys_target Into query5
+									If TableInfo("query5",TAB_INFO_NROWS) > 0 Then
+										data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """,""Y"""
+										Close Table query5
+									Else
+										data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """,""N"""
+										Close Table query5
+									End If
+								Else
+									data = """" & ft_cell(1) & """,""" & sys_source & """,""" & ft_cell(num_ft_cells) & """,""" & sys_target & """"
+								End If
+								print #1, data
+							End If
+						End If		
+						Fetch Next From query4
+						z = z + 1
+					Loop
+					'######################################################################################
+
+					'write the first tier cells to the output array if it is the single cell case
+					'---------------------------------------------------------------------------
+					If single_cell And ft_cell(1) = single_cell_id Then
+						For k = 1 to num_ft_cells
+							first_tier_cells(k) = ft_cell(k)			'note the first one is always the source
+						Next
+					End If
+
+skip_ft_cand_site:
+					Close Table query4
+				Next
+				Fetch Next From query3
+				j = j + 1
+			Loop
+'#######################################################################
+			Close Table query3
+			Close Table query6
+		End If
+skip_site:
+		Fetch Next From query100
+	Loop
+	Commit Table table_to_use
+
+
+get_outa_here:
+
+	Close Table query100
+	Close Table query101
+	Close Table query102
+	Close Table query103
+	Close Table query104
+	Close Table query105
+	Drop Table FT_Cand
+	If export_ft Then
+		Close File #1
+	End If
+	Close File #2
+
+returnpoint_exit:
+	Set ProgressBars On
+
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'--------------
+general_error_start:
+Note "There was an error, the code is: " & Error$() & ".  Exiting..."
+Resume returnpoint_exit
+
+general_error:
+Note "There was an error, the code is: " & Error$() & ".  Exiting..."
+Resume get_outa_here
+
+file_open_error1:
+Note "The first tier output file is open, please close it and try again, exiting..."
+Resume returnpoint_exit
+
+file_open_error2:
+Note "The first tier log file is open, please close it and try again, exiting..."
+Resume returnpoint_exit
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'########################################################################################3
+'The following are all function definitions
+'This is a function to calculate the bearing in degrees from site 1 to site 2
+'--------------------------------------------------------------------
+Function calc_bearing(ByVal x1 As Float, ByVal y1 As Float, ByVal x2 As Float, ByVal y2 As Float) As Float
+Dim temp_f As float
+
+		'Calc angle
+		'---------------
+		If x2-x1 >= 0 AND y2-y1 >= 0 Then     	'quad 1
+			temp_f = RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1)))
+		ElseIf x2-x1 >= 0 AND y2-y1 < 0 Then     	'quad 2
+			temp_f = 180 - RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1)))
+		ElseIf x2-x1 < 0 AND y2-y1 < 0 Then     	'quad 3
+			temp_f = 180 + RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1)))
+		ElseIf x2-x1 < 0 AND y2-y1 >= 0 Then     	'quad 4
+			temp_f = 360 - RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1)))
+		End If
+
+		'temp_f will be now between -360 and 360
+		'need to cleanup angle so it is between 0 and 359
+		'-----------------------------------------
+		If temp_f < 0 Then
+			temp_f = temp_f + 360
+		End If
+
+		If temp_f = 360 Then
+			temp_f = 0
+		End If
+
+		'Temp to check for errors
+		'----------------------------
+		If temp_f < 0 OR temp_f >= 360 Then
+			Note "there is an angle out of range, exiting => " & Str$(temp_f)
+		End If
+
+		calc_bearing = temp_f
+
+End Function
+
+
+
+'This is a function to calculate the x cartesian coord from an origin and polar coords
+'input is the origin(x,y), length(m) and angle from true north clockwise
+'------------------------------------------------------------------------------------------
+Function polar_2_cart_x(ByVal x1 As Float, ByVal y1 As Float, ByVal angle As Float, ByVal length As Float) As Float
+
+		polar_2_cart_x = x1 + length * SIN(DEG_2_RAD * angle) / Z_x
+
+End Function
+
+
+
+'This is a function to calculate the y cartesian coord from an origin and polar coords
+'input is the origin(x,y), length(m) and angle from true north clockwise
+'------------------------------------------------------------------------------------------
+Function polar_2_cart_y(ByVal x1 As Float, ByVal y1 As Float, ByVal angle As Float, ByVal length As Float) As Float
+
+		polar_2_cart_y = y1 + length * COS(DEG_2_RAD * angle) / Z_y
+
+End Function
+
+
+'This is a function to calculate the centroid distance from the origin for a triangel, given the 2 other side lengths from the origin and the az of each of these sides
+'input is dist1, dist2 in m, angle1 and angle2 in degrees, output is centroid distance in m
+'------------------------------------------------------------------------------------------------
+Function calc_centroid_dist(ByVal d1 As Float, ByVal d2 As Float, ByVal a1 As Float, ByVal a2 As Float) As Float
+
+	If a2 < a1 Then
+		a2 = a2 + 360
+		calc_centroid_dist = d1*SIN(DEG_2_RAD*(RAD_2_DEG*(ASIN(d2*SIN(DEG_2_RAD*((a2-a1)))/SQR(d2^2+d1^2-2*d2*d1*COS(DEG_2_RAD*((a2-a1))))))/2))/SIN(DEG_2_RAD*(180-RAD_2_DEG*(ASIN(d2*SIN(DEG_2_RAD*((a2-a1)))/SQR(d2^2+d1^2-2*d2*d1*COS(DEG_2_RAD*((a2-a1))))))/2-(a2-a1)/2))
+	ElseIf a1 < a2 Then
+		calc_centroid_dist = d1*SIN(DEG_2_RAD*(RAD_2_DEG*(ASIN(d2*SIN(DEG_2_RAD*((a2-a1)))/SQR(d2^2+d1^2-2*d2*d1*COS(DEG_2_RAD*((a2-a1))))))/2))/SIN(DEG_2_RAD*(180-RAD_2_DEG*(ASIN(d2*SIN(DEG_2_RAD*((a2-a1)))/SQR(d2^2+d1^2-2*d2*d1*COS(DEG_2_RAD*((a2-a1))))))/2-(a2-a1)/2))
+	ElseIf a1 = a2 Then
+		calc_centroid_dist = 0
+	End If
+
+End Function
+
+
+'This is a function to calculate the difference between two angles
+'input is angle1 and angle2, output is the angular separation
+'-------------------------------------------------------------------
+Function calc_angle_delta(ByVal a1 As Float, ByVal a2 As Float) As Float
+Dim temp As Float
+
+
+	If a2 < a1 Then
+		temp = 360 + a2 - a1
+	Else
+		temp = a2 - a1
+	End If
+	calc_angle_delta = temp
+
+End Function
+
+
+'This is a function to calculate the new angle from an angle and a CW rotation
+'input is the start angle and the rotation, output is the resultant angle
+'-------------------------------------------------------------------------
+Function calc_new_angle(ByVal a1 As Float, ByVal d As Float) As Float
+Dim temp As Float
+
+	temp = a1 + d
+	If temp >= 360 Then
+		temp = temp - 360
+	ElseIf temp < 0 Then
+		temp = temp + 360
+	End If
+	calc_new_angle = temp
+
+End Function
+
+
+'This is a function to calculate the halfway azimuth between two azimuths
+'input is az1 and az2, output is the halfway azimuth
+'-------------------------------------------------------------------
+Function calc_mid_az(ByVal a1 As Float, ByVal a2 As Float) As Float
+Dim temp As Float
+
+	If a2 < a1 Then
+		temp = a1 + (360 + a2 - a1)/2
+		If temp >= 360 Then
+			temp = temp - 360
+		End If
+	Else
+		temp = a1 + (a2 - a1)/2
+	End If
+
+	calc_mid_az = temp
+
+End Function
+
+
+'determines if an angle is between 2 angles
+'input is az1 and az2, and the test az output is boolean
+'-------------------------------------------------------------------
+Function is_between_angles(ByVal a1 As Float, ByVal a2 As Float, ByVal a3 As Float) As Logical
+Dim temp As Logical
+
+	temp = False
+	If a2 < a1 Then
+		If a3 >= a1 Or a3 < a2 Then
+			temp = True
+		End If
+	Else
+		If a3 >= a1 And a3 < a2 Then
+			temp = True
+		End If
+	End If
+	is_between_angles = temp
+
+End Function
+
+
+
+
+
+
+

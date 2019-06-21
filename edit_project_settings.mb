@@ -1,0 +1,322 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub edit_project_settings_sub
+Declare Sub pre_edit_project_settings_sub
+Declare Sub set_display_sub
+Declare Sub set_thermatic_display_sub
+Declare Sub apply_display_sub
+Declare Sub load_project_file_sub
+Declare Sub save_project_file_sub
+Declare Sub define_status_sub
+Declare Sub edit_site_templates_sub
+Declare Sub saveas_project_file_sub
+Declare Sub initial_dialog_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+
+'---------------------------------------------------
+Sub pre_edit_project_settings_sub
+Dim i_win_id As String	
+
+
+	'This cancels the sub if there is no mapper as the top window
+Onerror goto no_mapper
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+returnpoint1:
+		Exit Sub
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+	Call check_tables_sub
+
+	Call edit_project_settings_sub
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'-------------------
+no_mapper:
+Resume returnpoint1
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' This is where the user can view and edit the project settings, upon hitting ok
+'---------------------------------------------------
+Sub edit_project_settings_sub
+Dim pf_user_path_old, pf_filename_old, proj_file As String
+Dim no_mapper_flag As Logical
+Dim i As Integer
+
+
+
+	pf_filename_old = pf_filename
+	pf_user_path_old = pf_user_path
+
+startpoint:
+
+	redraw_font = "On"           								' need this as it will not do the apply display properly if you leave it out
+
+	dont_redraw = "On"
+	
+	Dialog Title "Project Settings...." width 400 height 410 Position 20,40
+
+	Control GroupBox
+	Title "Project File and Location" 
+	Position 10, 10 Width 380 Height 40
+
+	Control StaticText
+	Title "Project Directory:  " + pathtodirectory$(pf_filename) + space$(500)
+	Position 20, 21
+	ID 10000
+	Control StaticText
+	Title "Project Filename:  " + pathtofilename$(pf_filename) + space$(500)
+	Position 20, 35
+	ID 10001
+
+	Control GroupBox
+	Title "Table Names"
+	Position 10, 60 Width 380 Height 170
+
+	Control StaticText
+	Title "System #1 Cells Table:   " & cells_sys(1)
+	Position 20, 70
+	Control StaticText
+	Title "System #2 Cells Table:   " & cells_sys(2)
+	Position 20, 85
+	Control StaticText
+	Title "System #3 Cells Table:   " & cells_sys(3)
+	Position 20, 100
+	Control StaticText
+	Title "System #4 Cells Table:   " & cells_sys(4)
+	Position 20, 115
+	Control StaticText
+	Title "System #5 Cells Table:   " & cells_sys(5)
+	Position 20, 130
+	Control StaticText
+	Title "System #6 Cells Table:   " & cells_sys(6)
+	Position 20, 145
+	Control StaticText
+	Title "System #7 Cells Table:   " & cells_sys(7)
+	Position 20, 160
+	Control StaticText
+	Title "System #8 Cells Table:   " & cells_sys(8)
+	Position 20, 175
+	Control StaticText
+	Title "System #9 Cells Table:   " & cells_sys(9)
+	Position 20, 190
+	Control StaticText
+	Title "System #10 Cells Table:   " & cells_sys(10)
+	Position 20, 205
+
+
+	Control GroupBox
+	Title "Display Properties" 
+	Position 10, 250 Width 120 Height 50
+
+	Control Button	
+	Title "&Set Object Display"
+	Calling set_display_sub
+	Position 20, 260 Width 100
+
+	Control Button	
+	Title "&Apply Changes"
+	Calling apply_display_sub
+	Position 20, 280 Width 100
+
+
+	Control GroupBox 
+	Title "Thermatic Display Properties" 
+	Position 140, 250 Width 120 Height 50
+
+	Control Button	
+	Title "&Set Thermatic Map Display"
+	Calling set_thermatic_display_sub
+	Position 150, 260 Width 100
+
+
+	Control GroupBox
+	Title "Status Properties" 
+	Position 270, 250 Width 120 Height 50
+
+	Control Button	
+	Title "&Define Status Options"
+	Calling define_status_sub
+	Position 280, 260 Width 100
+
+
+	Control GroupBox
+	Title "Site Templates" 
+	Position 10, 305 Width 120 Height 50
+
+	Control Button	
+	Title "&Edit Site Templates"
+	Calling edit_site_templates_sub
+	Position 20, 315 Width 100
+
+	Control GroupBox
+	Title "" 
+	Position 140, 305 Width 120 Height 50
+
+	Control GroupBox
+	Title "" 
+	Position 270, 305 Width 120 Height 50
+
+
+	Control Button	
+	Title "&SaveAs Project Settings"
+	Calling saveas_project_file_sub
+	Position 180, 360 Width 140
+
+	Control Button	
+	Title "&Load Project Settings"
+	Calling load_project_file_sub
+	Position 180, 380 Width 140
+
+
+	Control OKButton
+	Position 30, 365
+	Control StaticText
+	Title "Project File will save on 'OK'"
+	Position 30, 385
+
+OnError Goto general_error2
+
+	If CommandInfo(CMD_INFO_DLG_OK) Then
+	   'Do this if the user path has changed so all the tables need to be closed, moved and reopened
+		'----------------------------------------------------------------------------
+		If pf_user_path <> pf_user_path_old Then
+			'This closes all files - the status of the files was gotten from check_tables which was run before the edit_project_settings_sub
+			'----------------------
+			For i = 10 to 1 Step -1
+				If is_open_cells_sys(i) = "On" Then
+					Commit Table cells_sys(i)
+					Close Table cells_sys(i)
+				End If
+				If is_open_sites_sys(i) = "On" Then
+					Commit Table sites_sys(i)
+					Close Table sites_sys(i)
+				End If
+			Next
+
+			no_mapper_flag = False
+			If WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+				no_mapper_flag = True
+			End If
+
+			For i = 10 to 1 Step -1
+				If sys(i) <> "" Then           ' check if the file is specified in the project file
+					' this then checks to see if the .tab, .map, .dat, .ind, .id exist in the project dir for the cells and sites tables of sys(1)
+					'------------------------------------------------------------------------
+					If FileExists(pf_user_path_old & cells_sys(i) & ".tab") = True 
+					and FileExists(pf_user_path_old & cells_sys(i) & ".map") = True 
+					and FileExists(pf_user_path_old & cells_sys(i) & ".ind") = True 
+					and FileExists(pf_user_path_old & cells_sys(i) & ".dat") = True 
+					and FileExists(pf_user_path_old & cells_sys(i) & ".id") = True 
+					and FileExists(pf_user_path_old & sites_sys(i) & ".tab") = True
+					and FileExists(pf_user_path_old & sites_sys(i) & ".map") = True 
+					and FileExists(pf_user_path_old & sites_sys(i) & ".ind") = True 
+					and FileExists(pf_user_path_old & sites_sys(i) & ".dat") = True 
+					and FileExists(pf_user_path_old & sites_sys(i) & ".id") = True Then
+						Open Table pf_user_path_old & cells_sys(i)
+						Open Table pf_user_path_old & sites_sys(i)
+						Commit Table cells_sys(i) As pf_user_path & cells_sys(i) &".tab" TYPE NATIVE Charset "WindowsLatin1"
+						Close Table cells_sys(i)
+						Commit Table sites_sys(i) As pf_user_path & sites_sys(i) &".tab" TYPE NATIVE Charset "WindowsLatin1"
+						Close Table sites_sys(i)
+						Open Table pf_user_path & cells_sys(i)
+						Open Table pf_user_path & sites_sys(i)
+						If no_mapper_flag = True Then				' if there is no mapper open or in front, a new one is created, otherwise it uses the existing one
+							Map From cells_sys(i), sites_sys(i)
+							no_mapper_flag = False
+						Else
+							Add Map Layer cells_sys(i), sites_sys(i)
+						End If
+						run command "Set Map Layer " & sites_sys(i) & " Label Position Right " & font_for_sites(i) & " With Site Auto On Overlap On Duplicates Off Offset 8 Parallel Off"
+					Else       ' there are no valid sys(i) files in the project directory => we need to import
+						Note "There is a problem.  There are no valid " & sys(i) & " tables in the project working directory.  You need to import."
+						Call initial_dialog_sub
+						Exit Sub
+					End If
+				End If
+			Next
+
+OnError Goto closed
+
+			If TableInfo(change_request, TAB_INFO_NAME) <> "" Then
+				Commit Table change_request As pf_user_path & "change_request.tab" TYPE NATIVE Charset "WindowsLatin1"
+				Close Table change_request
+				Open Table pf_user_path & "change_request.tab"
+			Else
+
+returnpoint:
+
+OnError Goto general_error1
+
+				If FileExists(pf_user_path_old & "change_request.tab") = True and FileExists(pf_user_path_old & "change_request.dat") = True Then
+					Open Table pf_user_path_old & "change_request.tab"
+					Commit Table change_request As pf_user_path & "change_request.tab" TYPE NATIVE Charset "WindowsLatin1"
+					Close Table change_request
+					Open Table pf_user_path & "change_request.tab"
+				Else 
+					Create Table change_request (Action char(50), Host_Cell char(20), Parameter char(30), Comment char(100)) File pf_user_path & "change_request.tab" 	
+				End If
+			End If
+		End If
+
+		pf_bypass = True  'we have the project filename, so we do not need to get it again
+
+		Call save_project_file_sub
+
+returnpoint1:
+returnpoint2:
+
+		Exit Sub
+	Else
+		pf_filename = pf_filename_old
+		pf_user_path = pf_user_path_old
+	End If
+
+Exit Sub
+
+
+
+'Error Handlers
+'-----------------
+closed:
+Resume returnpoint
+
+general_error1:
+Note "There was an error, details are... " & error$()
+Resume returnpoint1
+
+general_error2:
+Note "There was an error, details are... " & error$()
+Resume returnpoint2
+
+End Sub
+'---------------------------------------------------
+

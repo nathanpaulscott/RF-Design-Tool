@@ -1,0 +1,76 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub initial_dialog_sub
+Declare Sub load_project_file_sub
+Declare Sub import_other_file_sub
+Declare Sub pre_import_sub
+Declare Sub import_kml_sub
+
+
+'---------------------------------
+' This gets the user to select a path for the project
+'-------------------------------
+Sub initial_dialog_sub
+Dim i, j, k, i_win_id, choice As Integer
+Dim radio1 As String
+
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+	choice = 1
+
+	radio1 = " Load an Existing Project; Import a New Project; Convert a KML File to Tab and Map It; Import a Drive Data File and Map It"
+
+	Dialog Title "Import" width 180 height 120 Position 450,100
+
+	Control StaticText
+	Title "What would you like to do?" 
+	Position 10, 8
+	Control RadioGroup
+	Title radio1
+	Position 10, 30 Width 150
+	Value choice
+	Into choice
+
+	Control StaticText
+	Title "(must have 'Latitude' and 'Longitude' fields)" 
+	Position 22, 82
+
+	Control OKButton
+	Position 20, 100
+	Control CancelButton
+	Position 120, 100
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+	If choice = 1 Then 
+		Call load_project_file_sub 
+	Elseif choice = 2 Then
+		Call pre_import_sub 
+	Elseif choice = 3 Then
+		Call import_kml_sub 
+	Elseif choice = 4 Then
+		Call import_other_file_sub 
+	End If
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+End Sub
+'----------------------------------
+
+

@@ -1,0 +1,18 @@
+!table
+!version 300
+!charset WindowsLatin1
+
+Definition Table
+  Type NATIVE Charset "WindowsLatin1"
+  Fields 11
+    Site Char (100) Index 1 ;
+    Sitename Char (100) ;
+    System_Index Integer ;
+    System Char (20) ;
+    Status Char (30) ;
+    LON Decimal (20, 10) ;
+    LAT Decimal (20, 10) ;
+    Ht Float ;
+    Drops Float ;
+    CSSR Float ;
+    Mbphr Float ;

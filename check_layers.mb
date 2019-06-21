@@ -1,0 +1,59 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub check_layers_sub
+
+'---------------------------------------------------
+' this checks which tables are in the mapper and at what layer and are they displayed, 
+' check tables should have been run prior to this sub to know the opne status of the cells/sites tables
+' outputs of this sub are to set the is_display and is_in_mapper flags to true if they are true.
+'---------------------------------------------------
+Sub check_layers_sub
+Dim layer_num, i, j As Integer
+
+
+
+	'Gets the number of layers from the current mapper, it assumes that the current mapper is the frontmost window, which it should be at this point in the nbr_edit sub
+	'------------------------------------------------------------------------
+OnError GoTo error1
+	layer_num = MapperInfo(FrontWindow(),MAPPER_INFO_LAYERS)
+
+	For i = 1 to 10
+		is_display_cells_sys(i) = False
+		is_in_mapper_cells_sys(i) = False
+	Next
+
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		Else
+			For j = 1 to layer_num
+				If cells_sys(i) = LayerInfo(FrontWindow(),j,LAYER_INFO_NAME) Then
+					is_in_mapper_cells_sys(i) = True
+					If LayerInfo(FrontWindow(),j,LAYER_INFO_DISPLAY) <> 0 Then
+						is_display_cells_sys(i) = True
+					End If
+					Exit For        'don't need to check any more layers for this sysind
+				End If
+			Next
+		End If
+	Next
+
+returnpoint1:
+	Exit Sub
+
+
+
+'Error handlers here
+'------------------------------------------------
+error1:
+Note "There was a problem.  Most likely the frontmost window is not a mapper."
+Resume returnpoint1
+
+
+End Sub	
+'---------------------------------------------------
+
+

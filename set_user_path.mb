@@ -1,0 +1,30 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_user_path_sub
+Declare Sub load_project_file_sub
+Declare Sub pre_import_sub
+
+'---------------------------------
+' This gets the user to select a path for the project
+'-------------------------------
+Sub set_user_path_sub
+Dim i, j, k As Integer
+Dim l_choice As Logical
+
+note "The user path has not been set, please reload your project file"
+Exit Sub
+
+	l_choice = Ask("RFDT INITIALISATION"+Chr$(13)+"----------------------------------------"+Chr$(13)+"Do you want to:"+Chr$(13)+"1) Open a Project File,"+Chr$(13)+"2) Create a New Project?","Load","Create")
+	If l_choice = True Then
+		Call load_project_file_sub              ' this should set the user_path as it is stored in the file
+	ElseIf l_choice = False Then
+		Call pre_import_sub
+	End  If	 
+
+End Sub
+'----------------------------------
+
+

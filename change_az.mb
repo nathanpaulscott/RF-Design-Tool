@@ -1,0 +1,272 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+Declare Sub change_az_sub
+Declare Sub pre_change_az_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_change_az_sub
+Dim i_win_id As String	
+
+
+Onerror goto no_mapper
+	'This cancels the sub if there is no mapper as the top window
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+returnpoint1:
+		Exit Sub
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+'		Set Map Redraw Off
+		Set Event Processing Off
+	End If
+
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+
+
+'---------------------------------------------------
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call check_tables_sub
+
+	Call change_az_sub
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'-------------------
+no_mapper:
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for change az
+'---------------------------------------------------
+Sub change_az_sub
+Dim finalx, finaly, shiftx, shifty, x, y, x2, y2, aznew As Float
+Dim sysind, i, j, k, l, m, i_found, i_row_id, i_win_id As Integer
+Dim systemx, sitex, namex, cellx, pnx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, sitex2, namex2, cellx2, pnx2, htx2, mdtx2, edtx2, azx2, statusx2, commentx2, hbwx2, sizex2, typex As String
+Dim sector1, center, endpnt, temppnt As Object
+Dim select_ok As Logical
+Dim table_selected_alias, cell_data_alias As Alias
+Dim table_selected As String
+
+
+
+	' need to set the coord sys so that mapinfo uses the sys we select
+	'--------------------------------------------------
+	Run Command "Set " + proj
+	Set Distance Units "km"
+	'---------------------------------------------------
+
+	Call date_check_sub
+
+	site_update = False               ' is this required? what is is for?
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Set ProgressBars On
+		Set Map Redraw On
+		Set Event Processing On
+		Exit Sub
+	End If
+
+	' Determine the starting point where the user clicked.
+	'---------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	x2 = CommandInfo(CMD_INFO_X2)
+	y2 = CommandInfo(CMD_INFO_Y2)
+
+	If x = x2 and y = y2 Then    'the user clicked on the exact same place, I disable this
+		Exit Sub	
+	End If
+
+	' the user is using the line-mode tool (this is set in the dialog in main_sub), determine how many objects are at the chosen point.
+	'---------------------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+	If i_found = 0 Then
+		'do nothing, no objects found where the user clicked.
+	Else
+		' Process the search results if the user clicked on an object of some kind
+		'---------------------------------------------------
+		For i = 1 to i_found 											' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+
+			' Get the name of the table containing a "hit".
+			'---------------------------------------------------
+			table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+			table_selected = table_selected_alias
+
+			'Get the row ID number of the object that was a hit.
+			'---------------------------------------------------
+			i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+
+			' this tests to make sure the selection is a valid table
+			'-------------------------------------
+			select_ok = False
+			For j = 1 to 10
+				If sys(j) = "" Then
+					Exit For
+				ElseIf table_selected = cells_sys(j) Then
+					sysind = j
+					systemx = sys(j)
+					select_ok = True
+					Exit For
+				End If
+			Next
+
+			'*****************************************
+			'This is the code for selecting the cell and changing its az
+			'------------------------------------------
+			If select_ok = True Then           ' we have selected a sys(x) table
+
+				' Fetch the row of the object the user clicked on.
+				'---------------------------------------------------
+				Fetch rec i_row_id From table_selected
+					cell_data_alias = table_selected + ".Cell"
+					cellx = cell_data_alias					
+					cell_data_alias = table_selected + ".ANT_HBW"
+					hbwx = cell_data_alias
+					cell_data_alias = table_selected + ".OBJ_SIZE"
+					sizex = cell_data_alias
+					cell_data_alias = table_selected + ".AZ"
+					azx = cell_data_alias
+					cell_data_alias = table_selected + ".Status"
+					statusx = cell_data_alias
+					cell_data_alias = table_selected + ".Type"
+					typex = cell_data_alias
+					cell_data_alias = table_selected + ".LON"
+					finalx = cell_data_alias
+					cell_data_alias = table_selected + ".LAT"
+					finaly = cell_data_alias
+
+					'this writes to the undo store
+					'--------------------------------
+					undo_type = "az"
+					cell_data_alias = cells_sys(j) + ".site"	
+					undo_siteid = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".cell"	
+					undo_cellid = cell_data_alias
+					undo_cell_table = cells_sys(j)
+					undo_az = val(azx)
+
+				Call prepare_nbr_sub             'have to do this here, if you do in the pre_nbr_edit, it causes crashes if the user clicked on the nbr table before you closed it
+
+
+				' this does the changing of the objects
+				'-------------------------------------------
+				'This clears the old object	
+				'--------------------------
+				Delete Object from table_selected where rowid = i_row_id
+
+				'This calculates the new azimuth
+				'-----------------------------------
+				shiftx = x2 - finalx
+				shifty = y2 - finaly
+				If shifty = 0 Then       'this avoids the error when the y component = 0
+					aznew = RAD_2_DEG*PI/2
+				Else
+					aznew = RAD_2_DEG*atn(abs(shiftx/shifty))
+				End If
+
+				If shiftx >= 0 and shifty >= 0 Then           		'quadrant 1
+					aznew = aznew
+				ElseIf shiftx >= 0 and shifty < 0 Then			'quadrant 2
+					aznew = 180 - aznew
+				ElseIf shiftx < 0 and shifty < 0 Then			'quadrant 3
+					aznew = 180 + aznew
+				ElseIf shiftx < 0 and shifty >= 0 Then			'quadrant 4
+					aznew = 360 - aznew
+				End If
+				If aznew >= 360 Then
+					aznew = aznew - 360
+				ElseIf aznew < 0 Then
+					aznew = aznew + 360
+				End If
+				azx2 = str$(aznew)
+
+				If aznew = undo_az Then   'then there is no change in azimuth, so exit here
+					undo_type = ""
+					Exit Sub
+				End If
+				'------------------------------------
+
+				'############################################
+				Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx2, typex, sector1)
+				'############################################
+
+				' Put here the different colouring options based on status
+				'--------------------------
+				If statusx = "On-Air" Then
+					Alter Object sector1 
+					Info OBJ_INFO_BRUSH, brush_on_air(sysind)
+					Alter Object sector1 
+					Info OBJ_INFO_PEN, pen_on_air(i)
+				Else
+					Alter Object sector1 
+					Info OBJ_INFO_BRUSH, brush_not_on_air(sysind)
+					Alter Object sector1 
+					Info OBJ_INFO_PEN, pen_not_on_air(sysind)			
+				End If
+
+				Update table_selected
+					Set obj = sector1 Where rowid = i_row_id
+				Update table_selected
+					Set AZ = round(val(azx2),1) Where rowid = i_row_id
+
+				'This writes to the CR table
+				'-----------------------------------
+				Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+						Values ("Change Azimuth (" + systemx + ")", cellx, round(val(azx2),1) + " deg","old azimuth = " + round(val(azx),1) + " deg")
+
+			Exit Sub
+			End If
+		Next
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+

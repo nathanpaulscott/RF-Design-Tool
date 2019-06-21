@@ -1,0 +1,169 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub import_other_file_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub prepare_other_file_sub(ByVal tab_name As String)
+
+
+
+
+
+
+'---------------------------------------------------
+' this sub imports a text file with the 4G scan - lat-lon-PCI-SINR-RSRP... and creates other_tablename.tab
+'---------------------------------------------------
+Sub import_other_file_sub
+	Dim sector1, center, endpnt, bore, site1 As Object
+	Dim radio_temp_s, temp01, temp11, temp0, temp1, no_4G_flag, statusx, s_title As String	 
+	Dim radio_temp, row_0, i_win_id, i, j, k, k_old, count, num_pci As Integer
+	Dim pci_x, rsrp_x, sinr_x As Alias	
+	Dim other_filepath, other_filename, other_filename_short, other_tablename, other_fileproj As String
+
+
+	Set ProgressBars Off
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+	'---------------------------------------
+	other_filename = FileOpenDlg("","","","Please select the .txt/.csv data file to import and map...")
+	If other_filename = "" Then
+		Exit Sub
+	End If
+	other_filepath = PathToDirectory$(other_filename)
+	other_filename_short = PathToFileName$(other_filename)
+	other_tablename = PathToTableName$(other_filename)
+	If NOT Right$(other_filename_short,4) Like ".csv" AND NOT Right$(other_filename_short,4) Like ".txt" Then
+		Note "You dd not select a .csv/.txt file, exiting...."
+		Exit Sub
+	End If
+
+	If proj = "" Then			'the system projection has not yet been set so set it temporarily
+		other_fileproj = ChooseProjection$( "", True)
+		If other_fileproj = "" Then
+			Exit Sub
+		End If
+		Run Command "Set " + other_fileproj
+	Else
+		other_fileproj = proj
+	End If
+	'---------------------------------------
+	Call prepare_other_file_sub(other_tablename)		'checks to see if the file to be imported is already open, if so it closes it.
+
+	Print Chr$(12)
+	Print "Please Wait, importing..."
+
+	If Right$(other_filename_short,4) Like ".csv" Then
+OnError Goto target_is_open1
+		Register Table other_filename  TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into other_filepath & other_tablename & ".tab"
+OnError Goto 0
+	Else
+OnError Goto target_is_open1
+		Register Table other_filename  TYPE ASCII Delimiter 9 Titles Charset "WindowsLatin1" Into other_filepath & other_tablename & ".tab"
+OnError Goto 0
+	End If
+
+	Open Table other_filepath & other_tablename & ".tab"
+	Commit table other_tablename As other_filepath + "test.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Close Table other_tablename
+	Open Table other_filepath + "test.tab"
+	Commit table test As other_filepath + other_tablename & ".tab" TYPE NATIVE Charset "WindowsLatin1"
+	Drop Table test
+	Open Table other_filepath & other_tablename & ".tab"
+
+OnError Goto no_latlon_error
+	Alter Table other_tablename (Modify LON Decimal(20,10), LAT Decimal(20,10))
+OnError Goto 0
+	Commit Table other_tablename
+
+	Print Chr$(12)
+	Print "Mapping Table, please wait..."
+
+	Run Command "Create Map for " + other_tablename + " " + other_fileproj
+'###########################################################################3
+'carthographic seems to have issues in MI10+, so use wingdings circle, the 3rd param is the size
+	Set Style Symbol MakeFontSymbol(41,0,6,"MapInfo Cartographic",0,0)
+'if it has issues use this one
+'	Set Style Symbol MakeFontSymbol(108,0,6,"Wingdings",0,0), the 3rd param is the size
+'###########################################################################3
+	Update other_tablename
+		Set obj = CreatePoint (Lon,Lat)
+	Commit Table other_tablename
+'	Create Index On other_tablename (xxx)
+
+	k = FrontWindow()
+	j = WindowID(k)
+	run command "add map layer " + other_tablename
+
+	Print Chr$(12)
+	Print "Import Successful"
+
+general_return:
+	If proj <> "" Then
+		Run Command "Set " & proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	End If
+
+	Set ProgressBars On
+
+Exit Sub
+'---------------------
+target_is_open1:
+Note "The target file is open in an application, please close it and try again..."
+Resume general_return
+
+no_latlon_error:
+Note "There are no 'Lat' or 'Lon' fields in the import file, please check, exiting..."
+Resume general_return
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+' this checks if the table to be imported is open, if it is, it closes it
+'---------------------------------------------------
+Sub prepare_other_file_sub(ByVal tab_name As String)
+
+OnError GoTo closed1
+	If TableInfo(tab_name, TAB_INFO_NAME) <> "" Then
+		Drop Table tab_name
+		Exit Sub
+	End  If	 
+returnpoint1:
+OnError GoTo closed2
+	If TableInfo(test, TAB_INFO_NAME) <> "" Then
+		Drop Table test
+		Exit Sub
+	End  If	 
+returnpoint2:
+OnError GoTo closed3
+	If TableInfo(query1, TAB_INFO_NAME) <> "" Then
+		Close Table query1
+		Exit Sub
+	End  If	 
+returnpoint3:
+	Exit Sub
+
+'----------------------------
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+closed3:
+Resume returnpoint3
+
+End Sub
+'---------------------------------------------------
+
+

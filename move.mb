@@ -1,0 +1,392 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+Declare Sub snap2grid_alg_sub(ByVal at_site As String, at_sys_ind As Integer, at_az, at_obj_size, xsel, ysel As Float, xnew, ynew As Float)
+Declare Sub move_sub
+Declare Sub pre_move_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'--------------------------------------------------
+Sub pre_move_sub
+
+Dim i_win_id As String	
+
+
+Onerror goto no_mapper
+
+
+	'This cancels the sub if there is no mapper as the top window
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+returnpoint1:
+		Exit Sub
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Map Redraw Off
+		Set Event Processing Off
+	End If
+
+
+'---------------------------------------------------
+
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call check_tables_sub
+
+	Call move_sub
+
+	Call save_tables_sub
+
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'-------------------
+no_mapper:
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for site move mode
+'---------------------------------------------------
+Sub move_sub
+Dim finalx, finaly, shiftx, shifty, x, y, x2, y2, f_azx, f_sizex, f_lon, f_lat, xin, yin, xout, yout As Float
+Dim row_id_cell(100), row_id_site(100) as Integer		'this handles up to 100 sectors per site
+Dim statusi, h, i, j, k, l, m, i_found, i_row_id, i_win_id As Integer
+Dim sitex, namex, cellx, pnx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, sitex2, namex2, cellx2, pnx2, htx2, mdtx2, edtx2, azx2, statusx2, commentx2, hbwx2, sizex2, typex As String
+Dim sector, sector1, sector2, center, endpnt, sel, temppnt As Object
+Dim ctrl_move, shift_move As Logical
+Dim table_selected_alias, cell_data_alias As Alias
+Dim table_selected As String
+
+	
+	' need to set the coord sys so that mapinfo uses the sys we select
+	'--------------------------------------------------
+	Run Command "Set " + proj
+	Set Distance Units "km"
+	'---------------------------------------------------
+
+	Call date_check_sub
+
+	site_update = False
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the starting point where the user clicked.
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	x2 = CommandInfo(CMD_INFO_X2)
+	y2 = CommandInfo(CMD_INFO_Y2)
+	shift_move = CommandInfo(CMD_INFO_SHIFT)       	'this moves the cell only
+	ctrl_move = CommandInfo(CMD_INFO_CTRL)			'this shifts the site/cells by the click-drag amount, normal move, will move the cell/site center to the point dragged to
+
+	' determine how many objects are at the chosen point.
+	i_found = SearchPoint(i_win_id, x, y)
+
+	If i_found = 0 Then
+		' No objects found where the user clicked.
+	Else
+
+		' Process the search results.
+		For i = 1 to i_found
+			' Get the name of the table containing a "hit".
+			table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+			table_selected = table_selected_alias
+			
+			' Get the row ID number of the object that was a hit.
+			i_row_id = SearchInfo(i, SEARCH_INFO_ROW)
+			'if the point clicked on contains an object of the table cells_sys(1), we process it
+
+			For j = 1 to 10
+				If sys(j) = "" Then
+					Exit For
+				End If
+				ok_cells_sys(j) = "Off"
+				If table_selected = cells_sys(j) Then         
+					If is_open_cells_sys(j) = "On" and ((shift_move = True) or (shift_move = False and is_open_sites_sys(j) = "On")) Then 
+						ok_cells_sys(j) = "On"               ' this means all is ok so go ahead
+					Elseif is_open_cells_sys(j) = "On" and shift_move = False and is_open_sites_sys(j) = "Off" Then 
+						If Ask("The " & sites_sys(j) & " table is closed.  If you continue, only the " & cells_sys(j) & " table will be updated.","Continue","Cancel") = False Then
+							Exit Sub
+						End If
+						ok_cells_sys(j) = "On"               ' this means all is ok so go ahead
+					End If
+				End If
+
+				If ok_cells_sys(j) = "On" Then
+					Call prepare_nbr_sub
+
+					'if the point clicked on contains an object of the table cells_sys(j), we process it
+					'---------------------------------------------------
+					Fetch rec i_row_id from cells_sys(j)
+					cell_data_alias = cells_sys(j) + ".Site"	
+					sitex = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".LON"
+					f_lon = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".LAT"	
+					f_lat = cell_data_alias
+					If ctrl_move Then	
+						shiftx = x2 - x          	' moves the cell/site by the vector drawn
+						shifty = y2 - y      		' moves the cell/site by the vector drawn
+					Else
+						shiftx = x2 - f_lon	    	' moves the cell/site center to the point dragged to
+						shifty = y2 - f_lat	    	' moves the cell/site center to the point dragged to
+					End If
+
+					'Here we need to determine the new shiftx and shifty if the snap2grid flag is on
+					'-----------------------------------------------------------------------
+					If snap2grid Then
+						cell_data_alias = cells_sys(j) + ".Site"	
+						sitex = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Az"	
+						f_azx = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Obj_Size"	
+						f_sizex = cell_data_alias
+						xin = f_lon + shiftx
+						yin = f_lat + shifty
+						Call snap2grid_alg_sub(sitex,j,f_azx,f_sizex,xin,yin,xout,yout)
+						If xout = -9999 AND yout = -9999 Then		'the only match was invalid, so cancel moving
+							Exit Sub
+						End If
+						shiftx = xout - f_lon
+						shifty = yout - f_lat
+					End If	
+
+					'this writes to the undo store
+					'--------------------------------
+					Fetch rec i_row_id from cells_sys(j)
+					undo_type = "move"
+					undo_shiftx = shiftx
+					undo_shifty = shifty
+					undo_shift_move = shift_move
+					cell_data_alias = cells_sys(j) + ".Site"	
+					undo_siteid = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Cell"	
+					undo_cellid = cell_data_alias
+					undo_cell_table = cells_sys(j)
+
+					If shift_move = False Then    ' this finds the row ids of all the sites sectors in the cells table
+						Fetch First from table_selected
+						k = 0
+						Do While Not EOT (cells_sys(j))
+							cell_data_alias = cells_sys(j) + ".site"
+							If cell_data_alias = sitex Then
+								k = k + 1
+								cell_data_alias = cells_sys(j) + ".rowid"
+								row_id_cell(k) = cell_data_alias
+							End If
+							Fetch Next from cells_sys(j)
+						Loop
+
+						If is_open_sites_sys(j) = "On" Then
+							Fetch First from sites_sys(j)        ' this finds the row ids of the site in the site table
+							l = 0
+							Do While Not EOT (sites_sys(j))
+								cell_data_alias = sites_sys(j) + ".site"
+								If cell_data_alias = sitex Then
+									l = l + 1
+									cell_data_alias = sites_sys(j) + ".rowid"
+									row_id_site(l) = cell_data_alias
+								End If
+								Fetch Next from sites_sys(j)
+							Loop
+
+							For h = 1 to l                      ' this shifts the site object in the site table
+
+								Fetch  Rec row_id_site(h) From sites_sys(j)
+									cell_data_alias = sites_sys(j) + ".status"
+									statusx = cell_data_alias				
+									cell_data_alias = sites_sys(j) + ".LON"
+									finalx = cell_data_alias + shiftx				
+									cell_data_alias = sites_sys(j) + ".LAT"
+									finaly = cell_data_alias + shifty		
+
+								' this changes the lat/lon for the selected site in the sites_sys(1) table
+								'---------------------------------------
+								Update sites_sys(j) 
+									Set LON = finalx, LAT = finaly
+									Where rowid = row_id_site(h)
+
+								' This does the changing of the objects
+								'-------------------------------------------
+								' This clears the old object	
+								'--------------------------
+								Delete Object from sites_sys(j) where rowid = row_id_site(h)
+
+								'This draws the new object at the new co-ordinates
+								'----------------------------------------------------------
+								sector1 = CreatePoint(finalx, finaly)
+
+								If statusx = "On-Air" Then
+									Alter Object sector1
+									Info OBJ_INFO_SYMBOL, sym_on_air(j)
+								Else
+									Alter Object sector1
+									Info OBJ_INFO_SYMBOL, sym_not_on_air(j)
+								End If
+								Update sites_sys(j)
+									Set obj = sector1 where rowid = row_id_site(h)
+							Next
+						End If
+					Else
+						k = 1
+						row_id_cell(k) = i_row_id
+					End If
+
+					For h = 1 to k                            ' this shifts the sector objects in the cells table
+						Fetch  Rec row_id_cell(h) From cells_sys(j)
+							cell_data_alias = cells_sys(j) + ".status"
+							statusx = cell_data_alias
+							cell_data_alias = cells_sys(j) + ".LON"
+							finalx = cell_data_alias + shiftx
+							cell_data_alias = cells_sys(j) + ".LAT"
+							finaly = cell_data_alias + shifty
+
+						' this changes the lat/lon for the selected sector in the cells_sys(j) table
+						'---------------------------------------
+						Update cells_sys(j) 
+							Set LON = finalx, LAT = finaly
+							Where rowid = row_id_cell(h)
+
+						' this does the changing of the objects
+						'-------------------------------------------
+						'This clears the old object	
+						'--------------------------
+						Delete Object from cells_sys(j) where rowid = row_id_cell(h)
+
+						'This draws the new object at the new co-ordinates
+						'----------------------------------------------------------
+						cell_data_alias = cells_sys(j) + ".ANT_HBW"
+						hbwx = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".OBJ_SIZE"
+						sizex = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".AZ"
+						azx = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Type"
+						typex = cell_data_alias
+
+						'############################################
+						Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx, typex, sector1)
+						'############################################
+
+						' Put here the different colouring options based on status
+						'--------------------------
+						If statusx = "On-Air" Then
+							Alter Object sector1 
+							Info OBJ_INFO_BRUSH, brush_on_air(j)
+							Alter Object sector1 
+							Info OBJ_INFO_PEN, pen_on_air(j)
+						Else
+							Alter Object sector1 
+							Info OBJ_INFO_BRUSH, brush_not_on_air(j)
+							Alter Object sector1 
+							Info OBJ_INFO_PEN, pen_not_on_air(j)			
+						End If
+
+						Update cells_sys(j)
+							Set obj = sector1 Where rowid = row_id_cell(h)
+					Next
+
+
+'#################################################################
+'#################################################################
+'#################################################################
+'#################################################################
+	'This is temp for the STI project
+	'---------------------------------
+OnError GoTo STI_proj_file_is_closed
+	If TableInfo("Basic_Population_Indonesia_V2", TAB_INFO_NAME) <> "" Then
+OnError GoTo 0
+		Dim temp_obj(10) As Object
+		Dim temp_pop(10), temp_pop_total As Float
+		Dim pop_string As String
+
+		For h = 1 to k
+			Fetch  Rec row_id_cell(h) From cells_sys(j)
+			cell_data_alias = cells_sys(j) + ".obj"
+			temp_obj(h) = cell_data_alias
+		Next
+
+		pop_string = ""
+		temp_pop_total = 0
+		For h = 1 to k
+			temp_pop(h) = 0
+			Select * From Basic_Population_Indonesia_V2 Where Basic_Population_Indonesia_V2.obj Intersects temp_obj(h) Into query1
+			Fetch First from query1
+			Do While Not EOT(query1)
+				temp_pop(h) = temp_pop(h) + ProportionOverlap(query1.obj,temp_obj(h))*query1.Population
+				Fetch Next from query1
+			Loop
+			Close Table query1
+			temp_pop(h) = temp_pop(h)/1000
+			pop_string = pop_string + Format$(temp_pop(h),",#.#") + "/"
+			temp_pop_total = temp_pop_total + temp_pop(h)
+		Next
+		pop_string = Left$(pop_string, Len(pop_string)-1)
+
+		Set Map Redraw On
+		Print Chr$(12)
+		Print("Site Covers: " + Format$(temp_pop_total,",#.#K") + " => " + pop_string + " people")
+	End  If	 
+	returnpoint_sti:
+'#################################################################
+'#################################################################
+'#################################################################
+
+
+
+					Exit Sub		
+				End If
+			Next
+		Next
+	End If
+Exit Sub
+
+
+'------------------------
+STI_proj_file_is_closed:
+Resume returnpoint_sti
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+

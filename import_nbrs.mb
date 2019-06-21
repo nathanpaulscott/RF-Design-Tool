@@ -1,0 +1,188 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub pre_import_nbrs_sub
+Declare Sub import_nbrs_sub(ByVal input_filename As String)
+
+
+
+
+
+'--------------------------------
+' calls the import nbrs sub
+'--------------------------------
+Sub pre_import_nbrs_sub
+
+'	'This opens the import log for writing
+'	'---------------------------------------
+'	Open File pf_user_path & "import_log.txt" For Output As #100
+
+	'Resets the nbr edit selections
+	'--------------------------------
+	add_nbr_flag = "Off"
+	disable_edit = "Off"
+	del_nbr_flag = "Off"
+	Alter Menu Item ID 1005 Check			'choose_host_sub Check
+	Alter Menu Item ID 1006 Disable 		'add_nbr_sub Disable
+	Alter Menu Item ID 1006 UnCheck
+	Alter Menu Item ID 1007 Disable		'del_nbr_sub Disable
+	Alter Menu Item ID 1007 UnCheck
+
+	Call import_nbrs_sub("") 
+
+'	Close File #100
+
+	Exit Sub
+'----------------------------
+
+End Sub
+
+
+
+
+
+
+'----------------------------------------------------------------
+' imports a .csv file to the loaded nl, overwrites the old one => NOTE: this imports any cellids, even if they are not in the cell files (because we need to know what is actually in the NL
+'----------------------------------------------------------------
+Sub import_nbrs_sub(ByVal input_filename As String)
+Dim i, j, k As Integer
+
+
+	Print Chr$(12)
+	Print "Importing NL, please wait..."
+
+	If input_filename <> "no nbrs table given" Then
+		If input_filename = "" Then
+			input_filename = FileOpenDlg("","","csv","Please select the NL file to import...")
+			If input_filename = "" Then
+				Exit Sub
+			End If
+		End If
+	Else
+		input_filename = ""
+	End If
+
+	' Deletes any important files if they are open
+	'--------------------------------------------------
+	If FileExists(pf_user_path + "input.tab") Then
+		Kill pf_user_path + "input.tab"
+	End If	 
+	If FileExists(pf_user_path + "input.dat") Then
+		Kill pf_user_path + "input.dat"	 
+	End If
+	If FileExists(pf_user_path + "inputx.tab") Then
+		Kill pf_user_path + "inputx.tab"
+	End If	 
+	If FileExists(pf_user_path + "inputx.dat") Then
+		Kill pf_user_path + "inputx.dat"	 
+	End If
+
+	If input_filename <> "" Then
+		' This imports the nbr data into the nbrs_DB tab
+		'--------------------------------------------------
+returnpoint_fileused2:
+OnError Goto file_used2
+		Register Table input_filename TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into pf_user_path + "inputx.tab"
+OnError Goto general_error
+		Open Table pf_user_path + "inputx.tab"
+		Commit Table inputx As pf_user_path + "input.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Open Table pf_user_path + "input.tab"
+		Close Table inputx
+		If FileExists(pf_user_path + "inputx.tab") = True Then
+			Kill pf_user_path + "inputx.tab"
+		End If
+
+		'Performs some basic checks on the data and format
+		'--------------------------------------------------
+		'We select only the cols we want and remove any duplicates => errors indicate missing col names, out of range sys vals
+		'------------------------------------------------------------------------------------------------------------------------------
+OnError Goto nbr_col_name_error
+	Select Host_Cell, Host_Sys, Nbr_Cell, Nbr_Sys From input Where Host_Cell <> "" And Nbr_Cell <> "" And Host_Sys = Any(sys(1),sys(2),sys(3),sys(4),sys(5),sys(6),sys(7),sys(8),sys(9),sys(10)) And Host_Sys <> "" And Nbr_Sys = Any(sys(1),sys(2),sys(3),sys(4),sys(5),sys(6),sys(7),sys(8),sys(9),sys(10)) And Nbr_Sys <> "" Into query1 Group By Host_Cell, Host_Sys, Nbr_Cell, Nbr_Sys
+OnError Goto general_error
+	End If
+
+	'If we get here we are ok, so we delete the nbrs_DB table and put the newly imported data in it
+	'-----------------------------------------------------------------------------
+	' This closes any open nbrs_DB table and deletes all files
+	'------------------------------------------------------------
+OnError GoTo nbrs_table_open
+	If TableInfo(nbrs_DB, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Close Table nbrs_DB
+	End If
+returnpoint_7:
+OnError Goto general_error
+	If FileExists(pf_user_path + "nbrs_DB.tab") Then
+		Kill pf_user_path + "nbrs_DB.tab"
+	End If	 
+	If FileExists(pf_user_path + "nbrs_DB.dat") Then
+		Kill pf_user_path + "nbrs_DB.dat"	 
+	End If
+	If FileExists(pf_user_path + "nbrs_DB.ind") Then
+		Kill pf_user_path + "nbrs_DB.ind"	 
+	End If
+
+	'Creates the blank nbrs_DB Table
+	'-----------------------------------
+	Create Table nbrs_DB (Host_Cell char(100), Host_Sys Char(20), Nbr_Cell char(100), Nbr_Sys Char(20)) File pf_user_path + "nbrs_DB.tab" 	
+	Set Table nbrs_DB Fastedit On
+	Create Index On nbrs_DB (Host_Cell)
+	Create Index On nbrs_DB (Host_Sys)
+	Create Index On nbrs_DB (Nbr_Cell)
+	Create Index On nbrs_DB (Nbr_Sys)
+	Commit Table nbrs_DB
+
+	If input_filename <> "" Then
+		Insert Into nbrs_DB
+			Select * From query1
+		Commit Table nbrs_DB
+		Close Table query1
+
+skip_nbr_import2:
+OnError GoTo general_error
+		Close Table input
+
+		If FileExists(pf_user_path + "input.tab") = True Then
+			Kill pf_user_path + "input.tab"	 
+		End If 
+		If FileExists(pf_user_path + "input.dat") = True Then
+			Kill pf_user_path + "input.dat"	 
+		End If
+	End If
+
+
+	Print Chr$(12)
+	Print "Done Importing NL."
+
+skip_nbr_import:
+OnError GoTo general_error
+
+general_returnpoint:
+Exit Sub
+'----------------------
+'Error Handlers
+'------------------------
+general_error:
+Note "There was an error: " & Error$()
+Resume general_returnpoint
+
+record_size_error_nbrs:
+Note "There was an error, the code is: " + Error$() + "  The most likely cause is that your nbrs import file has too many extra cols for MI to handle, reduce the number of extra cols"
+Resume general_returnpoint
+
+file_used2:
+Note "The input file either is being used by another program or has no nbrs, skipping..."
+Resume skip_nbr_import
+
+nbrs_table_open:
+Resume returnpoint_7
+
+nbr_col_name_error:
+Note "The nbrs import file does not have the required col names, not importing nbrs."
+Resume skip_nbr_import2
+
+End Sub
+'---------------------------------------------------

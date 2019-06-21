@@ -1,0 +1,43 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub date_check_sub
+Declare Sub x_factor_sub
+Declare Sub set_display_sub
+Declare Sub draw_3G_cells_sub
+Declare Sub draw_2G_cells_sub
+Declare Sub add_nbr_sub
+Declare Sub del_nbr_sub
+Declare Sub prepare_nbr_sub
+
+'---------------------------------------------------
+' this is a geo copy protection sub
+'---------------------------------------------------
+Sub x_factor_sub
+Dim i, j, k, l, m ,n , o As Integer
+Dim dist, x0, y0, x1, y1, x2 As Float
+Dim lonx, latx As String
+Dim site_data_alias As Alias
+Dim temp_obj As Object
+
+
+	m = Tableinfo(input, tab_info_nrows)
+	For j = 6 to m
+		Fetch Rec j From input
+			site_data_alias = input + ".lon"
+			lonx = site_data_alias
+			site_data_alias = input + ".lat"
+			latx = site_data_alias
+		If distance(protect_lon, protect_lat, lonx, latx, "km") > protect_dist Then
+			Note "Tool is not authorised for use in this area.  Please contact nathanpaulscott@yahoo.com"
+			End Program
+		End If
+		j = minimum(m, j + round(Minimum(1,(j/200))*100*rnd(1),1))
+	Next
+End Sub
+'---------------------------------------------------
+
+
+

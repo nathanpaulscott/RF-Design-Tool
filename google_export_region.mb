@@ -1,0 +1,373 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub google_export_region_sub
+Declare Sub google_export_header_main_sub(ByVal fn As String)
+Declare Sub google_export_footer_main_sub
+Declare Sub google_export_header_sub(ByVal fn As String)
+Declare Sub google_export_footer_sub
+Declare Sub pre_google_export_region_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+Declare Sub date_check_sub
+Declare Sub test_nbrq1_sub
+
+
+
+'---------------------------------------------------
+Sub pre_google_export_region_sub
+Dim i_win_id As String	
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Map Redraw Off
+		Set Event Processing Off
+	End If
+
+
+	' We need to check all tables before the export
+	'------------------------------------------------------------
+	Call check_tables_sub
+
+	Call save_tables_sub
+
+	Call google_export_region_sub
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this exports the selected polyline or region to google in .kml format
+'---------------------------------------------------
+Sub google_export_region_sub
+
+Dim data_alias As Alias
+Dim data(100), output_filename_short, output_filename, output_path, temp_string, num_rows_s As String
+Dim i, j, k, l, m, x, y, z, mold, num_rows_i, i_row_id As Integer
+Dim first_table_flag As Logical
+Dim temp_lat, temp_lon As Float
+Dim num_nodes, num_polys, num_rows, num_splits As Integer
+Dim temp_s As String
+
+
+OnError Goto general_error
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+'	Call date_check_sub
+
+OnError GoTo no_sel_error
+	If ObjectInfo(selection.obj,OBJ_INFO_TYPE) <> 4 And ObjectInfo(selection.obj,OBJ_INFO_TYPE) <> 7 Then   'The selected object is not a polyline or region so exit
+		Note "This only works for polyline or region objects.  Exiting..."
+		Goto returnpoint1
+	End If
+	If ObjectInfo(selection.obj,OBJ_INFO_NPNTS) < 2 Then   'The selected object has too few points
+		Note "Please select an object with at least 2 nodes.  Exiting..."
+		Goto returnpoint1
+	End If
+OnError GoTo general_error
+
+	output_filename = FileSaveAsDlg(pf_user_path, "", "kml", "Choose Export Location and Filename")
+	If output_filename = "" Then
+		Exit Sub
+	End If
+
+	output_path = PathToDirectory$(output_filename)
+	output_filename_short = PathToFilename$(output_filename)
+
+	'This cleans the file
+	'---------------------------------------
+OnError Goto file_open_error
+
+	Open File output_filename For Output As #1
+
+OnError GoTo general_error
+
+'	data(1) = ""
+'	For i = 1 to 1000000   ' I am cleaning up to 1e6 lines
+'		print #1, data(1)
+'	Next
+	Close File #1
+
+	Print Chr$(12)
+	Print "Please wait.  Exporting....."
+
+	'This opens the cleaned file for writing
+	'---------------------------------------
+	Open File output_filename For Output As #1
+
+	Call google_export_header_main_sub(output_filename_short)
+
+	num_rows = TableInfo(selection,TAB_INFO_NROWS)
+	m = 0
+	For k = 1 to num_rows
+		Fetch Rec k From selection
+		num_polys = ObjectInfo(selection.obj,OBJ_INFO_NPOLYGONS)
+		For i = 1 to num_polys
+			m = m + 1
+			num_nodes = ObjectInfo(selection.obj,OBJ_INFO_NPOLYGONS+i)
+			temp_s =Left$(output_filename_short,Instr(1,output_filename_short,".kml") - 1) + "_" + m
+			Call google_export_header_sub(temp_s)
+
+			'As string vars can only hold 32000 chars or so, we have to break the large polgons up, calcs show there are just under 30 chars per node
+			'=> 30*1000 = 30000 is a safe break up distance
+			'-----------------------------------------------------------------
+			num_splits = num_nodes/1000 + 1
+			For x = 1 to num_splits
+				data(x) = ""
+				For j = 1 + 1000*(x-1) to Minimum(num_nodes,1000*x)
+					data(x) = data(x) + ObjectNodeX(selection.obj,i,j) + "," + ObjectNodeY(selection.obj,i,j) + ",0 "
+				Next
+				print #1, data(x)
+			Next
+			Call google_export_footer_sub
+		Next
+	Next
+
+	Call google_export_footer_main_sub
+
+	Close File #1
+
+	Print Chr$(12)
+	Print "Finished Exporting"
+
+returnpoint1:
+Call test_nbrq1_sub
+If q1_exists = "On" Then
+	Close Table query1
+End If
+
+Exit Sub
+
+'Error Handlers
+'------------------------
+general_error:
+Note "Got an error, exiting now.  Details are: "+error$()
+Resume returnpoint1
+
+file_open_error:
+Note "Your ouput file is currently open in another program (like XL).  Close it and try again."
+Resume returnpoint1
+
+no_sel_error:
+Note "You do not have any polyline or region object selected.  Exiting..."
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+' this is all the header gunk for the whole thing
+'---------------------------------------------------
+Sub google_export_header_main_sub(ByVal fn As String)
+Dim data As String
+
+	'Header
+	'---------------------------------------
+	data = "<?xml version=""1.0"" encoding=""UTF-8""?>"
+	print #1, data
+	data = "<kml xmlns=""http://www.opengis.net/kml/2.2"" xmlns:gx=""http://www.google.com/kml/ext/2.2"" xmlns:kml=""http://www.opengis.net/kml/2.2"" xmlns:atom=""http://www.w3.org/2005/Atom"">"
+	print #1, data
+
+	data = "<Document>"
+	print #1, data
+	data = "<name>" + fn + "</name>"
+	print #1, data
+	data = "<StyleMap id=""m_ylw-pushpin"">"
+	print #1, data
+	data = "<Pair>"
+	print #1, data
+	data = "<key>normal</key>"
+	print #1, data
+	data = "<styleUrl>#s_ylw-pushpin</styleUrl>"
+	print #1, data
+	data = "</Pair>"
+	print #1, data
+	data = "<Pair>"
+	print #1, data
+	data = "<key>highlight</key>"
+	print #1, data
+	data = "<styleUrl>#s_ylw-pushpin_hl</styleUrl>"
+	print #1, data
+	data = "</Pair>"
+	print #1, data
+	data = "</StyleMap>"
+	print #1, data
+	data = "<Style id=""s_ylw-pushpin_hl"">"
+	print #1, data
+	data = "<IconStyle>"
+	print #1, data
+	data = "<scale>1.3</scale>"
+	print #1, data
+	data = "<Icon>"
+	print #1, data
+	data = "<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>"
+	print #1, data
+	data = "</Icon>"
+	print #1, data
+	data = "<hotSpot x=""20"" y=""2"" xunits=""pixels"" yunits=""pixels""/>"
+	print #1, data
+	data = "</IconStyle>"
+	print #1, data
+	data = "<LineStyle>"
+	print #1, data
+	data = "<color>ff0000ff</color>"
+	print #1, data
+	data = "<width>3</width>"
+	print #1, data
+	data = "</LineStyle>"
+	print #1, data
+	data = "<PolyStyle>"
+	print #1, data
+	data = "<fill>0</fill>"
+	print #1, data
+	data = "</PolyStyle>"
+	print #1, data
+	data = "</Style>"
+	print #1, data
+	data = "<Style id=""s_ylw-pushpin"">"
+	print #1, data
+	data = "<IconStyle>"
+	print #1, data
+	data = "<scale>1.1</scale>"
+	print #1, data
+	data = "<Icon>"
+	print #1, data
+	data = "<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>"
+	print #1, data
+	data = "</Icon>"
+	print #1, data
+	data = "<hotSpot x=""20"" y=""2"" xunits=""pixels"" yunits=""pixels""/>"
+	print #1, data
+	data = "</IconStyle>"
+	print #1, data
+	data = "<LineStyle>"
+	print #1, data
+	data = "<color>ff0000ff</color>"
+	print #1, data
+	data = "<width>3</width>"
+	print #1, data
+	data = "</LineStyle>"
+	print #1, data
+	data = "<PolyStyle>"
+	print #1, data
+	data = "<fill>0</fill>"
+	print #1, data
+	data = "</PolyStyle>"
+	print #1, data
+	data = "</Style>"
+	print #1, data
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is the footer for the main thing
+'---------------------------------------------------
+Sub google_export_footer_main_sub
+Dim data As String
+
+
+	'Footer
+	'---------------------------------------
+	data = "</Document>"
+	print #1, data
+	data = "</kml>"
+	print #1, data
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is all the header gunk for each region/polyline object
+'---------------------------------------------------
+Sub google_export_header_sub(ByVal fn As String)
+Dim data As String
+
+	data = "<Placemark>"
+	print #1, data
+	data = "<name>" + fn + "</name>"
+	print #1, data
+	data = "<styleUrl>#m_ylw-pushpin</styleUrl>"
+	print #1, data
+	data = "<Polygon>"
+	print #1, data
+	data = "<tessellate>1</tessellate>"
+	print #1, data
+	data = "<outerBoundaryIs>"
+	print #1, data
+	data = "<LinearRing>"
+	print #1, data
+	data = "<coordinates>"
+	print #1, data
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is all the footer gunk for each region/polyline object
+'---------------------------------------------------
+Sub google_export_footer_sub
+Dim data As String
+
+
+	'Footer
+	'---------------------------------------
+	data = "</coordinates>"
+	print #1, data
+	data = "</LinearRing>"
+	print #1, data
+	data = "</outerBoundaryIs>"
+	print #1, data
+	data = "</Polygon>"
+	print #1, data
+	data = "</Placemark>"
+	print #1, data
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+

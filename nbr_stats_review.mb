@@ -1,0 +1,838 @@
+'This code is a bit messy, need to rewrite it.
+
+
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub nbr_stats_review_sub
+Declare Sub pre_nbr_stats_review_sub
+Declare Sub mod_nbr_stats_sub
+Declare Sub pre_nbr_stats_import_sub
+Declare Sub choose_nbr_pos_sub (desired_pos as Integer)
+Declare Sub prepare_nbr_sub
+Declare Sub x_factor2_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+Declare Sub check_layers_sub
+
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_nbr_stats_review_sub
+Dim host_val As String
+Dim i_win_id As String	
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+	Call check_tables_sub
+
+	Call check_layers_sub
+	Call nbr_stats_review_sub
+
+OnError Goto file_closed_error
+	If TableInfo(nbr_stats, TAB_INFO_NAME) <> "" Then
+		'table is open, do nothing
+	Else
+file_closed_returnpoint:
+		Call pre_nbr_stats_import_sub
+		If nbr_stats_filename = "" Then
+			Exit Sub
+		End If
+	End  If
+OnError Goto 0
+
+	Call nbr_stats_review_sub
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'-----------------------------------------------------
+file_closed_error:
+Resume file_closed_returnpoint
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for the NL editing state
+'---------------------------------------------------
+Sub nbr_stats_review_sub
+Dim nbr_sysind, host_sysind, desired_pos, blank_space_num, host_row_id, nbr_row_id, count, i, j, k, i_found, i_row_id, i_win_id, pen1, pen2, brush1, brush2 As Integer
+Dim nl_size, recip_nl_size, nl(64), pen3, bucket, table_selected, finished_flag, layer1, host_val, nbr_val, found_blank, host_table, host_sys, nbr_table, nbr_sys, sitex, namex, cellx, sysx, pnx, bsicx, zcrsx, typex, latx, lonx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, statsx, recip_statsx, nl_sizex, recip_nl_sizex, is_nbrx, distx, actionx As String
+Dim x, y, x2, y2 As Float
+Dim sel, sel2 As Object
+Dim table_selected_alias, cell_data_alias As Alias
+Dim select_ok, s_click, c_click As Logical
+
+
+
+OnError Goto general_error
+	' need to set the coord sys so that mapinfo uses the sys we select
+	'-----------------------------------------------
+	Run Command "Set " + proj 
+	Set Distance Units "km"
+	'-------------------------------------------------
+
+	' this checks that the front window is a mapper
+	'---------------------------------------------------
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Set Map Redraw On
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the point where the user clicked and if shift or ctrl was pressed
+	'------------------------------------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	s_click = CommandInfo(CMD_INFO_SHIFT)
+	c_click = CommandInfo(CMD_INFO_CTRL)
+
+	' the user is using the point-mode tool (this is set in the dialog in main_sub), determine how many objects are at the chosen point.
+	'---------------------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+	If i_found = 0 Then
+		'do nothing, no objects found where the user clicked.
+	Else
+		'this is the regular nbr management mode
+		'----------------------------------------------
+		If NOT c_click Then
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			Set Map Redraw Off
+			For i = 1 to i_found 		'searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+				' this tests to see which table is open and then which has been selected
+				'-------------------------------------
+				select_ok = False
+				For j = 1 to 10
+					If sys(j) = "" Then
+						Exit For
+					ElseIf table_selected = cells_sys(j) Then
+						host_sys = sys(j)
+						host_sysind = j
+						select_ok = True
+						Exit For
+					End If
+				Next
+
+				Call save_tables_sub
+
+
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'This is the code for selecting a new host
+				'------------------------------------------
+				'if the point clicked on contains an object of the table sys(x), we process it
+				'---------------------------------------------------
+				If select_ok = True Then
+					host_row_id = i_row_id
+
+					' Fetch the row of the object the user clicked on.
+					'---------------------------------------------------
+					Fetch rec host_row_id From table_selected
+					layer1 = LayerInfo( i_win_id, 1, LAYER_INFO_NAME)
+
+					'Print important data to screen
+					'---------------------------------------------------
+					Print Chr$(12)
+					cell_data_alias =  table_selected_alias + ".Site" 
+					Print "Site: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".Sitename"
+					Print "Site Name: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".Cell"
+					Print "Cell ID: " + cell_data_alias
+					cell_data_alias = table_selected + ".System"
+					Print "System: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".PCI_SC_BCCH_PN"
+					Print "Pci/Sc/Bcch/Pn: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".AZ" 
+					Print "Azimuth: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".MDT" 
+					Print "MDT: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".EDT" 
+					Print "EDT: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".HT" 
+					Print "Height: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".STATUS" 
+					Print "Status: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".Comment" 
+					Print "Comments: " + cell_data_alias
+
+					Call prepare_nbr_sub             'have to do this here, if you do in the pre_nbr_edit, it causes crashes if the user clicked on the nbr table before you closed it
+
+					Select * From table_selected Where rowid = host_row_id Into query1
+					Commit Table query1 As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+					Close Table query1
+					Open Table pf_user_path & "nbrs_RFDT.TAB"
+					Add Map Layer nbrs_RFDT
+
+					' this changes the display properties of the host object in the nbrs_RFDT table
+					'--------------------------------------
+					Fetch First from nbrs_RFDT
+					sel = nbrs_RFDT.obj
+					x = centroidx(nbrs_RFDT.obj)
+					y = centroidy(nbrs_RFDT.obj)
+					host_val = nbrs_RFDT.cell
+
+					'these are globals to allow us to query nbrs of this host in the c_click case
+					'------------------------------------------------------------------------------
+					nbr_stats_host = host_val
+					nbr_stats_host_sys = host_sys
+					nbr_stats_y1 = Str$(y)
+					nbr_stats_x1 = Str$(x)
+
+					'This sets the colours based on the system
+					'----------------------------------------
+					Alter Object sel
+					Info OBJ_INFO_BRUSH, brush_host(host_sysind)
+					Alter Object sel 
+					Info OBJ_INFO_PEN, pen_host(host_sysind)
+					Update nbrs_RFDT
+						set obj = sel where rowid = 1
+
+					' this puts the nbr objects into the nbrs_RFDT tab
+					'----------------------------------------------------
+					Select * From nbr_stats Where Cell = host_val AND Layer = host_sys Into query2
+					If TableInfo(query2,TAB_INFO_NROWS) > 0 Then
+						Fetch First From query2
+							nbr_val =  query2.NCELL
+							nbr_sys =  query2.NCELL_LAYER
+
+						'test that the nbr sys is in defined in the tool
+						'-------------------------------------------------
+						For j = 1 to 10
+							If nbr_sys = sys(j) Then			'this is the table for our nbr, j will be fixed now
+								nbr_sysind = j	
+								Exit For
+							ElseIf sys(j) = "" Or j = 10 Then
+								Note "There is an unknown system/layer in the nbr stats table, it must exist in the tool to analyse. exiting...."
+								Goto general_returnpoint	
+							End If
+						Next
+
+						brush1 = StyleAttr(brush_nbr(nbr_sysind),BRUSH_PATTERN)
+						brush2 = StyleAttr(brush_nbr(nbr_sysind),BRUSH_BACKCOLOR)
+						pen1 = StyleAttr(pen_connector(nbr_sysind),PEN_PATTERN)
+						pen2 = StyleAttr(pen_connector(nbr_sysind),PEN_COLOR)
+						Do While Not EOT(query2)
+							statsx = query2.STATS
+							actionx = query2.ACTION
+							is_nbrx = query2.IS_NBR
+							nbr_val =  query2.NCELL
+							nbr_sys =  query2.NCELL_LAYER
+							If nbr_val <> "" and nbr_val <> "0" then	
+								Select * from cells_sys(nbr_sysind) where Cell = nbr_val Into query1
+								If TableInfo(query1,TAB_INFO_NROWS) > 0 Then
+									Insert Into nbrs_RFDT
+										Select * from query1
+									If nbr_lines_flag = "On" Then
+										Fetch Last From nbrs_RFDT
+										x2 = centroidx(nbrs_RFDT.obj)
+										y2 = centroidy(nbrs_RFDT.obj)
+										sel = nbrs_RFDT.obj
+										If actionx = "ADD" Then
+											Alter Object sel 
+												Info OBJ_INFO_BRUSH, MakeBrush(brush1,GREEN,brush2)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										ElseIf actionx = "REMOVE" Then
+											Alter Object sel 
+												Info OBJ_INFO_BRUSH, MakeBrush(brush1,RED,brush2)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										ElseIf NOT is_nbrx = Any("Y","y") Then
+											Alter Object sel 
+												'Info OBJ_INFO_BRUSH, MakeBrush(1,RGB(252,252,252),brush2)
+												'Info OBJ_INFO_PEN, MakePen (2, 2, 0)
+												Info OBJ_INFO_BRUSH, MakeBrush(brush1,RGB(250,250,250),brush2)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										Else
+											Alter Object sel 
+												Info OBJ_INFO_BRUSH, MakeBrush(brush1,BLUE,brush2)
+												'Info OBJ_INFO_BRUSH, brush_nbr(nbr_sysind)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										End If
+										Update nbrs_RFDT
+											set obj = sel where rowid = nbrs_RFDT.rowid
+
+										'Draws the lines of different thickness
+										'----------------------------------------
+										If s_click AND Val(statsx) > 0 AND actionx = Any("ADD","MOD","REMOVE","NONE","NOT ADD") Then   	'Then we show also lines for the "NOT ADD"s - gets quite messy
+												sel = CreateLine(x, y, x2, y2)
+												Alter Object sel 
+													Info OBJ_INFO_PEN, MakePen(Round(Minimum(7,Maximum(1,7*Log(Val(statsx)+1)/Log(10))),0.1),pen1,pen2)
+												Insert Into nbrs_RFDT (Cell, System, obj)
+													Values (nbr_val,sys(nbr_sysind),sel)
+										ElseIf NOT s_click AND Val(statsx) > 0 AND actionx = Any("ADD","MOD","REMOVE","NONE") Then   	'Don't show lines for the "NOT ADD"s
+												sel = CreateLine(x, y, x2, y2)
+												Alter Object sel 
+													Info OBJ_INFO_PEN, MakePen(Round(Minimum(7,Maximum(1,7*Log(Val(statsx)+1)/Log(10))),0.1),pen1,pen2)
+												Insert Into nbrs_RFDT (Cell, System, obj)
+													Values (nbr_val,sys(nbr_sysind),sel)
+										End If
+									Else
+										Fetch Last from nbrs_RFDT
+										sel = nbrs_RFDT.obj
+										If actionx = "ADD" Then
+											Alter Object sel 
+												Info OBJ_INFO_BRUSH, MakeBrush(brush1,GREEN,brush2)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										ElseIf actionx = "REMOVE" Then
+											Alter Object sel 
+												Info OBJ_INFO_BRUSH, MakeBrush(brush1,RED,brush2)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										ElseIf NOT is_nbrx = Any("Y","y") Then
+											Alter Object sel 
+												Info OBJ_INFO_BRUSH, MakeBrush(brush1,RGB(200,200,200),brush2)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										Else
+											Alter Object sel 
+												Info OBJ_INFO_BRUSH, brush_nbr(nbr_sysind)
+												Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+										End If
+										Update nbrs_RFDT
+											set obj = sel where rowid = nbrs_RFDT.rowid
+									End If	
+								Else
+									Print "This Cell(" & host_val & ") Has An Undefined Neighbor(" & nbr_val & ")"
+								End If
+								Close Table query1
+							End If
+							Fetch Next From query2
+						Loop
+						Close Table query2
+					End If
+
+					'This gets out of the i loop so no more underlying objects are processed => the top sector is processed as the host only
+					'-------------------------------------------------------------
+					Exit For
+				End If
+			Next
+
+
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'This shows the cell info, if the CTRL key was pressed while clicking					
+		'-----------------------------------------------------------------------
+		ElseIf c_click Then
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+
+				' this tests to see which table is open and then which has been selected
+				'-------------------------------------
+				select_ok = False
+				For j = 1 to 10
+					If sys(j) = "" Then
+						Exit For
+					ElseIf table_selected = cells_sys(j) Then
+						select_ok = True
+						Exit For
+					End If
+				Next
+
+				' Fetch the row of the object the user clicked on.
+				'------------------------------------------------------
+				If select_ok = True Then
+					' Fetch the row of the object the user clicked on.
+					'------------------------------------------------------
+					Fetch rec i_row_id From table_selected
+						cell_data_alias = table_selected + ".Site"
+						sitex =  cell_data_alias
+						cell_data_alias = table_selected + ".Sitename"
+						namex = cell_data_alias
+						cell_data_alias = table_selected + ".Cell"
+						cellx = cell_data_alias
+						cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+						pnx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_BSIC"
+						bsicx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_Cnt"
+						zcrsx = cell_data_alias
+						cell_data_alias = table_selected + ".LAT"
+						latx = cell_data_alias
+						cell_data_alias = table_selected + ".LON"
+						lonx = cell_data_alias
+						cell_data_alias = table_selected + ".HT"
+						htx = cell_data_alias
+						cell_data_alias = table_selected + ".AZ"
+						azx = cell_data_alias
+						cell_data_alias = table_selected + ".MDT"
+						mdtx = cell_data_alias
+						cell_data_alias = table_selected + ".EDT"
+						edtx = cell_data_alias
+						cell_data_alias = table_selected + ".STATUS"
+						statusx = cell_data_alias
+						cell_data_alias = table_selected + ".Comment"
+						commentx = cell_data_alias
+						cell_data_alias = table_selected + ".ANT_HBW"
+						hbwx = cell_data_alias
+						cell_data_alias = table_selected + ".OBJ_SIZE"
+						sizex = cell_data_alias
+						cell_data_alias = table_selected + ".Type"
+						typex = cell_data_alias
+
+					recip_not_in_nbr_stats_flag = False
+					not_in_nbr_stats_flag = False
+					change_nbr_choice = "-"
+					nbr_stats_nbr = cellx
+					nbr_stats_nbr_sys = sysx
+					nbr_stats_y2 = Str$(latx)
+					nbr_stats_x2 = Str$(lonx)
+
+					Select * From nbr_stats Where CELL = nbr_stats_host AND LAYER = nbr_stats_host_sys AND NCELL = nbr_stats_nbr AND NCELL_LAYER = nbr_stats_nbr_sys Into query1			
+					If TableInfo(query1,TAB_INFO_NROWS) > 0 Then		'the selected cell is in the nbr_stats table
+						Fetch First From query1
+							cell_data_alias = query1 + ".STATS"
+							statsx =  cell_data_alias
+							cell_data_alias = query1 + ".IS_NBR"
+							is_nbrx =  cell_data_alias
+							cell_data_alias = query1 + ".ACTION"
+							actionx =  cell_data_alias
+							cell_data_alias = query1 + ".NL_SIZE_NEW"
+							nl_sizex =  cell_data_alias
+							cell_data_alias = query1 + ".DIST_KM"
+							distx =  cell_data_alias
+
+						If actionx = "NOT ADD" Then 
+							change_nbr_choice = "ADD"
+						ElseIf actionx = "ADD" Then 
+							change_nbr_choice = "NOT ADD"
+						ElseIf actionx = "MOD" OR actionx = "NONE" Then 
+							change_nbr_choice = "REMOVE"
+						ElseIf actionx = "REMOVE" Then 
+							change_nbr_choice = "MOD"
+						End If
+
+					Else	'the selected nbr is not in the nbr_stats table
+						Close Table query1
+						not_in_nbr_stats_flag = True
+						Select * From nbr_stats Where CELL = nbr_stats_host AND LAYER = nbr_stats_host_sys Into query1			
+						Fetch First From query1
+							cell_data_alias = query1 + ".NL_SIZE_NEW"
+							nl_sizex =  cell_data_alias
+							nbr_stats_nl_size = nl_sizex							
+
+						actionx = "NOT ADD"
+						statsx = "-"
+						is_nbrx = "N"
+						distx = Str$(Round(Distance(Val(nbr_stats_x1),Val(nbr_stats_y1),Val(nbr_stats_x2),Val(nbr_stats_y2),"km"),0.01))
+						change_nbr_choice = "ADD"
+					End If
+					Close Table query1
+
+					Select * From nbr_stats Where CELL = nbr_stats_nbr AND LAYER = nbr_stats_nbr_sys AND NCELL = nbr_stats_host AND NCELL_LAYER = nbr_stats_host_sys Into query1
+					If TableInfo(query1,TAB_INFO_NROWS) > 0 Then
+						Fetch First From query1
+							cell_data_alias = query1 + ".STATS"
+							recip_statsx =  cell_data_alias
+							cell_data_alias = query1 + ".NL_SIZE_NEW"
+							recip_nl_sizex =  cell_data_alias
+					Else	'the selected recip nbr is not in the nbr_stats table
+						Close Table query1
+						recip_not_in_nbr_stats_flag = True
+						Select * From nbr_stats Where CELL = nbr_stats_nbr AND LAYER = nbr_stats_nbr_sys Into query1
+						Fetch First From query1
+							cell_data_alias = query1 + ".NL_SIZE_NEW"
+							recip_nl_sizex =  cell_data_alias
+							nbr_stats_recip_nl_size = recip_nl_sizex							
+					End If
+					Close Table query1
+
+					Dialog Title "View Cells Parameters" width 180 height 355	 Position 20,40
+					Control GroupBox
+					Title "Cell Details" 
+					Position 10, 10 Width 160 Height 55
+					Control StaticText
+					Title "Site:" Position 15, 20
+					Control StaticText
+					Title sitex Position 75, 20
+					Control StaticText
+					Title "Site Name:" Position 15, 35
+					Control StaticText
+					Title namex Position 75, 35
+					Control StaticText
+					Title "Cell ID:" Position 15, 50
+					Control StaticText
+					Title cellx Position 75, 50
+					Control StaticText
+					Title "Pci/Sc/Pn/Bcch:" Position 15, 75
+					Control StaticText
+					Title pnx Position 75, 75 
+					Control StaticText
+					Title "Zcrs/Bsic:" Position 15, 90
+					Control StaticText
+					Title bsicx Position 75, 90
+					Control StaticText
+					Title "Cnt:" Position 110, 90
+					Control StaticText
+					Title zcrsx Position 125, 90
+					Control StaticText
+					Title "Azimuth (deg):" Position 15, 105
+					Control StaticText
+					Title azx Position 75, 105
+					Control StaticText
+					Title "Ant HBW (deg):" Position 15, 120
+					Control StaticText
+					Title hbwx Position 75, 120
+					Control StaticText
+					Title "Object Size (m):" Position 15, 135
+					Control StaticText
+					Title sizex Position 75, 135
+					Control StaticText
+					Title "Height (m/ft):" Position 15, 150
+					Control StaticText
+					Title htx Position 75, 150
+					Control StaticText
+					Title "MDT (deg):" Position 15, 165
+					Control StaticText
+					Title mdtx Position 75, 165
+					Control StaticText
+					Title "EDT (deg):" Position 15, 180
+					Control StaticText
+					Title edtx Position 75, 180
+					Control StaticText
+					Title "Status:" Position 15, 195
+					Control StaticText
+					Title statusx Position 75, 195
+					Control StaticText
+					Title "Comments:" Position 15, 210
+					Control StaticText
+					Title Commentx Position 75, 210
+					Control StaticText
+					Title "Type:" Position 15, 225
+					Control StaticText
+					Title typex Position 75, 225
+
+
+					Control GroupBox
+					Title "Nbr Stats Review" 
+					Position 10, 245 Width 160 Height 65
+					Control StaticText
+					Title "Action:" Position 15, 255
+					Control StaticText
+					Title actionx Position 75, 255 Width 40
+					ID 100
+					Control StaticText
+					Title "Change Action" Position 115, 240
+					Control Button
+					Calling mod_nbr_stats_sub
+					Title change_nbr_choice Position 120, 252 Width 40
+					ID 101
+					Control StaticText
+					Title "% MR/ASU:" Position 15, 268
+					Control StaticText
+					Title Str$(Round(Val(statsx),0.00001)) Position 75, 268
+					ID 102
+					Control StaticText
+					Title "[R:" & Str$(Round(Val(recip_statsx),0.00001)) & "]" Position 120, 268
+					ID 103
+					Control StaticText
+					Title "NL Size:" Position 15, 281
+					Control StaticText
+					Title nl_sizex Position 75, 281 Width 30
+					ID 104
+					Control StaticText
+					Title "[R:" & recip_nl_sizex & "]" Position 120, 281 Width 30
+					ID 105
+					Control StaticText
+					Title "Dist (km):" Position 15, 294
+					Control StaticText
+					Title distx Position 75, 294
+					Control StaticText
+					Title "Orig.Nbr:" Position 120, 294
+					Control StaticText
+					Title is_nbrx Position 150, 294
+
+					Control OKButton
+					Position 70, 315
+					If CommandInfo(CMD_INFO_DLG_OK) = True Then
+						Exit Sub
+					Else
+						Exit Sub
+					End If
+				End If
+			Next
+		End If
+	End If
+
+general_returnpoint:
+
+Exit Sub
+'--------------
+general_error:
+Note "There was an error " & Error$()
+Resume general_returnpoint
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+'----------------------------------------------------------------------------
+' Mods the nbr stats based on the users choice and updates the open dialog
+'----------------------------------------------------------------------------
+Sub mod_nbr_stats_sub
+Dim is_nbrx, actionx, nl_sizex, recip_actionx, recip_nl_sizex, distx As String
+Dim i, j, k, brush1, brush2, host_sysind, nbr_sysind As Integer
+Dim fail_cause As String
+Dim sel As Object
+
+
+	fail_cause = ""
+
+	If not_in_nbr_stats_flag Then		'we add the selected cell (but still has the NOT ADD action)
+		Insert Into nbr_stats
+			(RNC_BSC, CELL, LAYER, NCELL_RNC_BSC, NCELL, NCELL_LAYER, STATS, IS_NBR, ACTION, NL_SIZE_NEW, DIST_KM)
+			Values ("TBD", nbr_stats_host, nbr_stats_host_sys, "TBD", nbr_stats_nbr, nbr_stats_nbr_sys, "0", "N", "NOT ADD", nbr_stats_nl_size, Round(Distance(Val(nbr_stats_x1),Val(nbr_stats_y1),Val(nbr_stats_x2),Val(nbr_stats_y2),"km"),0.01))
+		not_in_nbr_stats_flag = False
+	End If
+
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		If sys(i) = nbr_stats_host_sys Then
+			host_sysind = i
+		End If
+		If sys(i) = nbr_stats_nbr_sys Then
+			nbr_sysind = i
+		End If
+	Next
+
+	Select * From nbr_stats Where CELL = nbr_stats_host AND LAYER = nbr_stats_host_sys AND NCELL = nbr_stats_nbr AND NCELL_LAYER = nbr_stats_nbr_sys Into query1			
+	Fetch First From query1
+		is_nbrx = query1.IS_NBR
+		actionx = query1.ACTION
+		nl_sizex = query1.NL_SIZE_NEW
+		distx = query1.DIST_KM 
+
+	If recip_not_in_nbr_stats_flag Then		'we add the selected recip cell (but still has the NOT ADD action)
+		Insert Into nbr_stats
+			(RNC_BSC, CELL, LAYER, NCELL_RNC_BSC, NCELL, NCELL_LAYER, STATS, IS_NBR, ACTION, NL_SIZE_NEW, DIST_KM)
+			Values ("TBD", nbr_stats_nbr, nbr_stats_nbr_sys, "TBD", nbr_stats_host, nbr_stats_host_sys, "0", "N", "NOT ADD", nbr_stats_recip_nl_size, Round(Distance(Val(nbr_stats_x1),Val(nbr_stats_y1),Val(nbr_stats_x2),Val(nbr_stats_y2),"km"),0.01))
+		recip_not_in_nbr_stats_flag = False
+	End If
+
+	Select * From nbr_stats Where CELL = nbr_stats_nbr AND LAYER = nbr_stats_nbr_sys AND NCELL = nbr_stats_host AND NCELL_LAYER = nbr_stats_host_sys Into query2			
+	Fetch First From query2
+		recip_actionx = query2.ACTION
+		recip_nl_sizex = query2.NL_SIZE_NEW
+
+	'Do the possibility check if any nl will increase in size (not add => add or remove => mod)
+	'--------------------------------------------------------------------------------------------
+	If actionx = Any("NOT ADD","REMOVE") Then
+		If Val(nl_sizex) >= g_nl_max_size(10*(host_sysind-1)+nbr_sysind) And nbr_enforce_max_size_flag Then
+			fail_cause = "NL already full"	
+		End If
+	End If
+
+	If recip_actionx = Any("NOT ADD","REMOVE") Then
+		If Val(recip_nl_sizex) >= g_nl_max_size(10*(nbr_sysind-1)+host_sysind) And nbr_enforce_max_size_flag Then
+			If len(fail_cause) > 0 Then
+				fail_cause = "Both NL already full"	
+			Else
+				fail_cause = "Recip NL already full"	
+			End If
+		End If
+	End If
+
+	If fail_cause <> "" Then
+		Note "Can't make change, reason => " & fail_cause
+		Exit Sub
+	End If
+
+	'Here it is ok to perform the action, so do it
+	'------------------------------------------------------
+	If actionx = "NOT ADD" Then
+		Update query1 Set ACTION = "ADD"
+		actionx = "ADD"
+		Alter Control 100 Title "ADD"
+		Alter Control 101 Title "NOT ADD"
+		Select * From nbr_stats Where CELL = nbr_stats_host AND LAYER = nbr_stats_host_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(nl_sizex) + 1)
+		Close Table query3
+		nl_sizex = Str$(Val(nl_sizex) + 1)
+		Alter Control 104 Title nl_sizex
+	ElseIf actionx = "ADD" Then 
+		Update query1 Set ACTION = "NOT ADD"
+		actionx = "NOT ADD"
+		Alter Control 100 Title "NOT ADD"
+		Alter Control 101 Title "ADD"
+		Select * From nbr_stats Where CELL = nbr_stats_host AND LAYER = nbr_stats_host_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(nl_sizex) - 1)
+		Close Table query3
+		nl_sizex = Str$(Val(nl_sizex) - 1)
+		Alter Control 104 Title nl_sizex
+	ElseIf actionx = "MOD" Then
+		Update query1 Set ACTION = "REMOVE"
+		actionx = "REMOVE"
+		Alter Control 100 Title "REMOVE"
+		Alter Control 101 Title "MOD"
+		Select * From nbr_stats Where CELL = nbr_stats_host AND LAYER = nbr_stats_host_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(nl_sizex) - 1)
+		Close Table query3
+		nl_sizex = Str$(Val(nl_sizex) - 1)
+		Alter Control 104 Title nl_sizex
+	ElseIf actionx = "REMOVE" Then
+		Update query1 Set ACTION = "MOD"
+		actionx = "MOD"
+		Alter Control 100 Title "MOD"
+		Alter Control 101 Title "REMOVE"
+		Select * From nbr_stats Where CELL = nbr_stats_host AND LAYER = nbr_stats_host_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(nl_sizex) + 1)
+		Close Table query3
+		nl_sizex = Str$(Val(nl_sizex) + 1)
+		Alter Control 104 Title nl_sizex
+	End If
+	Close Table query1
+
+	If recip_actionx = "NOT ADD" Then
+		Update query2 Set ACTION = "ADD"
+		recip_actionx = "ADD"
+		Select * from nbr_stats Where CELL = nbr_stats_nbr AND LAYER = nbr_stats_nbr_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(recip_nl_sizex) + 1)
+		Close Table query3
+		recip_nl_sizex = Str$(Val(recip_nl_sizex) + 1)
+		Alter Control 105 Title "[R:" & recip_nl_sizex & "]"
+	ElseIf recip_actionx = "ADD" Then 
+		Update query2 Set ACTION = "NOT ADD"
+		recip_actionx = "NOT ADD"
+		Select * from nbr_stats Where CELL = nbr_stats_nbr AND LAYER = nbr_stats_nbr_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(recip_nl_sizex) - 1)
+		Close Table query3
+		recip_nl_sizex = Str$(Val(recip_nl_sizex) - 1)
+		Alter Control 105 Title "[R:" & recip_nl_sizex & "]"
+	ElseIf recip_actionx = "MOD" Then
+		Update query2 Set ACTION = "REMOVE"
+		recip_actionx = "REMOVE"
+		Select * from nbr_stats Where CELL = nbr_stats_nbr AND LAYER = nbr_stats_nbr_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(recip_nl_sizex) - 1)
+		Close Table query3
+		recip_nl_sizex = Str$(Val(recip_nl_sizex) - 1)
+		Alter Control 105 Title "[R:" & recip_nl_sizex & "]"
+	ElseIf recip_actionx = "REMOVE" Then
+		Update query2 Set ACTION = "MOD"
+
+		recip_actionx = "MOD"
+		Select * from nbr_stats Where CELL = nbr_stats_nbr AND LAYER = nbr_stats_nbr_sys Into query3
+		Update query3 Set NL_SIZE_NEW = Str$(Val(recip_nl_sizex) + 1)
+		Close Table query3
+		recip_nl_sizex = Str$(Val(recip_nl_sizex) + 1)
+		Alter Control 105 Title "[R:" & recip_nl_sizex & "]"
+	End If
+	Close Table query2
+	Commit Table nbr_stats
+
+
+OnError Goto general_error
+	'Update the colour of the edited nbr
+	'-------------------------------------
+	brush1 = StyleAttr(brush_nbr(nbr_sysind),BRUSH_PATTERN)
+	brush2 = StyleAttr(brush_nbr(nbr_sysind),BRUSH_BACKCOLOR)
+
+	Commit Table nbrs_RFDT
+
+	Select * From nbrs_RFDT where Cell = nbr_stats_nbr AND System = nbr_stats_nbr_sys AND Lat <> 0 AND Lon <> 0 Into query1
+	Fetch First From query1
+		sel = query1.obj
+	If actionx = "ADD" Then
+		Alter Object sel 
+			Info OBJ_INFO_BRUSH, MakeBrush(brush1,GREEN,brush2)
+			Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+	ElseIf actionx = "REMOVE" Then
+		Alter Object sel 
+			Info OBJ_INFO_BRUSH, MakeBrush(brush1,RED,brush2)
+			Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+	ElseIf actionx = "NOT ADD" Then
+		Alter Object sel 
+			Info OBJ_INFO_BRUSH, MakeBrush(brush1,RGB(200,200,200),brush2)
+			Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+	ElseIf actionx = "MOD" Then
+		Alter Object sel 
+			Info OBJ_INFO_BRUSH, brush_nbr(nbr_sysind)
+			Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+	End If
+	Update query1
+		set obj = sel
+
+	Close Table query1
+	Commit Table nbrs_RFDT
+	
+'if so, then make the change to the nbr and the reciprocal actions, then recalc the nl sizes of the host and recip
+'then write these new values 1) to the open dialog, and 2) to the nbr_stats table
+
+
+general_returnpoint:
+
+Exit Sub
+'--------------
+general_error:
+Note "There was an error " & Error$()
+Resume general_returnpoint
+
+End Sub
+'---------------------------------------------------
+
+

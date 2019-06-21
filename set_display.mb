@@ -1,0 +1,886 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_display_sub
+Declare Sub calc_conv_factor_sub
+Declare Sub reset_hex2cell_factor_sub
+Declare Sub load_project_file_display_only_sub
+Declare Sub set_first_tier_prop_sub
+
+
+
+'---------------------------------------------------
+' this sets the object display properties
+'---------------------------------------------------
+Sub set_display_sub
+Dim save_proj_file As Logical
+Dim s(200) As String
+Dim width_temp_1, width_temp_2, width_temp_3, width_temp_4, width_temp_5, width_temp_6, width_temp_7, width_temp_8, width_temp_9, width_temp_10, z_x_old, z_y_old As Float
+Dim count, i, k, j, draw_cells_i, draw_cells_i_old As Integer
+Dim hex2cell_old, omni_factor_old As Float
+
+
+	If draw_cells_type = "pies" Then
+		draw_cells_i = 1
+	ElseIf draw_cells_type = "hexagons" Then
+		draw_cells_i = 2
+	ElseIf draw_cells_type = "footprints" Then
+		draw_cells_i = 3
+	End If
+	draw_cells_i_old = draw_cells_i
+
+	redraw_sym = False
+	redraw_cell = False
+	redraw_font = "Off"
+	hex2cell_old = hex2cell	
+	omni_factor_old = omni_factor
+
+	save_proj_file = False
+
+	z_x_old = z_x		
+	z_y_old = z_y		
+'-----------------------------------------
+	For i = 1 to 10				' can have up to 20 values per system
+		s((i-1)*20+1) = Str$(sym_on_air(i))
+		s((i-1)*20+2) = Str$(sym_not_on_air(i))
+		s((i-1)*20+3) = Str$(pen_on_air(i))
+		s((i-1)*20+4) = Str$(pen_not_on_air(i))		
+		s((i-1)*20+5) = Str$(brush_on_air(i))
+		s((i-1)*20+6) = Str$(brush_not_on_air(i))
+		s((i-1)*20+7) = Str$(font_for_cells(i))
+		s((i-1)*20+8) = Str$(font_for_sites(i))
+	Next
+'----------------------------------------
+
+
+
+	'This sets up some parameters for the dialog
+	'--------------------------------------------
+	width_temp_1 = 10000
+	width_temp_2 = 10000
+	width_temp_3 = 10000
+	width_temp_4 = 10000
+	width_temp_5 = 10000
+	width_temp_6 = 10000
+	width_temp_7 = 10000
+	width_temp_8 = 10000
+	width_temp_9 = 10000
+	width_temp_10 = 10000
+
+	count = 0
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		Else
+			count = count + 1
+			If i = 1 Then width_temp_1 = 55+70*count
+			ElseIf i = 2 Then width_temp_2 = 55+70*count
+			ElseIf i = 3 Then width_temp_3 = 55+70*count
+			ElseIf i = 4 Then width_temp_4 = 55+70*count
+			ElseIf i = 5 Then width_temp_5 = 55+70*count
+			ElseIf i = 6 Then width_temp_6 = 55+70*count
+			ElseIf i = 7 Then width_temp_7 = 55+70*count
+			ElseIf i = 8 Then width_temp_8 = 55+70*count
+			ElseIf i = 9 Then width_temp_9 = 55+70*count
+			ElseIf i = 10 Then width_temp_10 = 55+70*count
+			End If
+		End If
+	Next
+
+
+	'this is the input dialog for the symbols, lines and fills   
+	'-----------------------------------------------------------
+	Dialog Title "Set Display Properties Dialog" Width Maximum(240,140+70*count) Height 465  Position 20,20
+
+	Control GroupBox
+	Title sys(1) 
+	Position width_temp_1, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(2)
+	Position width_temp_2, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(3)
+	Position width_temp_3, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(4)
+	Position width_temp_4, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(5)
+	Position width_temp_5, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(6)
+	Position width_temp_6, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(7)
+	Position width_temp_7, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(8)
+	Position width_temp_8, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(9)
+	Position width_temp_9, 10 Width 60 Height 252
+	Control GroupBox
+	Title sys(10)
+	Position width_temp_10, 10 Width 60 Height 252
+
+	Control GroupBox 
+	Position 10, 17 Width 105+70*count Height 35
+	Control GroupBox 
+	Position 10, 47 Width 105+70*count Height 35
+	Control GroupBox 
+	Position 10, 77 Width 105+70*count Height 35
+	Control GroupBox 
+	Position 10, 107 Width 105+70*count Height 35
+	Control GroupBox 
+	Position 10, 137 Width 105+70*count Height 35
+	Control GroupBox 
+	Position 10, 167 Width 105+70*count Height 35
+	Control GroupBox 
+	Position 10, 197 Width 105+70*count Height 35
+	Control GroupBox 
+	Position 10, 227 Width 105+70*count Height 35
+
+	Control StaticText
+	Title "Draw Sites: (On-Air:Not On-Air)" Position 15, 30
+	Control StaticText
+	Title "Draw On-Air Cells with:" Position 15, 60
+	Control StaticText
+	Title "Draw Not-On-Air Cells with:" Position 15, 90
+	Control StaticText
+	Title "Font for Cells:" Position 15, 120
+	Control StaticText
+	Title "Font for Sites:" Position 15, 150
+	Control StaticText
+	Title "Draw Neighbor Cells with:" Position 15, 180
+	Control StaticText
+	Title "Draw Line to Neighbor Cells with:" Position 15, 210
+	Control StaticText
+	Title "Draw Host Cells with:" Position 15, 240
+
+	Control SymbolPicker value sym_on_air(1)
+	Position width_temp_1+5, 25
+	Into sym_on_air(1)
+	ID 1
+	Control SymbolPicker value sym_not_on_air(1)
+	Position width_temp_1+35, 25
+	Into sym_not_on_air(1)
+	ID 2
+	Control PenPicker value pen_on_air(1)
+	Position width_temp_1+5, 55
+	Into pen_on_air(1)
+	ID 3
+	Control BrushPicker value brush_on_air(1)	
+	Position width_temp_1+35, 55
+	Into brush_on_air(1)
+	ID 4
+	Control PenPicker value pen_not_on_air(1)
+	Position width_temp_1+5, 85
+	Into pen_not_on_air(1)
+	ID 5
+	Control BrushPicker value brush_not_on_air(1)
+	Position width_temp_1+35, 85
+	Into brush_not_on_air(1)
+	ID 6
+	Control FontPicker value font_for_cells(1)
+	Position width_temp_1+5, 115
+	Into font_for_cells(1)
+	ID 7
+	Control FontPicker value font_for_sites(1)
+	Position width_temp_1+5, 145
+	Into font_for_sites(1)
+	ID 8
+	Control PenPicker value pen_nbr(1)
+	Position width_temp_1+5, 175
+	Into pen_nbr(1)
+	ID 9
+	Control BrushPicker value brush_nbr(1)
+	Position width_temp_1+35, 175
+	Into brush_nbr(1)
+	ID 10
+	Control PenPicker value pen_connector(1)
+	Position width_temp_1+5, 205
+	Into pen_connector(1)
+	ID 11
+	Control PenPicker value pen_host(1)
+	Position width_temp_1+5, 235
+	Into pen_host(1)
+	ID 12
+	Control BrushPicker value brush_host(1)
+	Position width_temp_1+35, 235
+	Into brush_host(1)
+	ID 13
+
+	Control SymbolPicker value sym_on_air(2)
+	Position width_temp_2+5, 25
+	Into sym_on_air(2)
+	ID 21
+	Control SymbolPicker value sym_not_on_air(2)
+	Position width_temp_2+35, 25
+	Into sym_not_on_air(2)
+	ID 22
+	Control PenPicker value pen_on_air(2)
+	Position width_temp_2+5, 55
+	Into pen_on_air(2)
+	ID 23
+	Control BrushPicker value brush_on_air(2)	
+	Position width_temp_2+35, 55
+	Into brush_on_air(2)
+	ID 24
+	Control PenPicker value pen_not_on_air(2)
+	Position width_temp_2+5, 85
+	Into pen_not_on_air(2)
+	ID 25
+	Control BrushPicker value brush_not_on_air(2)
+	Position width_temp_2+35, 85
+	Into brush_not_on_air(2)
+	ID 26
+	Control FontPicker value font_for_cells(2)
+	Position width_temp_2+5, 115
+	Into font_for_cells(2)
+	ID 27
+	Control FontPicker value font_for_sites(2)
+	Position width_temp_2+5, 145
+	Into font_for_sites(2)
+	ID 28
+	Control PenPicker value pen_nbr(2)
+	Position width_temp_2+5, 175
+	Into pen_nbr(2)
+	ID 29
+	Control BrushPicker value brush_nbr(2)
+	Position width_temp_2+35, 175
+	Into brush_nbr(2)
+	ID 30
+	Control PenPicker value pen_connector(2)
+	Position width_temp_2+5, 205
+	Into pen_connector(2)
+	ID 31
+	Control PenPicker value pen_host(2)
+	Position width_temp_2+5, 235
+	Into pen_host(2)
+	ID 32
+	Control BrushPicker value brush_host(2)
+	Position width_temp_2+35, 235
+	Into brush_host(2)
+	ID 33
+
+	Control SymbolPicker value sym_on_air(3)
+	Position width_temp_3+5, 25
+	Into sym_on_air(3)
+	ID 41
+	Control SymbolPicker value sym_not_on_air(3)
+	Position width_temp_3+35, 25
+	Into sym_not_on_air(3)
+	ID 42
+	Control PenPicker value pen_on_air(3)
+	Position width_temp_3+5, 55
+	Into pen_on_air(3)
+	ID 43
+	Control BrushPicker value brush_on_air(3)	
+	Position width_temp_3+35, 55
+	Into brush_on_air(3)
+	ID 44
+	Control PenPicker value pen_not_on_air(3)
+	Position width_temp_3+5, 85
+	Into pen_not_on_air(3)
+	ID 45
+	Control BrushPicker value brush_not_on_air(3)
+	Position width_temp_3+35, 85
+	Into brush_not_on_air(3)
+	ID 46
+	Control FontPicker value font_for_cells(3)
+	Position width_temp_3+5, 115
+	Into font_for_cells(3)
+	ID 47
+	Control FontPicker value font_for_sites(3)
+	Position width_temp_3+5, 145
+	Into font_for_sites(3)
+	ID 48
+	Control PenPicker value pen_nbr(3)
+	Position width_temp_3+5, 175
+	Into pen_nbr(3)
+	ID 49
+	Control BrushPicker value brush_nbr(3)
+	Position width_temp_3+35, 175
+	Into brush_nbr(3)
+	ID 50
+	Control PenPicker value pen_connector(3)
+	Position width_temp_3+5, 205
+	Into pen_connector(3)
+	ID 51
+	Control PenPicker value pen_host(3)
+	Position width_temp_3+5, 235
+	Into pen_host(3)
+	ID 52
+	Control BrushPicker value brush_host(3)
+	Position width_temp_3+35, 235
+	Into brush_host(3)
+	ID 53
+
+	Control SymbolPicker value sym_on_air(4)
+	Position width_temp_4+5, 25
+	Into sym_on_air(4)
+	ID 61
+	Control SymbolPicker value sym_not_on_air(4)
+	Position width_temp_4+35, 25
+	Into sym_not_on_air(4)
+	ID 62
+	Control PenPicker value pen_on_air(4)
+	Position width_temp_4+5, 55
+	Into pen_on_air(4)
+	ID 63
+	Control BrushPicker value brush_on_air(4)	
+	Position width_temp_4+35, 55
+	Into brush_on_air(4)
+	ID 64
+	Control PenPicker value pen_not_on_air(4)
+	Position width_temp_4+5, 85
+	Into pen_not_on_air(4)
+	ID 65
+	Control BrushPicker value brush_not_on_air(4)
+	Position width_temp_4+35, 85
+	Into brush_not_on_air(4)
+	ID 66
+	Control FontPicker value font_for_cells(4)
+	Position width_temp_4+5, 115
+	Into font_for_cells(4)
+	ID 67
+	Control FontPicker value font_for_sites(4)
+	Position width_temp_4+5, 145
+	Into font_for_sites(4)
+	ID 68
+	Control PenPicker value pen_nbr(4)
+	Position width_temp_4+5, 175
+	Into pen_nbr(4)
+	ID 69
+	Control BrushPicker value brush_nbr(4)
+	Position width_temp_4+35, 175
+	Into brush_nbr(4)
+	ID 70
+	Control PenPicker value pen_connector(4)
+	Position width_temp_4+5, 205
+	Into pen_connector(4)
+	ID 71
+	Control PenPicker value pen_host(4)
+	Position width_temp_4+5, 235
+	Into pen_host(4)
+	ID 72
+	Control BrushPicker value brush_host(4)
+	Position width_temp_4+35, 235
+	Into brush_host(4)
+	ID 73
+
+	Control SymbolPicker value sym_on_air(5)
+	Position width_temp_5+5, 25
+	Into sym_on_air(5)
+	ID 81
+	Control SymbolPicker value sym_not_on_air(5)
+	Position width_temp_5+35, 25
+	Into sym_not_on_air(5)
+	ID 82
+	Control PenPicker value pen_on_air(5)
+	Position width_temp_5+5, 55
+	Into pen_on_air(5)
+	ID 83
+	Control BrushPicker value brush_on_air(5)	
+	Position width_temp_5+35, 55
+	Into brush_on_air(5)
+	ID 84
+	Control PenPicker value pen_not_on_air(5)
+	Position width_temp_5+5, 85
+	Into pen_not_on_air(5)
+	ID 85
+	Control BrushPicker value brush_not_on_air(5)
+	Position width_temp_5+35, 85
+	Into brush_not_on_air(5)
+	ID 86
+	Control FontPicker value font_for_cells(5)
+	Position width_temp_5+5, 115
+	Into font_for_cells(5)
+	ID 87
+	Control FontPicker value font_for_sites(5)
+	Position width_temp_5+5, 145
+	Into font_for_sites(5)
+	ID 88
+	Control PenPicker value pen_nbr(5)
+	Position width_temp_5+5, 175
+	Into pen_nbr(5)
+	ID 89
+	Control BrushPicker value brush_nbr(5)
+	Position width_temp_5+35, 175
+	Into brush_nbr(5)
+	ID 90
+	Control PenPicker value pen_connector(5)
+	Position width_temp_5+5, 205
+	Into pen_connector(5)
+	ID 91
+	Control PenPicker value pen_host(5)
+	Position width_temp_5+5, 235
+	Into pen_host(5)
+	ID 92
+	Control BrushPicker value brush_host(5)
+	Position width_temp_5+35, 235
+	Into brush_host(5)
+	ID 93
+
+	Control SymbolPicker value sym_on_air(6)
+	Position width_temp_6+5, 25
+	Into sym_on_air(6)
+	ID 101
+	Control SymbolPicker value sym_not_on_air(6)
+	Position width_temp_6+35, 25
+	Into sym_not_on_air(6)
+	ID 102
+	Control PenPicker value pen_on_air(6)
+	Position width_temp_6+5, 55
+	Into pen_on_air(6)
+	ID 103
+	Control BrushPicker value brush_on_air(6)	
+	Position width_temp_6+35, 55
+	Into brush_on_air(6)
+	ID 104
+	Control PenPicker value pen_not_on_air(6)
+	Position width_temp_6+5, 85
+	Into pen_not_on_air(6)
+	ID 105
+	Control BrushPicker value brush_not_on_air(6)
+	Position width_temp_6+35, 85
+	Into brush_not_on_air(6)
+	ID 106
+	Control FontPicker value font_for_cells(6)
+	Position width_temp_6+5, 115
+	Into font_for_cells(6)
+	ID 107
+	Control FontPicker value font_for_sites(6)
+	Position width_temp_6+5, 145
+	Into font_for_sites(6)
+	ID 108
+	Control PenPicker value pen_nbr(6)
+	Position width_temp_6+5, 175
+	Into pen_nbr(6)
+	ID 109
+	Control BrushPicker value brush_nbr(6)
+	Position width_temp_6+35, 175
+	Into brush_nbr(6)
+	ID 110
+	Control PenPicker value pen_connector(6)
+	Position width_temp_6+5, 205
+	Into pen_connector(6)
+	ID 111
+	Control PenPicker value pen_host(6)
+	Position width_temp_6+5, 235
+	Into pen_host(6)
+	ID 112
+	Control BrushPicker value brush_host(6)
+	Position width_temp_6+35, 235
+	Into brush_host(6)
+	ID 113
+
+	Control SymbolPicker value sym_on_air(7)
+	Position width_temp_7+5, 25
+	Into sym_on_air(7)
+	ID 121
+	Control SymbolPicker value sym_not_on_air(7)
+	Position width_temp_7+35, 25
+	Into sym_not_on_air(7)
+	ID 122
+	Control PenPicker value pen_on_air(7)
+	Position width_temp_7+5, 55
+	Into pen_on_air(7)
+	ID 123
+	Control BrushPicker value brush_on_air(7)	
+	Position width_temp_7+35, 55
+	Into brush_on_air(7)
+	ID 124
+	Control PenPicker value pen_not_on_air(7)
+	Position width_temp_7+5, 85
+	Into pen_not_on_air(7)
+	ID 125
+	Control BrushPicker value brush_not_on_air(7)
+	Position width_temp_7+35, 85
+	Into brush_not_on_air(7)
+	ID 126
+	Control FontPicker value font_for_cells(7)
+	Position width_temp_7+5, 115
+	Into font_for_cells(7)
+	ID 127
+	Control FontPicker value font_for_sites(7)
+	Position width_temp_7+5, 145
+	Into font_for_sites(7)
+	ID 128
+	Control PenPicker value pen_nbr(7)
+	Position width_temp_7+5, 175
+	Into pen_nbr(7)
+	ID 129
+	Control BrushPicker value brush_nbr(7)
+	Position width_temp_7+35, 175
+	Into brush_nbr(7)
+	ID 130
+	Control PenPicker value pen_connector(7)
+	Position width_temp_7+5, 205
+	Into pen_connector(7)
+	ID 131
+	Control PenPicker value pen_host(7)
+	Position width_temp_7+5, 235
+	Into pen_host(7)
+	ID 132
+	Control BrushPicker value brush_host(7)
+	Position width_temp_7+35, 235
+	Into brush_host(7)
+	ID 133
+
+	Control SymbolPicker value sym_on_air(8)
+	Position width_temp_8+5, 25
+	Into sym_on_air(8)
+	ID 141
+	Control SymbolPicker value sym_not_on_air(8)
+	Position width_temp_8+35, 25
+	Into sym_not_on_air(8)
+	ID 142
+	Control PenPicker value pen_on_air(8)
+	Position width_temp_8+5, 55
+	Into pen_on_air(8)
+	ID 143
+	Control BrushPicker value brush_on_air(8)	
+	Position width_temp_8+35, 55
+	Into brush_on_air(8)
+	ID 144
+	Control PenPicker value pen_not_on_air(8)
+	Position width_temp_8+5, 85
+	Into pen_not_on_air(8)
+	ID 145
+	Control BrushPicker value brush_not_on_air(8)
+	Position width_temp_8+35, 85
+	Into brush_not_on_air(8)
+	ID 146
+	Control FontPicker value font_for_cells(8)
+	Position width_temp_8+5, 115
+	Into font_for_cells(8)
+	ID 147
+	Control FontPicker value font_for_sites(8)
+	Position width_temp_8+5, 145
+	Into font_for_sites(8)
+	ID 148
+	Control PenPicker value pen_nbr(8)
+	Position width_temp_8+5, 175
+	Into pen_nbr(8)
+	ID 149
+	Control BrushPicker value brush_nbr(8)
+	Position width_temp_8+35, 175
+	Into brush_nbr(8)
+	ID 150
+	Control PenPicker value pen_connector(8)
+	Position width_temp_8+5, 205
+	Into pen_connector(8)
+	ID 151
+	Control PenPicker value pen_host(8)
+	Position width_temp_8+5, 235
+	Into pen_host(8)
+	ID 152
+	Control BrushPicker value brush_host(8)
+	Position width_temp_8+35, 235
+	Into brush_host(8)
+	ID 153
+
+	Control SymbolPicker value sym_on_air(9)
+	Position width_temp_9+5, 25
+	Into sym_on_air(9)
+	ID 161
+	Control SymbolPicker value sym_not_on_air(9)
+	Position width_temp_9+35, 25
+	Into sym_not_on_air(9)
+	ID 162
+	Control PenPicker value pen_on_air(9)
+	Position width_temp_9+5, 55
+	Into pen_on_air(9)
+	ID 163
+	Control BrushPicker value brush_on_air(9)	
+	Position width_temp_9+35, 55
+	Into brush_on_air(9)
+	ID 164
+	Control PenPicker value pen_not_on_air(9)
+	Position width_temp_9+5, 85
+	Into pen_not_on_air(9)
+	ID 165
+	Control BrushPicker value brush_not_on_air(9)
+	Position width_temp_9+35, 85
+	Into brush_not_on_air(9)
+	ID 166
+	Control FontPicker value font_for_cells(9)
+	Position width_temp_9+5, 115
+	Into font_for_cells(9)
+	ID 167
+	Control FontPicker value font_for_sites(9)
+	Position width_temp_9+5, 145
+	Into font_for_sites(9)
+	ID 168
+	Control PenPicker value pen_nbr(9)
+	Position width_temp_9+5, 175
+	Into pen_nbr(9)
+	ID 169
+	Control BrushPicker value brush_nbr(9)
+	Position width_temp_9+35, 175
+	Into brush_nbr(9)
+	ID 170
+	Control PenPicker value pen_connector(9)
+	Position width_temp_9+5, 205
+	Into pen_connector(9)
+	ID 171
+	Control PenPicker value pen_host(9)
+	Position width_temp_9+5, 235
+	Into pen_host(9)
+	ID 172
+	Control BrushPicker value brush_host(9)
+	Position width_temp_9+35, 235
+	Into brush_host(9)
+	ID 173
+
+	Control SymbolPicker value sym_on_air(10)
+	Position width_temp_10+5, 25
+	Into sym_on_air(10)
+	ID 181
+	Control SymbolPicker value sym_not_on_air(10)
+	Position width_temp_10+35, 25
+	Into sym_not_on_air(10)
+	ID 182
+	Control PenPicker value pen_on_air(10)
+	Position width_temp_10+5, 55
+	Into pen_on_air(10)
+	ID 183
+	Control BrushPicker value brush_on_air(10)	
+	Position width_temp_10+35, 55
+	Into brush_on_air(10)
+	ID 184
+	Control PenPicker value pen_not_on_air(10)
+	Position width_temp_10+5, 85
+	Into pen_not_on_air(10)
+	ID 185
+	Control BrushPicker value brush_not_on_air(10)
+	Position width_temp_10+35, 85
+	Into brush_not_on_air(10)
+	ID 186
+	Control FontPicker value font_for_cells(10)
+	Position width_temp_10+5, 115
+	Into font_for_cells(10)
+	ID 187
+	Control FontPicker value font_for_sites(10)
+	Position width_temp_10+5, 145
+	Into font_for_sites(10)
+	ID 188
+	Control PenPicker value pen_nbr(10)
+	Position width_temp_10+5, 175
+	Into pen_nbr(10)
+	ID 189
+	Control BrushPicker value brush_nbr(10)
+	Position width_temp_10+35, 175
+	Into brush_nbr(10)
+	ID 190
+	Control PenPicker value pen_connector(10)
+	Position width_temp_10+5, 205
+	Into pen_connector(10)
+	ID 191
+	Control PenPicker value pen_host(10)
+	Position width_temp_10+5, 235
+	Into pen_host(10)
+	ID 192
+	Control BrushPicker value brush_host(10)
+	Position width_temp_10+35, 235
+	Into brush_host(10)
+	ID 193
+
+	Control GroupBox
+	Title "Other Drawing Settings" 
+	Position 10, 270 Width 210 Height 135
+
+	Control RadioGroup
+	Position 15, 285
+	Title "Draw Cells as Pie Slices;Draw Cells as Hexagons;Draw Cells as Footprints - very slow"
+	Value draw_cells_i
+	Into draw_cells_i
+	ID 200
+
+	Control Button
+	Title "Settings"
+	Calling set_first_tier_prop_sub
+	Position 157, 310 Width 50
+
+	Control StaticText
+	Title "Hex to Cell Factor:"
+	Position 15, 330
+	Disable
+	Control EditText
+	Value hex2cell
+	Into hex2cell
+	Position 110, 329 Width 50
+	ID 210
+	Disable
+	Control Button	
+	Title "&Default"
+	Calling reset_hex2cell_factor_sub
+	Position 170, 328
+	Disable
+
+	Control StaticText
+	Title "Omni Size Reduction Factor:"
+	Position 15, 345
+	Control EditText
+	Value omni_factor
+	Into omni_factor
+	Position 110, 344 Width 50
+	ID 201
+	Control StaticText
+	Title "Non-Macro Size Redn Factor:"
+	Position 15, 360
+	Control EditText
+	Value g_ibs_factor
+	Into g_ibs_factor
+	Position 110, 359 Width 50
+	ID 204
+	Control StaticText
+	Title "Lon to m Coversion Factor:"
+	Position 15, 375
+	Control EditText
+	Value Z_x
+	Into Z_x
+	Position 110, 374 Width 50
+	ID 202
+	Control StaticText
+	Title "Lat to m Coversion Factor:"
+	Position 15, 390
+	Control EditText
+	Value Z_y
+	Into Z_y
+	Position 110, 389 Width 50
+	ID 203
+	Control Button	
+	Title "&AutoCalc"
+	Calling calc_conv_factor_sub
+	Position 170, 379
+
+	Control Button	
+	Title "&Load From A Project File"
+	Calling load_project_file_display_only_sub
+	Position 30+35*count, 415 Width 95
+
+	Control OKButton
+	Position 40, 435
+	Control CancelButton
+	Position Maximum (160, 60+70*count), 435
+
+	If NOT CommandInfo(CMD_INFO_DLG_OK)  Then
+		Exit Sub
+	End If
+
+	'this section sets redraw_font to "on" or "only" if any font is to be changed.  It sets the redraw_all flag to true if any of the hex or fills, lines or symbols are to be changed
+	'------------------------------------------------------------------------
+	For i = 1 to 10				' can have up to 20 values per system
+		If sys(i) = "" Then
+			Exit For
+
+		ElseIf s((i-1)*20+1) = Str$(sym_on_air(i))
+		AND s((i-1)*20+2) = Str$(sym_not_on_air(i))
+		AND s((i-1)*20+3) = Str$(pen_on_air(i))
+		AND s((i-1)*20+4) = Str$(pen_not_on_air(i))		
+		AND s((i-1)*20+5) = Str$(brush_on_air(i))
+		AND s((i-1)*20+6) = Str$(brush_not_on_air(i))
+		AND (s((i-1)*20+7) <> Str$(font_for_cells(i)) or s((i-1)*20+8) <> Str$(font_for_sites(i))) 
+		AND redraw_font <> "On" Then       	' this is the case that the font is the only thing to be changed
+			redraw_font = "Only"
+
+		ElseIf s((i-1)*20+7) <> Str$(font_for_cells(i)) 
+		OR s((i-1)*20+8) <> Str$(font_for_sites(i)) Then			' this is the case that the font needs to be changed along with other things
+			redraw_font = "On"
+
+		ElseIf s((i-1)*20+3) <> Str$(pen_on_air(i))
+		OR s((i-1)*20+4) <> Str$(pen_not_on_air(i))		
+		OR s((i-1)*20+5) <> Str$(brush_on_air(i))
+		OR s((i-1)*20+6) <> Str$(brush_not_on_air(i))
+		OR z_x <> z_x_old
+		OR z_y <> z_y_old
+		OR omni_factor <>  omni_factor_old Then
+			redraw_cell = True
+
+		ElseIf s((i-1)*20+1) <> Str$(sym_on_air(i))
+		OR s((i-1)*20+2) <> Str$(sym_not_on_air(i)) Then				' this is the case that any of the symbols need to be changed
+			redraw_sym = True
+
+		End If
+	Next
+
+	If draw_cells_i = 1 Then
+		draw_cells_type = "pies" 
+	ElseIf draw_cells_i = 2 Then
+		draw_cells_type = "hexagons"
+	ElseIf draw_cells_i = 3 Then
+		draw_cells_type = "footprints"
+	End If
+
+	'Tests to see if we need to redraw cells
+	'----------------------------------------------
+	If draw_cells_i <> draw_cells_i_old OR (draw_cells_type = "hexagons" AND hex2cell <> hex2cell_old) Then    'then we have to redraw the objects as we are changing
+		redraw_cell = True
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+Sub calc_conv_factor_sub
+Dim temp_lat, temp_lon As Float
+Dim table_selected As String
+
+
+	'We determine the values for z_x and z_y based on the location of the network
+	'--------------------------------------------------------------------------
+OnError goto first_run_error
+	temp_lon = TableInfo(cells_sys(1), TAB_INFO_MINX) + (TableInfo(cells_sys(1), TAB_INFO_MAXX) - TableInfo(cells_sys(1), TAB_INFO_MINX))/2
+	temp_lat = TableInfo(cells_sys(1), TAB_INFO_MINY) + (TableInfo(cells_sys(1), TAB_INFO_MAXY) - TableInfo(cells_sys(1), TAB_INFO_MINY))/2
+	Z_x = Distance(temp_lon,temp_lat,temp_lon + 1,temp_lat,"m")
+	Z_y = Distance(temp_lon,temp_lat,temp_lon,temp_lat + 1,"m")
+
+	Alter Control 202 Value Str$(Z_x)
+	Alter Control 203 Value Str$(Z_y)
+	Exit Sub
+
+returnpoint1:
+OnError goto other_error
+	Select Avg(LON) , Avg(LAT) From input Group by System Into query1
+	Fetch First From query1 
+	temp_lon = query1.Col1
+	temp_lat = query1.Col2
+	Close Table query1
+	Z_x = Distance(temp_lon,temp_lat,temp_lon + 1,temp_lat,"m")
+	Z_y = Distance(temp_lon,temp_lat,temp_lon,temp_lat + 1,"m")
+
+	Alter Control 202 Value Str$(Z_x)
+	Alter Control 203 Value Str$(Z_y)
+
+returnpoint2:
+Exit Sub
+'------------
+first_run_error:
+Resume returnpoint1
+
+other_error:
+Resume returnpoint2
+End sub
+
+
+
+
+
+
+Sub reset_hex2cell_factor_sub
+
+	hex2cell = hex2cell_default
+	Alter Control 210 Value Str$(hex2cell)
+
+Exit Sub
+'------------
+
+
+End sub
+

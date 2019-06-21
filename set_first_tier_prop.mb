@@ -1,0 +1,134 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_first_tier_prop_sub
+
+'---------------------------------------------------------------------------------------
+' this lets the user set the first_tier and best server object generation properties
+'---------------------------------------------------------------------------------------
+Sub set_first_tier_prop_sub
+Dim roc, pie, ig0, ig1, b_dist, min_d, area_red, big_gap, overlap, ibs_prop As String
+
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "Set Your First-Tier Analysis Prefereces" width 400 height 355
+
+	Control GroupBox
+	Title "First Tier Parameters" 
+	Position 10, 10 Width 380 Height 285
+
+	Control EditText
+	Value g_roc_perc
+	Into roc
+	Position 15, 25 Width 40
+	Control StaticText
+	Title "(%) 'ROC' - Rate Of Change % of the last site distance per 10 degrees allowed (20-30% recommended)"
+	Position 60, 27 Width 360
+	Control StaticText
+	Title "NOTE: greater will make it easier to add cells to the FT list => but also more likley to be removed"
+	Position 60, 37 Width 360
+
+	Control EditText
+	Value Format$(g_pie_width,"#")
+	Into pie
+	Position 15, 50 Width 40
+	Control StaticText
+	Title "(deg) Angular granularity for first tier analysis (recommendeded 10 deg, must divide into 360)"
+	Position 60, 52 Width 360
+
+	Control EditText
+	Value Format$(g_ignore_dist0,"#")
+	Into ig0
+	Position 15, 75 Width 40
+	Control StaticText
+	Title "(m) Initial max dist =>Sites further than this can't be FT candidates (rec: > max LOS prop dist)"
+	Position 60, 77 Width 340
+
+	Control EditText
+	Value Format$(g_ignore_dist1,"#")
+	Into ig1
+	Position 15, 100 Width 40
+	Control StaticText
+	Title "(m) min per site ignore dist => lower limit on the calc'd per site ignore dist (rec: > 5000)"
+	Position 60, 102 Width 340
+
+	Control EditText
+	Value Format$(g_border_dist,"#")
+	Into b_dist
+	Position 15, 125 Width 40
+	Control StaticText
+	Title "(m) border distance => max limit for gap areas with no cells (rec: 10000)"
+	Position 60, 127 Width 340
+
+	Control EditText
+	Value Format$(g_min_dist0,"#")
+	Into min_d
+	Position 15, 150 Width 40
+	Control StaticText
+	Title "(m) lower limit override for the closest site distance (rec:0 to 500m)"
+	Position 60, 152 Width 340
+
+	Control EditText
+	Value g_area_red_factor
+	Into area_red
+	Position 15, 175 Width 40
+	Control StaticText
+	Title "(0 to 1) factor by which the cell footprint objects are reduced in size (drawing only)"
+	Position 60, 177 Width 360
+
+	Control EditText
+	Value Format$(g_big_gap_angle,"#")
+	Into big_gap
+	Position 15, 200 Width 40
+	Control StaticText
+	Title "(deg) lower limit for a gap in nbr site candidates to be considered a gap (rec: 70-90 deg)"
+	Position 60, 202 Width 360
+
+	Control EditText
+	Value g_cell_overlap_factor
+	Into overlap
+	Position 15, 225 Width 40
+	Control StaticText
+	Title "(0 to 1) closer to one makes it easier for a FT candidate cell to meet the crieria (rec: 0.3-0.4)"
+	Position 60, 227 Width 360
+
+	Control EditText
+	Value g_ibs_prop_range
+	Into ibs_prop
+	Position 15, 250 Width 40
+	Control StaticText
+	Title "(m) Non-Macro cells will be treated as omnis with this signal prop radius (rec: 50-200m)"
+	Position 60, 252 Width 360
+
+	Control Checkbox
+	Title "                Draw Triangles to Each FT Site => for visualisation of the algorithm only"
+	Value g_draw_triangles
+	Into g_draw_triangles
+	Position 15, 275 Width 360
+
+	Control OKButton
+	Position 30, 315
+	Control CancelButton
+	Position 330, 315
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Exit Sub
+	End If
+
+	g_roc_perc = Val(roc)
+	g_pie_width = Val(pie)
+	g_ignore_dist0 = Val(ig0)
+	g_ignore_dist1 = Val(ig1)
+	g_border_dist = Val(b_dist)
+	g_min_dist0 = Val(min_d)
+	g_area_red_factor = Val(area_red)
+	g_big_gap_angle = Val(big_gap)
+	g_cell_overlap_factor = Val(overlap)
+	g_ibs_prop_range = Val(ibs_prop)
+
+End Sub
+'---------------------------------------------------
+

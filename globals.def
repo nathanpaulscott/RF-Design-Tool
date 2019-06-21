@@ -1,0 +1,140 @@
+Global adj_inc, co_toggle_counter, old_row_id, host_row_id_orig As Integer
+Global table_for_nbrlist, table_for_pairs2check, table_for_4G_scan, table_for_3G_scan, table_for_2G_scan, SINR_or_RSRP, EcIo_or_RSCP, user_path_nbrlist, user_path_pairs2check, user_path_scan_2G, user_path_scan_3G, user_path_scan_4G, q1_exists, q2_exists, q3_exists, nbrs_exists, disable_edit, set_z_flag, check_cr_flag, check_x_flag, add_nbr_flag, del_nbr_flag, ch_az_got_sector_flag As String
+Global mutual_flag, nbr_lines_flag, nbr_show_ft_flag, ft_only_onair_flag, ft_draw_host_flag As Logical
+Global sym_scan, sym_nbr_edit, sym_on_air(10), sym_not_on_air(10) As Symbol
+Global pen_for_search, pen_dline(10), pen_on_air(10), pen_not_on_air(10), pen_host(10), pen_nbr(10), pen_connector(10), pen_select, pen_for_interferer, pen_for_server As Pen
+Global circle_brush, brush_nbr(10), brush_host(10), brush_on_air(10), brush_not_on_air(10), brush_for_interferer, brush_for_server As Brush
+Global font_for_search, font_for_interferer, font_for_server, font_for_cells(10), font_for_sites(10) As Font
+Global scan_create_best_server_table_flag As Logical
+Global scan_tab_delete_flag, scan_save_cw_flag, scan_overshooter_anal_flag, scan_best_is_strongest_flag As Logical
+Global scan_overshoot_min_dist As Float
+Global no_sys_nbrs_flag as Logical
+
+Global g_outputfilename_export_drive As String
+Global g_range_colour(10) As Brush
+Global g_range_from(10), g_range_to(10) As Float
+Global g_current_thematic_ranges As String
+Global g_thematic_col_i, g_lat_col_i, g_lon_col_i As Integer
+Global g_table_in_i As Integer
+Global g_colarray(300) As String
+
+Global find_co_type As String
+Global find_co_use_pci_mod, find_co_use_zcrs_count, find_co_show_adj_pn, find_co_incl_bsic, find_co_show_adj_bcch As Logical
+Global find_co_dist, find_adj_dist, find_co_pci_mod, find_co_pn_inc As Float
+
+Global get_table_name_flag, site_update, site_update_move As Logical
+Global undo_az, undo_shiftx, undo_shifty As Float
+Global undo_cellid, undo_siteid, undo_cell_table, undo_site_table, undo_type As String
+Global undo_shift_move As Logical
+Global undo_site_sysind, undo_site_lat, undo_site_lon, undo_site_ht As Float
+Global undo_site_sys, undo_site_status, undo_site_name, undo_site_type As String
+Global undo_cell_data(200) As String
+Global undo_cell_data_lon(10), undo_cell_data_lat(10) As Float
+Global undo_delete_flag As Logical
+
+Global enable_toolbar As Logical
+Global load_templates_only, load_display_only, load_status_only, load_settings_only As Logical
+Global status_value(100) As String
+Global t_names(20), t_values(1320), t_names_temp, t_values_temp(66) As String
+Global active_template, active_template_system As String
+Global active_template_pointer, active_template_sectors As Integer
+Global snap2grid As Logical
+
+Global Z_x, Z_y As Float              ' this is for the conversion from lat-lon or utm to meters (105000 for latlon, 1 for utm)
+Global proj As String
+Global pf_user_path, pf_filename As String   
+Global pf_bypass, pf_error As Logical   
+
+Global cells_sys(10) As String
+Global sites_sys(10) As String   
+Global sys(10) As String
+Global cells_map_status(10), cells_display_status(10) As Logical
+Global sites_map_status(10), sites_display_status(10) As Logical
+Global check_map_display As Logical
+Global ok_cells_sys(10), ok_sites_sys(10) As String 
+Global is_open_cells_sys(10), is_open_sites_sys(10) As String
+Global is_display_cells_sys(10), is_display_sites_sys(10) As Logical
+Global is_in_mapper_cells_sys(10), is_in_mapper_sites_sys(10) As Logical
+Global draw_subset_flag As Logical
+Global new_site_pointer As Integer
+Global omni_factor, hex2cell As Float
+Global draw_cells_type As String
+
+Global g_roc_perc, g_pie_width, g_ignore_dist0, g_ignore_dist1, g_border_dist, g_min_dist0, g_area_red_factor, g_big_gap_angle, g_cell_overlap_factor, g_ibs_prop_range, g_ibs_factor As Float
+Global g_draw_triangles, g_ft_indicate_not_in_nl As Logical
+Global g_ft_source_sysind(10), g_ft_target_sysind(10), nbr_enforce_max_size_flag As Logical
+
+Global g_nl_stats_source_sysind, g_nl_stats_target_sysind, g_nl_max_size(100) As Integer
+Global g_nl_stats_source_sys, g_nl_stats_target_sys, g_ft_source_sys(10), g_ft_target_sys(10) As String
+
+Global load_t_values_only_flag As Logical
+Global redraw_cell, redraw_sym As Logical
+Global redraw_font, dont_redraw As String
+
+Global toolbar_position_x, toolbar_position_y As Float
+
+Global protect_lat, protect_lon, protect_dist As Float
+
+Global enable_pairs2check_arrows, pairs2check_statusflag As Logical
+Global pairs2check_pointer, header_cnt As Integer
+Global pairs2check_fields(10) As String
+
+Global nbr_stats_path, nbr_stats_filename, nbr_stats_host, nbr_stats_host_sys, nbr_stats_nbr, nbr_stats_nbr_sys, nbr_stats_y1, nbr_stats_x1, nbr_stats_y2, nbr_stats_x2, nbr_stats_nl_size, nbr_stats_recip_nl_size As String
+Global not_in_nbr_stats_flag, recip_not_in_nbr_stats_flag As Logical
+
+Global change_nbr_choice As String
+
+Global label_toggle as Integer
+
+Type ant_pat
+	ant_name As String
+	ant_ref As String
+	ant_gain As Float
+	ant_loss_h(360) As Float
+	ant_loss_v(360) As Float
+End Type
+Global panel_4G(11) As ant_pat		'this is for a commscope 6516 antenna with 0 to 10 deg of EDT (11 patterns), remember mapbasic arrays go from 1 to max, not 0 to max, so panel_4G(1) is the pattern for 0deg EDT
+Global start_time As Integer
+
+
+
+
+
+
+
+
+
+
+
+
+'these are the global vars for the different cells and sites tables for the different systems as well as the names of the different systems, these would have to be 'set from the project file as it would know the table names and locations, also they would be set on import.  The cell/site tables are named as such => "cells_" + sysx
+
+Define PI 3.141593	'this is pi
+Define Zx 0.67 		'this sets the location of the label (1 => at edge of sector, 0=> at point of sector)
+Define hex2cell_default 1.33333333333333
+
+'Colours
+Define	D_GREY	6908265
+Define	GREY	11119017
+Define	L_GREY	15132390
+Define	D_BLUE	139
+Define	L_BLUE	65535
+Define	LL_BLUE	12320767
+Define	D_GREEN	35584
+Define	L_GREEN	9498256
+Define	D_YELLOW	13487360
+Define	L_YELLOW	16777184
+Define	D_ORANGE	15627776
+Define	ORANGE	16744448
+Define	L_ORANGE	16753999
+Define	D_RED	9109504
+Define	L_RED	16738922
+Define	D_PINK	9112144
+Define	PINK	16716947
+Define	L_PINK	16740020
+Define	D_MAGENTA	9109643
+Define	L_MAGENTA	16759807
+
+
+
+

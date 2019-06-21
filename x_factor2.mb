@@ -1,0 +1,103 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub date_check_sub
+Declare Sub x_factor2_sub
+Declare Sub set_display_sub
+Declare Sub draw_3G_cells_sub
+Declare Sub draw_2G_cells_sub
+Declare Sub add_nbr_sub
+Declare Sub del_nbr_sub
+Declare Sub prepare_nbr_sub
+Declare Sub check_tables_sub
+
+
+
+
+'---------------------------------------------------
+' this is a date copy protection sub
+'---------------------------------------------------
+Sub x_factor2_sub
+Dim i, j, k, l, m ,n , o As Integer
+Dim dist, x0, y0, x1, y1, x2 As Float
+Dim lonx, latx As String
+Dim site_data_alias, cell_data_alias As Alias
+Dim temp_obj As Object
+
+
+'this is causing crashes now so skip it
+Goto general_returnpoint
+
+
+OnError Goto general_error
+	Call check_tables_sub
+
+	k = 1
+	dist = 1
+	For i = 1 to 10
+note i + "1"
+		If sys(i) <> "" Then
+			If is_open_sites_sys(i) = "On" Then
+				Pack Table sites_sys(i) Data
+				m = Tableinfo(sites_sys(i), tab_info_nrows)
+'				j = 1
+				Fetch First From sites_sys(i)
+				Do While Not EOT(sites_sys(i))
+					site_data_alias = sites_sys(i) + ".lon"
+					lonx = site_data_alias
+					site_data_alias = sites_sys(i) + ".lat"
+					latx = site_data_alias
+					site_data_alias = sites_sys(i) + ".obj"
+					temp_obj = site_data_alias
+					If distance(protect_lon, protect_lat, lonx, latx, "km") > protect_dist or distance(protect_lon, protect_lat, ObjectNodeX(temp_obj,1,6), ObjectNodeY(temp_obj,1,6), "km") > protect_dist Then
+						Note "Tool is not authorised for use in this area.  Please contact nathanpaulscott@yahoo.com"
+						End Program
+					End If
+
+'					Fetch Rec j From cells_sys(i)
+'					j = minimum(m, j + round(Minimum(1,(j/200))*100*rnd(1),1))
+					Fetch Next From sites_sys(i)
+				Loop
+			End If
+		End If
+
+note i + "2"
+		If sys(i) <> "" Then
+			If is_open_cells_sys(i) = "On" Then
+				Pack Table cells_sys(i) Data
+				m = Tableinfo(cells_sys(i), tab_info_nrows)
+'				j = 1
+				Fetch First From cells_sys(i)
+				Do While Not EOT(cells_sys(i))
+					cell_data_alias = cells_sys(i) + ".lon"
+					lonx = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".lat"
+					latx = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".obj"
+					temp_obj = cell_data_alias
+					If distance(protect_lon, protect_lat, lonx, latx, "km") > protect_dist or distance(protect_lon, protect_lat, ObjectNodeX(temp_obj,1,6), ObjectNodeY(temp_obj,1,6), "km") > protect_dist Then
+						Note "Tool is not authorised for use in this area.  Please contact nathanpaulscott@yahoo.com"
+						End Program
+					End If
+
+'					Fetch Rec j From cells_sys(i)
+'					j = minimum(m, j + round(Minimum(1,(j/200))*100*rnd(1),1))
+					Fetch Next From cells_sys(i)
+				Loop
+			End If
+		End If
+	Next
+
+general_returnpoint:
+Exit Sub
+'-----------------------
+general_error:
+note "there was a crash in x_factor2: " + Error$()
+Resume general_returnpoint
+
+End Sub
+'---------------------------------------------------
+
+

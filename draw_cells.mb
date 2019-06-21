@@ -1,0 +1,257 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+Declare Sub draw_cells_sub
+Declare Sub ft_sub (ByVal table_to_use As String, ByVal sys_source As Integer, ByVal sys_target As Integer, ByVal single_cell As Logical, ByVal draw_cell As Logical, ByVal export_ft As Logical, first_tier_cells() As String)
+
+'---------------------------------------------------
+' this draws the cells and sites
+'---------------------------------------------------
+Sub draw_cells_sub	
+Dim sector1, center, endpnt, site1, temppnt As Object
+Dim typex, sitex, sizex, azx, hbwx, statusx, num_rows_s As String	
+Dim i_row_id, h, i, j, k, z, m, mold, num_rows_i As Integer
+Dim cell_data_alias As Alias
+Dim finalx, finaly As Float
+Dim first_tier_cells(100) As String
+
+
+'Nathan: I took these 2 out to stop the screen flashing in add sites mode as I have to add 10000s of sites for a particular project, if it causes issues, just put them back in
+'------------------------------
+'	Set ProgressBars On
+'	Set Event Processing On
+'------------------------------
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	If draw_subset_flag = False Then
+		'this makes the sector object a region with length = OBJ_SIZE(m), ant_hbw(deg)
+		'-------------------------------------------------------------------------
+		For i = 1 to 10
+			If sys(i) = "" Then
+				Exit For
+			Else
+				'This is for the cells
+				'---------------------------------
+				num_rows_s = TableInfo(cells_sys(i), TAB_INFO_NROWS)
+				num_rows_i = Val(num_rows_s)
+
+				Fetch first from cells_sys(i)
+
+				'For the footprints analysis, we call the sub here, it will update all objects in the query1 table
+				'only need to recolour them after that
+				'------------------------------------------------------
+				If draw_cells_type = "footprints" Then
+'					Call ft_sub(cells_sys(i),1,1,False,True,False,first_tier_cells)
+					Exit Sub
+				End If
+
+				Do While Not EOT(cells_sys(i))
+					cell_data_alias = cells_sys(i) + ".Status"
+					statusx = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".Type"
+					typex = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".LON"
+					finalx = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".LAT"
+					finaly = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".ANT_HBW"
+					hbwx = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".OBJ_SIZE"
+					sizex = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".AZ"
+					azx = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".rowid"
+					i_row_id = cell_data_alias
+
+					'now we either draw the new cell object into var sector1 or just fetch the obj from query1 (for footprints) as it was already updated
+					'--------------------------------------------------------------------------------------------------------------------------------------		
+					If draw_cells_type = "pies" Or draw_cells_type = "hexagons" Then
+						'############################################
+						Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx, typex, sector1)
+						'############################################
+					ElseIf draw_cells_type = "footprints" Then
+						sector1 = query1.obj
+					End If
+
+					'this makes the on-air sites a different colour to the off-air sites
+					'-----------------------------------------------------------
+					If statusx = "On-Air" then
+						Alter Object sector1 
+						Info OBJ_INFO_PEN, pen_on_air(i)
+						Info OBJ_INFO_Brush, brush_on_air(i)
+					Else
+						Alter Object sector1 
+						Info OBJ_INFO_PEN, pen_not_on_air(i)
+						Info OBJ_INFO_Brush, brush_not_on_air(i)
+					End If	
+
+					Update cells_sys(i)
+						Set obj = sector1 Where rowid = i_row_id	
+
+					mold = m
+					m = Minimum(100,int(100*i_row_id/num_rows_i))
+					If m <> mold Then
+						Print Chr$(12)
+						Print "Redrawing " & sys(i) & " cells. Please wait..."
+						Print m & "% " & String$(m,"|")
+					End If
+
+					Fetch Next From cells_sys(i)
+				Loop
+
+
+				'This is for the sites
+				'---------------------------------
+				Fetch first from sites_sys(i)
+				Do While Not EOT(sites_sys(i))
+					cell_data_alias = sites_sys(i) + ".LON"
+					finalx = cell_data_alias
+					cell_data_alias = sites_sys(i) + ".LAT"
+					finaly = cell_data_alias
+					cell_data_alias = sites_sys(i) + ".Status"
+					statusx = cell_data_alias
+					cell_data_alias = sites_sys(i) + ".rowid"
+					i_row_id = cell_data_alias
+
+					site1 = CreatePoint(finalx, finaly)
+
+					If statusx = "On-Air" Then
+						Alter Object site1
+						Info OBJ_INFO_SYMBOL, sym_on_air(i)
+					Else
+						Alter Object site1
+						Info OBJ_INFO_SYMBOL, sym_not_on_air(i)
+					End If
+					Update sites_sys(i)
+						Set obj = site1 where rowid = i_row_id
+
+					Fetch next from sites_sys(i)
+				Loop
+
+			End If
+		Next
+	Else '=> this is for the case where we are only drawing 1 sites worth of objects
+		'this makes the sector object a region with length = OBJ_SIZE(m), ant_hbw(deg)
+		'-------------------------------------------------------------------------
+		'This is for the cells
+		'---------------------------------
+
+		If undo_delete_flag Then
+			For j = 1 to 10
+				If sys(j) = "" Then
+					Exit For
+				ElseIf sys(j) = undo_cell_data(3) Then
+					i = j		'this is the sys index for the deleted cell
+					Exit For
+				End If
+			Next
+		Else
+			For j = 1 to 10
+				If sys(j) = "" Then
+					Exit For
+				ElseIf sys(j) = Right$(t_values((active_template_pointer-1)*66+2),Len(t_values((active_template_pointer-1)*66+2))-8) Then
+					i = j		'this is the sys index for the new cell
+					Exit For
+				End If
+			Next
+		End If
+
+		'Get the name of the new site that was just added
+		'-------------------------------------
+		Fetch Last from cells_sys(i)
+			cell_data_alias = cells_sys(i) + ".Site"
+			sitex = cell_data_alias
+		
+		Select * From cells_sys(i) Where Site = sitex Into query1
+
+		Fetch first from query1
+		h = 1
+		num_rows_s = TableInfo(query1, TAB_INFO_NROWS)
+		num_rows_i = Val(num_rows_s)
+		Do While Not EOT(query1)
+			cell_data_alias = query1 + ".Status"
+			statusx = cell_data_alias
+			cell_data_alias = query1 + ".Type"
+			typex = cell_data_alias
+			cell_data_alias = query1 + ".LON"
+			finalx = cell_data_alias
+			cell_data_alias = query1 + ".LAT"
+			finaly = cell_data_alias
+			cell_data_alias = query1 + ".ANT_HBW"
+			hbwx = cell_data_alias
+			cell_data_alias = query1 + ".OBJ_SIZE"
+			sizex = cell_data_alias
+			cell_data_alias = query1 + ".AZ"
+			azx = cell_data_alias
+			cell_data_alias = query1 + ".rowid"
+			i_row_id = cell_data_alias
+
+			If draw_cells_type = "pies" Or draw_cells_type = "hexagons" Then
+				'############################################
+				Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx, typex, sector1)
+				'############################################
+			ElseIf draw_cells_type = "footprints" Then
+'				sector1 = Query1.obj
+				draw_cells_type = "pies"
+				'############################################
+				Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx, typex, sector1)
+				'############################################
+				draw_cells_type = "footprints"
+			End If
+
+
+			'this makes the on-air sites a different colour to the off-air sites
+			'---------------------------------------------------------------
+			If statusx = "On-Air" then
+				Alter Object sector1 
+				Info OBJ_INFO_PEN, pen_on_air(i)
+				Info OBJ_INFO_Brush, brush_on_air(i)
+			Else
+				Alter Object sector1 
+				Info OBJ_INFO_PEN, pen_not_on_air(i)
+				Info OBJ_INFO_Brush, brush_not_on_air(i)
+			End If	
+
+			Update query1
+				Set obj = sector1 Where rowid = i_row_id	
+
+			Fetch Next From query1
+			h = h + 1
+		Loop
+		Close Table query1
+
+
+		'This is for the sites
+		'---------------------------------
+		Fetch Last from sites_sys(i)
+			cell_data_alias = sites_sys(i) + ".LON"
+			finalx = cell_data_alias
+			cell_data_alias = sites_sys(i) + ".LAT"
+			finaly = cell_data_alias
+			cell_data_alias = sites_sys(i) + ".Status"
+			statusx = cell_data_alias
+			cell_data_alias = sites_sys(i) + ".rowid"
+			i_row_id = cell_data_alias
+
+		site1 = CreatePoint(finalx, finaly)
+
+		If statusx = "On-Air" Then
+			Alter Object site1
+			Info OBJ_INFO_SYMBOL, sym_on_air(i)
+		Else
+			Alter Object site1
+			Info OBJ_INFO_SYMBOL, sym_not_on_air(i)
+		End If
+		Update sites_sys(i)
+			Set obj = site1 where rowid = i_row_id
+	End If
+End Sub
+'---------------------------------------------------
+
+
+

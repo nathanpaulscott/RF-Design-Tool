@@ -1,0 +1,76 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub choose_nbr_pos_sub (desired_pos as integer)
+
+'---------------------------------------------------
+' this is the dialog that allows the user to select which position they wish to add a nbr to
+'---------------------------------------------------
+Sub choose_nbr_pos_sub (desired_pos as integer)  'desired_pos is the passed variable which specifies the users desired nbr position
+Dim x As Integer
+Dim use_specific_flag As Logical
+
+
+
+
+	Dialog Title "Nbr Position" width 155 height 200 Position 450, 100
+
+	Control StaticText
+	Title "Where do you want to add the new nbr?" 
+	Position 10, 10
+	Control RadioGroup
+	Title " ; ; ; ; " 
+	Position 10, 30 Width 15 
+	Value 3
+	Into x
+	Control StaticText
+	Title "Top of Nbr List" 
+	Position 25, 30
+	Control StaticText
+	Title "High in Nbr List" 
+	Position 25, 44
+	Control StaticText
+	Title "Middle of Nbr List" 
+	Position 25, 58
+	Control StaticText
+	Title "Low in Nbr List" 
+	Position 25, 72
+	Control StaticText
+	Title "End of Nbr List" 
+	Position 25, 86
+
+	Control Checkbox 
+	Position 10,120
+	Into use_specific_flag
+	Value False
+	Control StaticText
+	Title "or Specify a Position" 
+	Position 25, 120
+	Control EditText
+	Value "64" 
+	Position 95, 120 Width 20
+	Into desired_pos
+		
+	Control OKButton
+	Position 20, 170
+	Control CancelButton
+	Position 95, 170
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		desired_pos = -1
+		Exit Sub
+	End If
+
+	If use_specific_flag = False Then   																		' this translates the nonspecific input into a value
+		desired_pos = x+64   																					' so for later top = 33, high = 34, mid = 35, low = 36, end = 37
+	Else 																											' this cleans up any erroneous input from the user for the specific case
+		If desired_pos > 64 Then desired_pos = 64 End If
+		If desired_pos < 1 Then desired_pos = 1 End If
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+

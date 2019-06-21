@@ -1,0 +1,683 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub nbr_stats_import_sub
+Declare Sub nbr_stats_export_sub
+Declare Sub pre_nbr_stats_import_sub
+Declare Sub set_display_sub
+Declare Sub draw_cells_sub
+Declare Sub prepare_nbr_sub
+Declare Sub toolbar_sub 
+Declare Sub x_factor_sub
+Declare Sub check_template_and_status_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+Declare Sub save_project_file_sub
+
+
+
+
+Sub pre_nbr_stats_import_sub
+Dim i_win_id As String	
+Dim i As Integer
+
+Onerror goto no_mapper_error
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+no_mapper_returnpoint:
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+	Call check_tables_sub
+
+	If Ask("Neighbor Stats, do you want to Import or Export","Import","Export") Then
+		Call nbr_stats_import_sub
+	Else
+		Call nbr_stats_export_sub		
+	End If
+
+	Print Chr$(12)
+	Print "Done."
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'------------------
+no_mapper_error:
+Resume no_mapper_returnpoint
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this imports nbr statistics data from a csv file
+'---------------------------------------------------
+Sub nbr_stats_import_sub
+Dim sector1, center, endpnt, bore, site1 As Object
+Dim popup_string, s_systems(10), s_col_names(100), cellxb4, cellx, sysx, cell_data, statusx, user_path_import, temp_site_1, temp_status_1, temp_row_1, temp_site_2, temp_status_2, temp_row_2, input_filename, s_title, temp_string As String
+Dim num_cols, i_rnc_id, i_cell_id, i_layer, i_ncell_rnc_id, i_ncell_id, i_ncell_layer, i_stats, i_is_nbr, i_action, i_nl_size, i_dist, i_win_id, h, i, j, k, k_old, count, count1, count2, row_0 As Integer
+Dim cell_data_alias, temp_col_alias, col_names_alias(100) As Alias
+Dim no_mapper_flag, first_table_flag, raw_flag, is_nbr_flag, action_flag, layer_flag, nl_size_flag, dist_flag As Logical
+Dim finalx, finaly As Float
+
+
+	Set Distance Units "km"
+
+	Call prepare_nbr_sub
+
+
+	'This makes sure the nbr_stats are closed if they are open
+	'-------------------------------------------------------
+OnError GoTo nbr_stats_open_error
+	If TableInfo(nbr_stats, TAB_INFO_NAME) <> "" Then
+		Close Table nbr_stats
+	End If
+nbr_stats_open_returnpoint:
+OnError GoTo nbr_statsx_open_error
+	If TableInfo(nbr_statsx, TAB_INFO_NAME) <> "" Then
+		Close Table nbr_statsx
+	End If
+nbr_statsx_open_returnpoint:
+
+
+
+	'this imports a tab delimited .csv file with the correct column headers and data
+	'----------------------------------------------------------------------------------
+OnError Goto general_error
+	nbr_stats_filename = FileOpenDlg("","","csv","Please select the nbr stats file...")
+	If nbr_stats_filename = "" Then
+		Exit Sub
+	End If
+
+	nbr_stats_path = PathToDirectory$(nbr_stats_filename)               'this will overwrite any user_path already set
+
+	Print Chr$(12)
+	Print "Please wait, importing..."
+
+	Register Table nbr_stats_filename  TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into nbr_stats_path + "nbr_statsx.tab"
+	Open Table nbr_stats_path + "nbr_statsx.tab"
+	Commit Table nbr_statsx As nbr_stats_path + "nbr_stats.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Open Table nbr_stats_path + "nbr_stats.tab"
+	Close Table nbr_statsx
+	If FileExists(nbr_stats_path + "nbr_statsx.tab") = True Then
+		Kill nbr_stats_path + "nbr_statsx.tab"
+	End If
+
+
+	'gets the col names of the imported file
+	'------------------------------------------------	
+	i_rnc_id = 0
+	i_cell_id = 0
+	i_layer = 0
+	i_ncell_rnc_id = 0
+	i_ncell_id = 0
+	i_ncell_layer = 0
+	i_stats = 0
+	i_is_nbr = 0
+	i_action = 0
+	i_nl_size = 0
+	i_dist = 0
+	popup_string = ""
+	num_cols = TableInfo(nbr_stats, TAB_INFO_NCOLS)
+	For i = 1 to Minimum(100,num_cols)		
+		s_col_names(i) = ColumnInfo(nbr_stats, "COL" & i, COL_INFO_NAME)
+		col_names_alias(i) = s_col_names(i)
+		popup_string = popup_string & ";" & s_col_names(i)
+		If i_rnc_id = 0 AND Like(Lcase$(s_col_names(i)),"%rnc%","") Then
+			i_rnc_id = i+1
+		ElseIf i_cell_id = 0 AND Like(Lcase$(s_col_names(i)),"%cell%","") Then
+			i_cell_id = i+1
+		ElseIf i_layer = 0 AND Like(Lcase$(s_col_names(i)),"%layer%","") Then
+			i_layer = i+1
+		ElseIf i_ncell_rnc_id = 0 AND Like(Lcase$(s_col_names(i)),"%ncell_rnc%","") Then
+			i_ncell_rnc_id = i+1
+		ElseIf i_ncell_id = 0 AND Like(Lcase$(s_col_names(i)),"%ncell_id%","") Then
+			i_ncell_id = i+1
+		ElseIf i_ncell_layer = 0 AND Like(Lcase$(s_col_names(i)),"%ncell_layer%","") Then
+			i_ncell_layer = i+1
+		ElseIf i_stats = 0 AND Like(Lcase$(s_col_names(i)),"%stats%","") Then
+			i_stats = i+1
+		ElseIf i_is_nbr = 0 AND Like(Lcase$(s_col_names(i)),"%is_nbr%","") Then
+			i_is_nbr = i+1
+		ElseIf i_action = 0 AND Like(Lcase$(s_col_names(i)),"%action%","") Then
+			i_action = i+1
+		ElseIf i_nl_size = 0 AND Like(Lcase$(s_col_names(i)),"%nl_size_new%","") Then
+			i_nl_size = i+1
+		ElseIf i_dist = 0 AND Like(Lcase$(s_col_names(i)),"%dist%","") Then
+			i_dist = i+1
+		End If
+	Next
+
+	'builds the col selection dialog
+	'-----------------------------------	
+	Set Map Redraw On
+	Dialog Title "Define Nbr Stats Column Mapping" width 880 height 85 Position 20,40
+
+		Control StaticText
+		Title "RNC ID Column" Position 5, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 5, 20 Width 70
+		Value i_rnc_id
+		Into i_rnc_id
+		Control StaticText
+		Title "Optional" Position 10, 40
+
+		Control StaticText
+		Title "Cell ID Column" Position 85, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 85, 20 Width 70
+		Value i_cell_id
+		Into i_cell_id
+
+		Control StaticText
+		Title "Layer Column" Position 165, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 165, 20 Width 70
+		Value i_layer
+		Into i_layer
+
+		Control StaticText
+		Title "N.RNC ID Column" Position 245, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 245, 20 Width 70
+		Value i_ncell_rnc_id
+		Into i_ncell_rnc_id
+		Control StaticText
+		Title "Optional" Position 250, 40
+
+		Control StaticText
+		Title "NCell ID Column" Position 325, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 325, 20 Width 70
+		Value i_ncell_id
+		Into i_ncell_id
+
+		Control StaticText
+		Title "NCell Layer Column" Position 405, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 405, 20 Width 70
+		Value i_ncell_layer
+		Into i_ncell_layer
+
+		Control StaticText
+		Title "Stats Column" Position 485, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 485, 20 Width 70
+		Value i_stats
+		Into i_stats
+
+		Control Checkbox 
+		Position 490,40
+		Into raw_flag
+		Value False
+		Control StaticText
+		Title "Raw" Position 505, 40
+
+		Control StaticText
+		Title "NOTE: RAW will process" Position 485, 50 Width 100
+		Control StaticText
+		Title "stats from Attempts to" Position 485, 60 Width 100
+		Control StaticText
+		Title "% of HOST" Position 485, 70 Width 100
+
+		Control StaticText
+		Title "Is Nbr Column" Position 565, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 565, 20 Width 70
+		Value i_is_nbr
+		Into i_is_nbr
+
+		Control Checkbox 
+		Position 570,40
+		Into is_nbr_flag
+		Value True
+		Control StaticText
+		Title "Use" Position 585, 40
+
+		Control StaticText
+		Title "Action Column" Position 645, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 645, 20 Width 70
+		Value i_action
+		Into i_action
+
+		Control Checkbox 
+		Position 650,40
+		Into action_flag
+		Value True
+		Control StaticText
+		Title "Use" Position 665, 40
+
+		Control StaticText
+		Title "New NL Size Column" Position 725, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 725, 20 Width 70
+		Value i_nl_size
+		Into i_nl_size
+
+		Control Checkbox 
+		Position 730,40
+		Into nl_size_flag
+		Value True
+		Control StaticText
+		Title "Use" Position 745, 40
+
+		Control StaticText
+		Title "Distance Column" Position 805, 10 Width 70
+
+		Control PopupMenu
+		Title popup_string Position 805, 20 Width 70
+		Value i_dist
+		Into i_dist
+
+		Control Checkbox 
+		Position 810,40
+		Into dist_flag
+		Value True
+		Control StaticText
+		Title "Use" Position 825, 40
+
+		Control OKButton
+		Position 10, 65
+		Control CancelButton
+		Position 90, 65
+
+		If CommandInfo(CMD_INFO_DLG_OK) = False Then
+			Set Map Redraw Off
+			Exit Sub
+		End If
+		Set Map Redraw Off
+
+		Print Chr$(12)
+		Print "Importing"
+
+
+		'This checks the selections for the cols
+		'-----------------------------------------------
+		If i_cell_id-1 = 0 OR i_layer-1 = 0 OR i_ncell_id-1 = 0 OR i_ncell_layer-1 = 0 OR i_stats-1 = 0 Then
+			Note "Key Cols need to have values to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_cell_id = Any(i_rnc_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_stats,i_action,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Key Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_layer = Any(i_rnc_id,i_cell_id,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_stats,i_action,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Key Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_ncell_id = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_layer,i_stats,i_action,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Key Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_ncell_layer = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_stats,i_action,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Key Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_rnc_id-1 <> 0 AND i_rnc_id = Any(i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_stats,i_action,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_ncell_rnc_id-1 <> 0 AND i_ncell_rnc_id = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_id,i_ncell_layer,i_stats,i_action,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_stats-1 <> 0 AND i_stats = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_action,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_is_nbr-1 <> 0 AND i_is_nbr = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_stats,i_action,i_nl_size,i_dist) Then
+			Note "Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_action-1 <> 0 AND i_action = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_stats,i_is_nbr,i_nl_size,i_dist) Then
+			Note "Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_nl_size-1 <> 0 AND i_nl_size = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_stats,i_action,i_is_nbr,i_dist) Then
+			Note "Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		ElseIf i_dist-1 <> 0 AND i_dist = Any(i_rnc_id,i_cell_id,i_layer,i_ncell_rnc_id,i_ncell_id,i_ncell_layer,i_stats,i_action,i_is_nbr,i_nl_size) Then
+			Note "Cols need to be unique to proceed. Import Failed...."
+			Goto general_returnpoint
+		End If
+
+		'now we know the col names of the cols we need, we delete all the other cols and rename the ones we need
+		'----------------------------------------------------------------------------------------------------------
+		Alter Table nbr_stats
+			(Rename col_names_alias(i_cell_id-1) CELL, col_names_alias(i_layer-1) LAYER, col_names_alias(i_ncell_id-1) NCELL, col_names_alias(i_ncell_layer-1) NCELL_LAYER, col_names_alias(i_stats-1) STATS)
+		Alter Table nbr_stats
+			(Modify CELL Char(40), LAYER Char(20), NCELL Char(40), NCELL_LAYER Char(20), STATS Float)
+		Commit Table nbr_stats
+
+		If i_rnc_id-1 = 0 Then   	'there was nothing selected for the rnc id
+OnError Goto error_rnc1
+			If ColumnInfo("nbr_stats","RNC_BSC",COL_INFO_NUM) <> 0 Then
+				Alter Table nbr_stats
+					(Modify RNC_BSC Char(40))
+			Else
+returnpoint_rnc1:
+OnError Goto general_error
+				Alter Table nbr_stats
+					(Add RNC_BSC Char(40))
+			End If
+		Else
+			Alter Table nbr_stats
+				(Rename col_names_alias(i_rnc_id-1) RNC_BSC)
+			Alter Table nbr_stats
+				(Modify RNC_BSC Char(40))
+		End If
+
+		If i_ncell_rnc_id-1 = 0 Then   	'there was nothing selected for the ncell rnc id
+OnError Goto error_ncell_rnc1
+			If ColumnInfo("nbr_stats","NCELL_RNC_BSC",COL_INFO_NUM) <> 0 Then
+				Alter Table nbr_stats
+					(Modify NCELL_RNC_BSC Char(40))
+			Else		
+returnpoint_ncell_rnc1:
+OnError Goto general_error
+				Alter Table nbr_stats
+					(Add NCELL_RNC_BSC Char(40))
+			End If
+		Else
+			Alter Table nbr_stats
+				(Rename col_names_alias(i_ncell_rnc_id-1) NCELL_RNC_BSC)
+			Alter Table nbr_stats
+				(Modify NCELL_RNC_BSC Char(40))
+		End If
+
+		If (is_nbr_flag AND i_is_nbr-1 = 0) OR NOT is_nbr_flag Then
+OnError Goto error_is_nbr1
+			If ColumnInfo("nbr_stats","IS_NBR",COL_INFO_NUM) <> 0 Then
+				Alter Table nbr_stats
+					(Modify IS_NBR Char(20))
+			Else		
+returnpoint_is_nbr1:
+OnError Goto general_error
+				Alter Table nbr_stats
+					(Add IS_NBR Char(20))
+			End If
+		Else
+			Alter Table nbr_stats
+				(Rename col_names_alias(i_is_nbr-1) IS_NBR)
+			Alter Table nbr_stats
+				(Modify IS_NBR Char(20))
+		End If
+
+		If (action_flag AND i_action-1 = 0) OR NOT action_flag Then
+OnError Goto error_action1
+			If ColumnInfo("nbr_stats","ACTION",COL_INFO_NUM) <> 0 Then
+				Alter Table nbr_stats
+					(Modify ACTION Char(20))
+			Else		
+returnpoint_action1:
+OnError Goto general_error
+				Alter Table nbr_stats
+					(Add ACTION Char(20))
+			End If
+		Else
+			Alter Table nbr_stats
+				(Rename col_names_alias(i_action-1) ACTION)
+			Alter Table nbr_stats
+				(Modify ACTION Char(20))
+		End If
+
+		If (nl_size_flag AND i_nl_size-1 = 0) OR NOT nl_size_flag Then
+OnError Goto error_nl_size1
+			If ColumnInfo("nbr_stats","NL_SIZE_NEW",COL_INFO_NUM) <> 0 Then
+				Alter Table nbr_stats
+					(Modify NL_SIZE_NEW Char(20))
+			Else		
+returnpoint_nl_size1:
+OnError Goto general_error
+				Alter Table nbr_stats
+					(Add NL_SIZE_NEW Char(20))
+			End If
+		Else
+			Alter Table nbr_stats
+				(Rename col_names_alias(i_nl_size-1) NL_SIZE_NEW)
+			Alter Table nbr_stats
+				(Modify NL_SIZE_NEW Char(20))
+		End If
+
+		If (dist_flag AND i_dist-1 = 0) OR NOT dist_flag Then
+OnError Goto error_dist1
+			If ColumnInfo("nbr_stats","DIST_KM",COL_INFO_NUM) <> 0 Then
+				Alter Table nbr_stats
+					(Modify DIST_KM Char(20))
+			Else		
+returnpoint_dist1:
+OnError Goto general_error
+				Alter Table nbr_stats
+					(Add DIST_KM Char(20))
+			End If
+		Else
+			Alter Table nbr_stats
+				(Rename col_names_alias(i_dist-1) DIST_KM)
+			Alter Table nbr_stats
+				(Modify DIST_KM Char(20))
+		End If
+
+		Select RNC_BSC, CELL, LAYER, NCELL_RNC_BSC, NCELL, NCELL_LAYER, STATS, IS_NBR, ACTION, NL_SIZE_NEW, DIST_KM From nbr_stats Into query1
+		Commit Table query1 As nbr_stats_path + "nbr_statsx.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Open Table nbr_stats_path + "nbr_statsx.tab"
+		Drop Table nbr_stats
+		Commit Table nbr_statsx As nbr_stats_path + "nbr_stats.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Open Table nbr_stats_path + "nbr_stats.tab"
+		Drop Table nbr_statsx
+		Commit Table nbr_stats
+
+
+		Print Chr$(12)
+		Print "Calculating Stats, please wait...."
+
+		' This calcs the stats% for each pair
+		'----------------------------------------
+		If raw_flag Then
+			Alter Table nbr_stats
+				(Add HOST Char(60), TOT_STATS Float)
+			Update nbr_stats Set HOST = CELL & "_" & LAYER, TOT_STATS = 0
+			Commit Table nbr_stats
+
+			Select HOST, SUM(STATS) From nbr_stats 
+				Group By HOST Into query1
+			Add Column nbr_stats(TOT_STATS) From query1 Set To COL2 Where HOST = HOST
+			Commit Table nbr_stats
+			Close Table query1
+
+			Select * From nbr_stats Where TOT_STATS > 0 Into query1
+			Update query1
+				Set STATS = Round(100 * STATS / TOT_STATS,0.0001)
+			Commit Table nbr_stats
+			Close Table query1
+
+			Alter Table nbr_stats
+				(Drop HOST, TOT_STATS)
+			Commit Table nbr_stats
+		End If
+
+
+		' This puts "NONE" in the ACTION col of pairs with blank action defined
+		'----------------------------------------
+		Select ACTION From nbr_stats Where Not ACTION = Any("ADD","MOD","REMOVE","NONE","NOT ADD") Into query1
+		Update query1
+			Set ACTION = "NONE"
+		Commit Table nbr_stats
+		Close Table query1
+
+
+		Print Chr$(12)
+		Print "Finishing off, please wait...."
+
+		' This syncs the layer col with the system col in the nbr tool => 
+		' basically, the layer and ncell_layer cols need to have the same values as the system col from the cells tables
+		'----------------------------------------------------------------------------------------------------------------
+		For i = 1 to 10
+			s_systems(i) = ""
+			If is_open_cells_sys(i) = "On" Then
+				Fetch First From cells_sys(i)
+				temp_col_alias = cells_sys(i) & ".System"
+				s_systems(i) = temp_col_alias
+			End If
+		Next
+
+		Select LAYER From nbr_stats Group By LAYER Into query1
+		Fetch First From query1
+		Do While Not EOT(query1)
+			layer_flag = False
+			For i = 1 to 10
+				If s_systems(i) <> "" Then
+					If query1.COL1 = s_systems(i) Then
+						layer_flag = True
+						Exit For
+					End If
+				End If
+			Next
+			If Not layer_flag Then
+				Exit Do
+			End If
+			Fetch Next From query1
+		Loop
+		Close Table query1
+
+		If NOT layer_flag Then
+			Note "The layers in your file do not match the systems in the cells files => " & s_systems(1) & " : " & s_systems(2) & " : " & s_systems(3) & " : " & s_systems(4) & " : " & s_systems(5) & " : " & s_systems(6) & " : " & s_systems(7) & " : " & s_systems(8) & " : " & s_systems(9) & " : " & s_systems(10) & " ..Exiting...."
+			Drop Table nbr_stats			
+			Goto general_returnpoint
+		End If
+
+		Select NCELL_LAYER From nbr_stats
+			Group By NCELL_LAYER Into query1
+		Fetch First From query1
+		Do While Not EOT(query1)
+			layer_flag = False
+			For i = 1 to 10
+				If s_systems(i) <> "" Then
+					If query1.COL1 = s_systems(i) Then
+						layer_flag = True
+						Exit For
+					End If
+				End If
+			Next
+			If Not layer_flag Then
+				Exit Do
+			End If
+			Fetch Next From query1
+		Loop
+		Close Table query1
+
+		If Not layer_flag Then
+			Note "The layers in your file do not match the systems in the cells files => " & s_systems(1) & " : " & s_systems(2) & " : " & s_systems(3) & " : " & s_systems(4) & " : " & s_systems(5) & " : " & s_systems(6) & " : " & s_systems(7) & " : " & s_systems(8) & " : " & s_systems(9) & " : " & s_systems(10) & " ..Exiting...."
+			Drop Table nbr_stats			
+			Goto general_returnpoint
+		End If
+
+		Print Chr$(12)
+		Print "Done."
+
+general_returnpoint:
+
+Exit Sub
+'------------------------------
+general_error:
+Note "There was an error, the code is: " + Error$()
+Resume general_returnpoint
+
+nbr_stats_open_error:
+Resume nbr_stats_open_returnpoint
+
+nbr_statsx_open_error:
+Resume nbr_statsx_open_returnpoint
+
+error_rnc1:
+Resume returnpoint_rnc1
+
+error_ncell_rnc1:
+Resume returnpoint_ncell_rnc1
+
+error_is_nbr1:
+Resume returnpoint_is_nbr1
+
+error_action1:
+Resume returnpoint_action1
+
+error_nl_size1:
+Resume returnpoint_nl_size1
+
+error_dist1:
+Resume returnpoint_dist1
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+'----------------------------------------------
+' this exports edited nbr statistics data
+'----------------------------------------------
+Sub nbr_stats_export_sub
+Dim i_win_id, h, i, j, k As Integer
+Dim output_name, output_path As String
+
+
+OnError GoTo nbr_stats_closed_error
+	If TableInfo(nbr_stats, TAB_INFO_NAME) <> "" Then
+		'Do nothing
+	End If
+
+OnError Goto general_error
+	output_name = FileSaveAsDlg(PathToDirectory$(TableInfo(nbr_stats,TAB_INFO_TABFILE)),"", "csv", "Choose Nbr Stats Export Location and Filename")
+	If output_name = "" Then
+		Exit Sub
+	End If
+
+	Print Chr$(12)
+	Print "Please wait.  Exporting....."
+
+OnError Goto file_used_error
+	Export nbr_stats Into output_name Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+
+general_returnpoint:
+
+Exit Sub
+'------------------------------
+general_error:
+Note "There was an error, the code is: " + Error$()
+Resume general_returnpoint
+
+nbr_stats_closed_error:
+Note "There needs to be a nbr stats file open in order to export it, exiting..."
+Resume general_returnpoint
+
+file_used_error:
+Note "The destination file is being used by another program, close it and try again!"
+Resume general_returnpoint
+
+End Sub
+'---------------------------------------------------
+
+
+

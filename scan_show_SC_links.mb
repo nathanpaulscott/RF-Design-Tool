@@ -1,0 +1,516 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+Include "asynckeys.def"
+
+Declare Sub scan_show_SC_links_sub(Byval cells_sysind as Integer)
+Declare Sub scan_pre_show_SC_links_sub
+Declare Sub scan_choose_data_type_sub
+Declare Sub scan_import_3G_scan_sub
+Declare Sub scan_set_3G_scan_assoc_sub
+Declare Sub add_nbr_sub
+Declare Sub del_nbr_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+Declare Sub key_test_sub
+
+
+
+'---------------------------------------------------
+' checks the user has pressed a particular key
+'---------------------------------------------------
+Sub key_test_sub
+    Dim iState As Integer
+    iState = getASyncKeyState(vbKeyRight)
+
+    Do Case iState
+        Case vbKeyPressed
+            note "you are pressing the key"
+        Case vbKeyWasPressed
+            note "you pressed the key"
+        Case Else
+            Print "Nothing to report..."
+    End Case
+	Dialog Preserve
+End Sub
+
+
+
+
+'---------------------------------------------------
+' Makes some adustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub scan_pre_show_SC_links_sub
+Dim host_val, input_filename, layer_name As String
+Dim i_win_id As String
+Dim num_layer, i, j, k, x, y, z, sysind As Integer
+Dim need_to_exit As Logical
+
+
+	need_to_exit = False
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+OnError Goto closed1
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		Fetch First From nbrs_RFDT
+		host_val = nbrs_RFDT.cell
+	End If
+	
+point1:
+	
+
+	'This tests for and makes sure scan_3G_raw is open and in the mapper
+	'--------------------------------------------------------------------------
+OnError Goto closed4
+	If TableInfo(scan_3G_raw, TAB_INFO_NAME) <> "" Then
+		If user_path_scan_3G = "not set" Then
+			input_filename = TableInfo(scan_3G_raw, TAB_INFO_TABFILE)
+			user_path_scan_3G = PathToDirectory$(input_filename)
+		End If
+	Else
+point4:
+		input_filename = FileOpenDlg("","Scan_3G_raw","TAB","Please select the raw 3G scan table...")
+		If input_filename = "" Then
+			Exit Sub
+		End If
+		user_path_scan_3G = PathToDirectory$(input_filename)
+		Open Table "scan_3G_raw"
+	End If
+
+	'This turns off the display of any previous EcIo or RSCP plots
+	'----------------------------------------------------------------
+	k = FrontWindow()
+	j = WindowID(k)
+	num_layer = MapperInfo(j, Mapper_Info_Layers)          'j will always be the active mapper window id
+	For x = 1 to num_layer
+		layer_name = LayerInfo(j,x,Layer_Info_Name)
+		If layer_name = "scan_3G_raw" Then			'we are good
+			Exit For
+		ElseIf x = num_layer Then		'it is not in the mapper
+			Add Map Layer scan_3G_raw
+		End If
+	Next
+
+
+	'This tests to make sure the table for scan variable is set
+	'--------------------------------------------------------------
+	For j = 1 to 10
+		If sys(j) = "" Then
+			Call scan_set_3G_scan_assoc_sub
+			need_to_exit = True
+			Exit For
+		ElseIf table_for_3G_scan = cells_sys(j) AND NOT table_for_3G_scan = "" Then
+			sysind = j
+			Exit For
+		End If
+	Next
+
+	'This makes sure we have chosen EcIo or RSCP, once a selection has been made, it will not prompt again, you change it through the right click menu"
+	'-------------------------------------------------------------------------------------------------
+	If 	NOT EcIo_or_RSCP = Any("EcIo","RSCP") Then
+		EcIo_or_RSCP = "RSCP"
+	End If
+
+	If need_to_exit Then
+		'needs to exit sub as we get an error due to the user clicking in the dialog, need to get them to reclick
+		Note "As you just changed system data, please reselect the cell again"	
+		Exit Sub
+	End If
+
+	Call check_tables_sub
+
+	Call scan_show_SC_links_sub(sysind)
+
+OnError Goto closed2
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+	End If
+point2:
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+	Exit Sub
+
+
+'----------------------------------------
+Closed1:
+Resume point1
+
+Closed2:
+host_val = "nul"
+Resume point2
+
+Closed4:
+Resume point4
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this lets the user click on a point from the raw scan table and it shows the connections to the cells found in that data
+'---------------------------------------------------
+Sub scan_show_SC_links_sub(Byval cells_sysind as Integer)
+Dim x, y, x1, y1, x2, y2, x3, y3, size0, size1 As Float
+Dim num_layer, host_SC, num_rows, blank_space_num, host_row_id, nbr_row_id, count, i, j, k, i_found, i_row_id, i_win_id, sysind_selected, pen1, pen2, pen3, pen4 As Integer
+Dim val1, val2, val3, table_selected_alias, nbr, cell_data_alias as Alias
+Dim sel, sel2, sel3 as object
+Dim layer_name, tabname, line_deleted_flag, finished_flag, layer1, found_blank, match_val, match_rxlev, nbr_val, host_cell, table_selected, sitex, namex, cellx, pnx, bsicx, zcrsx, typex, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, latx, lonx As String
+Dim c_click, select_ok As Logical
+Dim table_name_full As String
+Dim layer_type As Integer
+Dim data_point(100) As String
+Dim col_a(10) As Alias
+Dim server_rscp, server_ecio, nbr_rscp, nbr_ecio As Float
+Dim distmin, xy_ratio, label_dist As Float
+Dim f_font As Font
+
+
+OnError GoTo general_error
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+	' this checks that the front window is a mapper
+	'---------------------------------------------------
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the point where the user clicked.
+	'---------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	c_click = CommandInfo(CMD_INFO_CTRL)
+
+	' the user is using the point-mode tool (this is set in the dialog in main_sub), determine how many objects are at the chosen point.
+	'---------------------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+	If i_found = 0 Then
+		'do nothing
+	Else
+		'If the CTRL key was held down while clicking, we show the cell info only
+		'-----------------------------------------------------------------------
+		If c_click = True Then
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+
+				' this tests to see which table is open and then which has been selected
+				'-------------------------------------
+				select_ok = False
+				For j = 1 to 10
+					If sys(j) = "" Then
+						Exit For
+
+					ElseIf table_selected = cells_sys(j) Then
+						select_ok = True
+						Exit For
+					End If
+				Next
+
+				
+				' Fetch the row of the object the user clicked on.
+				'------------------------------------------------------
+				If select_ok = True Then
+					Fetch rec i_row_id From table_selected
+						cell_data_alias = table_selected + ".Site"
+						sitex =  cell_data_alias
+						cell_data_alias = table_selected + ".Sitename"
+						namex = cell_data_alias
+						cell_data_alias = table_selected + ".Cell"
+						cellx = cell_data_alias
+						cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+						pnx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_BSIC"
+						bsicx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_Cnt"
+						zcrsx = cell_data_alias
+						cell_data_alias = table_selected + ".HT"
+						htx = cell_data_alias
+						cell_data_alias = table_selected + ".AZ"
+						azx = cell_data_alias
+						cell_data_alias = table_selected + ".MDT"
+						mdtx = cell_data_alias
+						cell_data_alias = table_selected + ".EDT"
+						edtx = cell_data_alias
+						cell_data_alias = table_selected + ".STATUS"
+						statusx = cell_data_alias
+						cell_data_alias = table_selected + ".Comment"
+						commentx = cell_data_alias
+						cell_data_alias = table_selected + ".ANT_HBW"
+						hbwx = cell_data_alias
+						cell_data_alias = table_selected + ".OBJ_SIZE"
+						sizex = cell_data_alias
+						cell_data_alias = table_selected + ".Type"
+						typex = cell_data_alias
+
+
+					Dialog Title "View Cells Parameters" width 180 height 290	 Position 20,40
+					Control GroupBox
+					Title "Cell Details" 
+					Position 10, 10 Width 160 Height 55
+					Control StaticText
+					Title "Site:" Position 15, 20
+					Control StaticText
+					Title sitex Position 75, 20
+					Control StaticText
+					Title "Site Name:" Position 15, 35
+					Control StaticText
+					Title namex Position 75, 35
+					Control StaticText
+					Title "Cell ID:" Position 15, 50
+					Control StaticText
+					Title cellx Position 75, 50
+					Control StaticText
+					Title "Pci/Sc/Pn/Bcch:" Position 15, 75
+					Control StaticText
+					Title pnx Position 75, 75 
+					Control StaticText
+					Title "Zcrs/Bsic:" Position 15, 90
+					Control StaticText
+					Title bsicx Position 75, 90
+					Control StaticText
+					Title "Cnt:" Position 110, 90
+					Control StaticText
+					Title zcrsx Position 125, 90
+					Control StaticText
+					Title "Azimuth (deg):" Position 15, 105
+					Control StaticText
+					Title azx Position 75, 105
+					Control StaticText
+					Title "Ant HBW (deg):" Position 15, 120
+					Control StaticText
+					Title hbwx Position 75, 120
+					Control StaticText
+					Title "Object Size (m):" Position 15, 135
+					Control StaticText
+					Title sizex Position 75, 135
+					Control StaticText
+					Title "Height (m/ft):" Position 15, 150
+					Control StaticText
+					Title htx Position 75, 150
+					Control StaticText
+					Title "MDT (deg):" Position 15, 165
+					Control StaticText
+					Title mdtx Position 75, 165
+					Control StaticText
+					Title "EDT (deg):" Position 15, 180
+					Control StaticText
+					Title edtx Position 75, 180
+					Control StaticText
+					Title "Status:" Position 15, 195
+					Control StaticText
+					Title statusx Position 75, 195
+					Control StaticText
+					Title "Comments:" Position 15, 210
+					Control StaticText
+					Title Commentx Position 75, 210
+					Control StaticText
+					Title "Type:" Position 15, 225
+					Control StaticText
+					Title typex Position 75, 225
+
+					Control OKButton
+					Position 60, 250
+
+					If CommandInfo(CMD_INFO_DLG_OK) = True Then
+						Exit Sub
+					End If
+				End If
+			Next
+
+		' This is regular mode
+		'---------------------------------------------------
+		Else
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			Set Map Redraw Off
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				If table_selected = "scan_3G_raw" Then			'we need to process
+					pen1 = StyleAttr(pen_connector(cells_sysind),PEN_PATTERN)
+					pen2 = StyleAttr(pen_connector(cells_sysind),PEN_COLOR)
+
+     				' Get the row ID number of the object that was a hit.
+					'------------------------------------------------------
+					i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+					Call prepare_nbr_sub
+
+					Select * From table_selected Where rowid = i_row_id Into query1 NoSelect
+					Commit Table query1 As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+					Close Table query1
+					Open Table pf_user_path & "nbrs_RFDT.TAB"
+
+					' reads the scan data from the point selected into the data_point array
+					'--------------------------------------------------------------------------
+					Fetch First from nbrs_RFDT
+						x1 = centroidx(nbrs_RFDT.obj)
+						y1 = centroidy(nbrs_RFDT.obj)
+						k = 1
+						For j = 1 to 10
+							col_a(1) = "nbrs_RFDT.SC_" & j
+							col_a(2) = "nbrs_RFDT.RSCP_" & j
+							col_a(3) = "nbrs_RFDT.EcIo_" & j
+							data_point((k-1)*3+2) = col_a(1)
+							If data_point((k-1)*3+2) = "-88888" or data_point((k-1)*3+2) = "-99999" or data_point((k-1)*3+2) = "" Then
+								data_point((k-1)*3+2) = ""
+								data_point((k-1)*3+3) = ""
+								data_point((k-1)*3+4) = ""
+							Else
+								data_point((k-1)*3+3) = col_a(2)
+								data_point((k-1)*3+4) = col_a(3)
+								k = k + 1
+							End If
+						Next
+						data_point(1) = k - 1
+						'-------------------------------------------------------------------------------------------
+						'now the data_point array has the lat lon and all the sc/rscp/ecio with values and the number of sc found is at the first position
+						'-------------------------------------------------------------------------------------------
+
+					' this is the engine for going through the sc one by one from the data point array, then finding the closest cell and adding it to the nbr table as well as a connector line
+					'----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+					server_rscp = data_point(3)
+					server_ecio = data_point(4)
+					For j = val(data_point(1)) to 1 Step -1
+						Select Cell, PCI_SC_BCCH_PN, Distance(LON, LAT, x1, y1,"km") "Dist_km", Obj
+							From table_for_3G_scan
+							Where PCI_SC_BCCH_PN = Val(data_point((j-1)*3+2))
+							Into query1 NoSelect
+							Order By Dist_km
+
+						If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then
+							Fetch First from query1
+								sel = query1.obj
+								x2 = centroidx(query1.Obj)
+								y2 = centroidy(query1.Obj)
+							Close Table query1
+							Alter Object sel Info OBJ_INFO_BRUSH, brush_for_interferer
+							Alter Object sel Info OBJ_INFO_PEN, pen_for_interferer
+
+							sel2 = CreateLine(x1, y1, x2, y2)
+							If j = 1 Then
+								Alter Object sel2 Info OBJ_INFO_PEN, MakePen(Round(Minimum(7,Maximum(1,7)),0.1),pen1,D_GREEN)
+								Alter Object sel Info OBJ_INFO_BRUSH, brush_for_server
+								Alter Object sel Info OBJ_INFO_PEN, pen_for_server
+							ElseIf EcIo_or_RSCP = "RSCP" Then
+								nbr_rscp = data_point((j-1)*3+3)
+								Alter Object sel2
+								Info OBJ_INFO_PEN, MakePen(Round(Minimum(7,Maximum(1,(15-(server_rscp - nbr_rscp))*6/15)+1),0.1),pen1,RED)
+							ElseIf EcIo_or_RSCP = "EcIo" Then
+								nbr_ecio = data_point((j-1)*3+4)
+								Alter Object sel2
+								Info OBJ_INFO_PEN, MakePen(Round(Minimum(7,Maximum(1,(8-(server_ecio - nbr_ecio))*6/8)+1),0.1),pen1,RED)
+							End If
+
+							'Add Text
+							'--------------------
+							distmin = distance(x1,y1,x2,y2,"km")
+							xy_ratio = abs((y2-y1))/abs((x2-x1))
+							label_dist = 200           'the labels will be this many m along their lines
+							x3 = sqr((label_dist/Z_x)^2/(1+xy_ratio^2))
+							y3 = xy_ratio*x3
+							If x2 < x1 Then
+								x3 = x1 - x3
+							Else
+								x3 = x1 + x3
+							End If
+							If y2 < y1 Then
+								y3 = y1 - y3
+							Else
+								y3 = y1 + y3
+							End If
+							f_font = CurrentFont()
+							Set Style Font font_for_search
+							If EcIo_or_RSCP = "RSCP" and j = 1 Then
+								Set Style Font font_for_server
+								sel3 = CreateText(i_win_id,x3,y3,Str$(server_rscp) & "dBm",0,0,0)
+							ElseIf EcIo_or_RSCP = "EcIo" and j = 1 Then
+								Set Style Font font_for_server
+								sel3 = CreateText(i_win_id,x3,y3,Str$(server_ecio) & "dB",0,0,0)
+							ElseIf EcIo_or_RSCP = "RSCP" and j > 1 Then
+								sel3 = CreateText(i_win_id,x3,y3,Str$(nbr_rscp) & "dBm",0,0,0)
+							ElseIf EcIo_or_RSCP = "EcIo" and j > 1 Then
+								sel3 = CreateText(i_win_id,x3,y3,Str$(nbr_ecio) & "dB",0,0,0)
+							End If
+							Set Style Font f_font
+
+							Insert Into nbrs_RFDT (Obj) Values (sel)
+							Insert Into nbrs_RFDT (Obj) Values (sel2)
+							Insert Into nbrs_RFDT (Obj) Values (sel3)
+						Else
+							Close Table query1
+						End If
+					Next
+					Add Map Layer nbrs_RFDT
+				End If
+			Next
+		End If
+	End If
+
+returnpoint3:
+
+Exit Sub
+
+
+' Error handlers here
+'------------------------------------------
+
+general_error:
+note "There was a problem, the error code is: " + error$()
+Resume returnpoint3
+
+End Sub
+
+'------------------------------------

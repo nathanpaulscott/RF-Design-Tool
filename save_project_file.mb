@@ -1,0 +1,396 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub save_project_file_sub
+Declare Sub saveas_project_file_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+
+'---------------------------------------------------
+' Used by the edit project settings sub
+'---------------------------------------------------
+Sub saveas_project_file_sub
+Dim pf_filename_temp As String
+
+	pf_filename_temp = pf_filename
+
+	pf_filename = FileSaveAsDlg("","","pro","Please specify a project file name...")
+	If pf_filename = "" Then
+		pf_filename = pf_filename_temp
+		Exit Sub
+	End If
+	pf_user_path = PathToDirectory$(pf_filename)
+
+	Alter Control 10000
+	Title "Project Directory:  " + pf_user_path
+
+	Alter Control 10001
+	Title "Project Filename:  " + PathToFilename$(pf_filename)
+
+	pf_bypass = True
+	Call save_project_file_sub
+	pf_bypass = False
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this sets the object display properties
+'---------------------------------------------------
+Sub save_project_file_sub
+Dim data As String
+Dim b_color, f_color, pat, i, j, k, l As Integer
+
+
+	
+	check_map_display = True 
+	Call check_tables_sub         'This checks the status of the different tables (if they are open and if they are visible)
+	check_map_display = False
+
+	If pf_bypass = False Then       ' if the bypass flag has been set by the load_project_file_sub, then we already have the required data
+point0:
+		pf_filename = FileSaveAsDlg("","","pro","Please specify a project file name...")
+		If pf_filename = "" Then
+			Note "A valid project file name needs to be specified.  Try again."
+			Goto point0
+		End If
+
+		pf_user_path = PathToDirectory$(pf_filename)
+
+	Else
+		pf_bypass = False
+	End If
+
+
+	'This cleans the file first
+	'-------------------------------
+
+OnError GoTo pf_open
+
+	Open File pf_filename For Output As #1
+
+returnpoint1:
+OnError GoTo general_error
+
+	For i = 1 to 10000   ' I am cleaning up to 10,000 lines
+		data = ""
+		print #1, data
+	Next
+	Close File #1
+
+
+
+	'This opens the cleaned file for writing
+	'---------------------------------------
+	Open File pf_filename For Output As #1
+
+	'This writes the section header
+	'-------------------------------
+	data = "Table Names and Locations"
+	print #1, data
+	data = "-----------------------------"
+	print #1, data
+
+	'This is all the subsequent data
+	'-----------------------------------
+	For i = 1 to 10
+		data = "System: " + sys(i)
+		print #1, data
+		data = "Cells Table Name: " & cells_sys(i)
+		print #1, data
+		data = "Sites Table Name: " & sites_sys(i)
+		print #1, data
+		If cells_sys(i) <> "" Then
+			data = "Cells Map Status: " & cells_map_status(i)
+		Else
+			data = "Cells Map Status: F"
+		End If
+		print #1, data
+		If cells_sys(i) <> "" Then
+			data = "Cells Display Status: " & cells_display_status(i)
+		Else
+			data = "Cells Display Status: F"
+		End If
+		print #1, data
+		If sites_sys(i) <> "" Then
+			data = "Sites Map Status: " & sites_map_status(i)
+		Else
+			data = "Sites Map Status: F"
+		End If
+		print #1, data
+		If sites_sys(i) <> "" Then
+			data = "Sites Display Status: " & sites_display_status(i)
+		Else
+			data = "Sites Display Status: F"
+		End If
+		print #1, data
+	Next
+
+	'This writes the section footer
+	'-------------------------------
+	data = "-----------------------------"
+	print #1, data
+	data = "End of Section"
+	print #1, data
+	data = ""
+	print #1, data
+
+
+
+	'This writes the section header
+	'-------------------------------
+	data = "Display Properties"
+	print #1, data
+	data = "-----------------------------"
+	print #1, data
+
+	'This is all the subsequent data
+	'-----------------------------------
+	For i = 1 to 10
+		data = "sym_on_air(" & i & ") " & sym_on_air(i)
+		print #1, data
+		data = "sym_not_on_air(" & i & ") " & sym_not_on_air(i)
+		print #1, data
+		data = "pen_on_air(" & i & ") " & pen_on_air(i)
+		print #1, data
+
+		'This is to deal with the transparent background problem => it will not write -1 in the background color field, have to force it to
+		'-----------------------------------------------------------
+		pat = StyleAttr(brush_on_air(i), BRUSH_PATTERN)   
+		f_color = StyleAttr(brush_on_air(i), BRUSH_FORECOLOR)
+		b_color = StyleAttr(brush_on_air(i), BRUSH_BACKCOLOR) 
+		data = "brush_on_air(" & i & ") Brush ( " & pat & " , " & f_color & " , " & b_color & " )"	
+		print #1, data
+
+		data = "pen_not_on_air(" & i & ") " & pen_not_on_air(i)
+		print #1, data
+
+		'This is to deal with the transparent background problem => it will not write -1 in the background color field, have to force it to
+		'-----------------------------------------------------------
+		pat = StyleAttr(brush_not_on_air(i), BRUSH_PATTERN)   
+		f_color = StyleAttr(brush_not_on_air(i), BRUSH_FORECOLOR)
+		b_color = StyleAttr(brush_not_on_air(i), BRUSH_BACKCOLOR) 
+		data = "brush_not_on_air(" & i & ") Brush ( " & pat & " , " & f_color & " , " & b_color & " )"	
+		print #1, data
+
+		data = "font_for_cells(" & i & ") " & font_for_cells(i)
+		print #1, data
+		data = "font_for_sites(" & i & ") " & font_for_sites(i)
+		print #1, data
+		data = "pen_nbr(" & i & ") " & pen_nbr(i)
+		print #1, data
+
+		'This is to deal with the transparent background problem => it will not write -1 in the background color field, have to force it to
+		'-----------------------------------------------------------
+		pat = StyleAttr(brush_nbr(i), BRUSH_PATTERN)   
+		f_color = StyleAttr(brush_nbr(i), BRUSH_FORECOLOR)
+		b_color = StyleAttr(brush_nbr(i), BRUSH_BACKCOLOR) 
+		data = "brush_nbr(" & i & ") Brush ( " & pat & " , " & f_color & " , " & b_color & " )"	
+		print #1, data
+
+		data = "pen_connector(" & i & ") " & pen_connector(i)
+		print #1, data
+
+		data = "pen_host(" & i & ") " & pen_host(i)
+		print #1, data
+
+		'This is to deal with the transparent background problem => it will not write -1 in the background color field, have to force it to
+		'-----------------------------------------------------------
+		pat = StyleAttr(brush_host(i), BRUSH_PATTERN)   
+		f_color = StyleAttr(brush_host(i), BRUSH_FORECOLOR)
+		b_color = StyleAttr(brush_host(i), BRUSH_BACKCOLOR) 
+		data = "brush_host(" & i & ") Brush ( " & pat & " , " & f_color & " , " & b_color & " )"	
+		print #1, data
+
+	Next
+	data = "draw_cells_type = " & draw_cells_type 	
+	print #1, data
+	data = "omni_factor = " & omni_factor 	
+	print #1, data
+	data = "Z_x = " & Z_x 	
+	print #1, data
+	data = "Z_y = " & Z_y 	
+	print #1, data
+
+
+	'This writes the section footer
+	'-------------------------------
+	data = "-----------------------------"
+	print #1, data
+	data = "End of Section"
+	print #1, data
+	data = ""
+	print #1, data
+
+
+
+	'This writes the section header
+	'-------------------------------
+	data = "Status Definitions"
+	print #1, data
+	data = "-----------------------------"
+	print #1, data
+
+	'This is all the subsequent data
+	'-----------------------------------
+	i = 1
+	Do While status_value(i) <> ""
+		data = status_value(i)
+		print #1, data
+		i = i + 1
+	Loop
+
+	'This writes the section footer
+	'-------------------------------
+	data = "-----------------------------"
+	print #1, data
+	data = "End of Section"
+	print #1, data
+	data = ""
+	print #1, data
+
+
+
+
+	'For the template values, we just write them to a long array, we have a max of 6 sectors per site and 11 values per sector => 66 values per site and we have 20 templates, so we have 66 x 20 = 1320 values total.
+	'This writes the section header
+	'-------------------------------
+	data = "Template Definitions"
+	print #1, data
+	data = "-----------------------------"
+	print #1, data
+
+	'This is all the subsequent data
+	'-----------------------------------
+	i = 1
+	Do While t_names(i) <> ""
+		data = "Template"
+		print #1, data
+		data = t_names(i)
+		print #1, data
+		data = "-----------------------------"
+		print #1, data
+		For j = 1 to 6
+			data = t_values((i-1)*66 + (j-1)*11 + 1) 
+			If data = "" Then
+				Exit For
+			End If
+			For k = 1 to 11
+				data = t_values((i-1)*66 + (j-1)*11 + k) 
+				print #1, data
+			Next
+			data = "----------------"
+			print #1, data				
+		Next
+		data = "-----------------------------"
+		print #1, data
+		data = "End Of Template"
+		print #1, data
+		data = ""
+		print #1, data
+		i = i + 1
+	Loop
+
+	'This writes the section footer
+	'-------------------------------
+	data = "-----------------------------"
+	print #1, data
+	data = "End of Section"
+	print #1, data
+	data = ""
+	print #1, data
+
+
+
+
+	'This writes the section header
+	'-------------------------------
+	data = "Toolbar Position"
+	print #1, data
+	data = "-----------------------------"
+	print #1, data
+
+	'This is all the subsequent data
+	'-----------------------------------
+
+    toolbar_position_x = buttonpadinfo("RFDT Program Controls",BTNPAD_INFO_X)
+    toolbar_position_y = buttonpadinfo("RFDT Program Controls",BTNPAD_INFO_Y)
+
+	data = toolbar_position_x
+	print #1, data
+	data = toolbar_position_y
+	print #1, data
+
+	'This writes the section footer
+	'-------------------------------
+	data = "-----------------------------"
+	print #1, data
+	data = "End of Section"
+	print #1, data
+	data = ""
+	print #1, data
+
+
+
+
+
+	'This writes the section header
+	'-------------------------------
+	data = "NL Max Size"
+	print #1, data
+	data = "-----------------------------"
+	print #1, data
+
+	'This is all the subsequent data
+	'-----------------------------------
+
+	For i = 1 to 10
+		For j = 1 to 10
+			data = g_nl_max_size((i-1)*10+j)
+			print #1, data
+		Next
+	Next
+
+	'This writes the section footer
+	'-------------------------------
+	data = "-----------------------------"
+	print #1, data
+	data = "End of Section"
+	print #1, data
+	data = ""
+	print #1, data
+
+
+
+
+	Close File #1
+
+
+
+returnpoint:
+
+Exit Sub
+
+
+
+pf_open:
+Note "Couldn't write the project file, giving up...."
+Resume returnpoint
+
+general_error:
+Note "There was an error, details are... " + error$()
+Resume returnpoint1
+
+
+End Sub
+'---------------------------------------------------
+

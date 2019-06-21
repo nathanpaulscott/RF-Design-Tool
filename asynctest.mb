@@ -1,0 +1,33 @@
+Include "asynckeys.def"
+Declare Sub Main
+Declare Sub KeyCheck
+
+Sub KeyCheck
+    ' Store the pressed state of the SHIFT key
+    Dim iState As Integer
+    iState = getASyncKeyState( vbKeyShift )
+
+    ' Check what the state was
+    Do Case iState
+        Case vbKeyPressed
+            Print "SHIFT is being pressed!"
+        Case vbKeyWasPressed
+            Print "SHIFT has been pressed since last check"
+        Case Else
+            Print "Nothing to report..."
+    End Case
+    
+    ' Keep the dialog around
+    Dialog Preserve
+End Sub
+
+
+Sub Main
+    Dialog
+        Title "ASync Key State"
+        Control OKButton
+            Title "Check"
+            Calling KeyCheck
+        Control CancelButton
+            Title "Quit"
+End Sub

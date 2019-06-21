@@ -1,0 +1,86 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub snap2grid_alg_sub(ByVal at_site As String, at_sys_ind As Integer, at_az, at_obj_size, xsel, ysel As Float, xnew, ynew As Float)
+
+
+
+'-------------------------------------
+' does the snap2grid processing
+'-------------------------------------
+Sub snap2grid_alg_sub(ByVal at_site As String, at_sys_ind As Integer, at_az, at_obj_size, xsel, ysel As Float, xnew, ynew As Float)
+Dim i, j, k As Integer
+Dim dist_min, dist1, dist2, x(6), y(6), x2(6), y2(6), h(6), xmin, ymin As Float
+
+
+	'This selects all the sites with a cell whose params are the same as the active templates first cell
+	'------------------------------------------------------------------------------------------------------
+	Select Site, Lon, Lat, Az, Obj_Size From cells_sys(at_sys_ind) Where Obj_Size = at_obj_size AND Az = at_az AND Site <> at_site AND Distance(xsel,ysel,Lon,Lat,"m") < 4*at_obj_size Group By Site Into query1
+
+	'This goes through the 6 points around each site to see if we get a match, working with dist in m here
+	'----------------------------------------------------------------------------------------------------------
+	dist_min = 1e6
+	xmin = 0
+	ymin = 0
+	Fetch First From query1
+	Do While Not EOT (query1)	'need to shift down by hex diam/2 and mult by 3
+		x(1) = 1e-10
+		y(1) = -2*at_obj_size
+		x(2) = -sqr(3)*at_obj_size
+		y(2) = -at_obj_size
+		x(3) = -sqr(3)*at_obj_size
+		y(3) = at_obj_size
+		x(4) = 1e-10
+		y(4) = 2*at_obj_size
+		x(5) = sqr(3)*at_obj_size
+		y(5) = at_obj_size
+		x(6) = sqr(3)*at_obj_size
+		y(6) = -at_obj_size
+
+		For i = 1 to 6
+			h(i) = sqr(x(i)^2+y(i)^2)*y(i)/abs(y(i))
+			x2(i) = query1.Lon + h(i)*sin(DEG_2_RAD*at_az + atn(x(i)/y(i)))/Z_x
+			y2(i) = query1.Lat + h(i)*cos(DEG_2_RAD*at_az + atn(x(i)/y(i)))/Z_y
+
+			dist1 = Distance(x2(i),y2(i),xsel,ysel,"m")					'dist between the grid point and the selected point
+			dist2 = Distance(query1.Lon,query1.Lat,xsel,ysel,"m")		'dist between the test site and the selected point
+			If dist2 < at_obj_size/2 Then   	'if it is too close to another site, we get out
+				dist_min = 2e6
+				Exit Do
+			ElseIf dist1 < at_obj_size*1.5 AND dist1 < dist_min Then		'the grid point is a potential match
+				Select Site From query1 Where Distance(x2(i),y2(i),Lon,Lat,"m") < 30 Into query2		'makes sure no grid points are ontop of other sites
+				If TableInfo(query2, TAB_INFO_NROWS) = 0 Then
+					dist_min = dist1
+					xmin = x2(i)
+					ymin = y2(i)
+				Else			'we found no match because they were on top of sites, so we keep searching for a match, but note this
+					dist_min = 2e6
+				End If
+				Close Table query2
+			End If
+		Next
+		Fetch Next From query1
+	Loop
+	Close Table query1
+	
+	If dist_min < 1e6 Then  		'a match was found
+		xnew = xmin
+		ynew = ymin
+	ElseIf dist_min = 1e6 Then 		'no match was found
+		xnew = xsel
+		ynew = ysel
+	ElseIf dist_min = 2e6 Then  	'no match was found and the area selected is invalid
+		xnew = -9999
+		ynew = -9999
+	End If
+
+
+Exit Sub
+'-------------
+
+
+End Sub
+'---------------------------------------------------
+

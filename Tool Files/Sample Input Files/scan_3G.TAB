@@ -1,0 +1,12 @@
+!table
+!version 300
+!charset WindowsLatin1
+
+Definition Table
+  Type NATIVE Charset "WindowsLatin1"
+  Fields 5
+    LONGITUDE Float ;
+    LATITUDE Float ;
+    SC_1 Smallint Index 1 ;
+    RSCP_1 Float ;
+    EcIo_1 Float ;

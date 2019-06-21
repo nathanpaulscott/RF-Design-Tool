@@ -1,0 +1,125 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub calc_az_sub
+Declare Sub pre_calc_az_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_calc_az_sub
+
+	Set ProgressBars Off
+	Set Event Processing Off
+
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call check_tables_sub
+
+	Call calc_az_sub
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Event Processing On
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for azimuth calculator
+'---------------------------------------------------
+Sub calc_az_sub
+Dim distancex, shiftx, shifty, x, y, x2, y2, aznew As Float
+Dim i, j, k, l, m, i_found, i_row_id, i_win_id As Integer
+
+	
+	' need to set the coord sys so that mapinfo uses the sys we select
+	'--------------------------------------------------
+	Run Command "Set " + proj
+	Set Distance Units "km"
+	'---------------------------------------------------
+
+	Call date_check_sub
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Set ProgressBars On
+		Set Event Processing On
+		Exit Sub
+	End If
+
+	' Determine the starting point where the user clicked.
+	'---------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	x2 = CommandInfo(CMD_INFO_X2)
+	y2 = CommandInfo(CMD_INFO_Y2)
+
+	If x = x2 and y = y2 Then    'the user double clicked
+		Exit Sub
+	End If
+
+	Call prepare_nbr_sub             'have to do this here, if you do in the pre_nbr_edit, it causes crashes if the user clicked on the nbr table before you closed it
+
+	'This calculates the new azimuth
+	'-----------------------------------
+	shiftx = x2 - x
+	shifty = y2 - y
+	aznew = RAD_2_DEG*atn(abs(shiftx/shifty))
+	If shiftx >= 0 and shifty >= 0 Then           		'quadrant 1
+		aznew = aznew
+	ElseIf shiftx >= 0 and shifty < 0 Then			'quadrant 2
+		aznew = 180 - aznew
+	ElseIf shiftx < 0 and shifty < 0 Then			'quadrant 3
+		aznew = 180 + aznew
+	ElseIf shiftx < 0 and shifty >= 0 Then			'quadrant 4
+		aznew = 360 - aznew
+	End If
+	If aznew >= 360 Then
+		aznew = aznew - 360
+	ElseIf aznew < 0 Then
+		aznew = aznew + 360
+	End If
+		
+	distancex = distance(x,y,x2,y2,"km")
+	Note "True Azimuth: "+round(aznew,.1)+" degrees, Distance: "+round(distancex,.01)+" km"
+
+
+
+End Sub
+'---------------------------------------------------
+
+
+

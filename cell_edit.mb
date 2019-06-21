@@ -1,0 +1,1298 @@
+' Does up to 6 sectors in site mode (shift key), to change this to more would need some brain surgery....
+' There is no undo function for the cell edit dialog as I can change multiple items.  I would have to create a new undo type (like multiple and it would be a hassle), do later if you feel like it
+' I have made the input for lat lon more stable, but it still is not perfect, if you put in characters mixed with the numbers, it sometimes goes through as a 0 and fucks it up, need to think how to solve this one, it is not so critical
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+Declare Sub cell_edit_sub
+Declare Sub pre_cell_edit_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_cell_edit_sub
+Dim i_win_id As String	
+
+
+'	i_win_id = FrontWindow()
+'	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+'		Set ProgressBars Off
+'		Set Event Processing Off
+'	Else
+'		Set ProgressBars Off
+'		Set Event Processing Off
+'	End If
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check 		'Choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable 	'del_nbr_sub Disable
+'---------------------------------------------------
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+	Call check_tables_sub
+
+	Call cell_edit_sub
+
+	Call save_tables_sub
+	Close Table Selection
+
+'	Set ProgressBars On
+'	Set Map Redraw On
+'	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for cell edit mode
+'---------------------------------------------------
+Sub cell_edit_sub
+Dim shiftx, shifty, finalx, finaly, latx(6), lonx(6), latx2(6), lonx2(6), x, y, x2, y2 As Float
+Dim count, count_2, sysind_selected, statusi(6), z, h, i, j, k, l, m, i_found, i_row_id, i_win_id As Integer
+Dim status_temp, az_temp, hbw_temp, size_temp, type_temp, sus_input, sys_selected As String 
+Dim lat_disp(6), lon_disp(6), lat_disp2(6), lon_disp2(6) As String
+Dim sitex, namex, cellx(6), pnx(6), bsicx(6), zcrsx(6), htx(6), mdtx(6), edtx(6), azx(6), statusx(6), commentx(6), hbwx(6), sizex(6), typex(6) As String
+Dim sitex2, namex2, cellx2(6), pnx2(6), bsicx2(6), zcrsx2(6), htx2(6), mdtx2(6), edtx2(6), azx2(6), statusx2(6), commentx2(6), hbwx2(6), sizex2(6), typex2(6) As String
+Dim sector2, sector1, center, endpnt, sel, sector, temppnt As Object
+Dim cell_data_alias, table_selected_alias As Alias
+Dim status_string, title_temp, table_selected, table_selected_sites As String
+Dim single_sector_flag, c_click, s_click, got_on_air_flag, select_ok, sites_ok As Logical
+Dim width_temp_1, width_temp_2, width_temp_3, width_temp_4, width_temp_5, width_temp_6, width_temp_7, height_temp As Float
+Dim coord_temp As String
+
+
+OnError Goto general_error
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+	site_update = False
+	site_update_move = False
+	sus_input = "null"
+	single_sector_flag = False
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the starting point where the user clicked.
+	'-----------------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	s_click = CommandInfo(CMD_INFO_SHIFT)       	'to show all cells on a site at once
+	c_click = CommandInfo(CMD_INFO_CTRL)			'to show the selected cell, but not to remove the current nbr table, just show data only
+
+	' the user is using the point-mode tool, determine how many objects are at the chosen point.
+	'----------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+
+	If i_found = 0 Then
+		' No objects found where the user clicked.
+	Else
+
+		' Process the search results.
+		'----------------------------------
+		For i = 1 to i_found
+			' Get the name of the table containing a "hit".
+			'----------------------------------
+			table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+			table_selected = table_selected_alias
+
+			' Get the row ID number of the object that was a hit.
+			'----------------------------------
+			i_row_id = SearchInfo(i, SEARCH_INFO_ROW)
+
+			sites_ok = False
+			select_ok = False
+			For j = 1 to 10
+				If sys(j) = "" Then
+					Exit For
+				End If
+				If table_selected = cells_sys(j) Then
+					select_ok = True
+					sysind_selected = j
+					sys_selected = sys(j)
+					If is_open_sites_sys(j) = "On" Then
+						sites_ok = True
+					End If
+					Exit For									' Now we have the name of the table we process it
+				End If
+			Next
+
+			If select_ok = True Then
+				If c_click = True Then
+					' Fetch the row of the object the user clicked on.
+					'------------------------------------------------------
+					Fetch rec i_row_id From table_selected
+						cell_data_alias = table_selected + ".Site"
+						sitex =  cell_data_alias
+						cell_data_alias = table_selected + ".Sitename"
+						namex = cell_data_alias
+						cell_data_alias = table_selected + ".Cell"
+						cellx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+						pnx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_BSIC"
+						bsicx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_Cnt"
+						zcrsx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".HT"
+						htx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".AZ"
+						azx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".MDT"
+						mdtx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".EDT"
+						edtx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".STATUS"
+						statusx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".Comment"
+						commentx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".ANT_HBW"
+						hbwx(1) = cell_data_alias
+						cell_data_alias = table_selected + ".OBJ_SIZE"
+						sizex(1) = cell_data_alias
+						cell_data_alias = table_selected + ".Type"
+						typex(1) = cell_data_alias
+
+					Dialog Title "View Cells Parameters" width 180 height 290	 Position 20,40
+					Control GroupBox
+					Title "Cell Details" 
+					Position 10, 10 Width 160 Height 55
+					Control StaticText
+					Title "Site:" Position 15, 20
+					Control StaticText
+					Title sitex Position 75, 20
+					Control StaticText
+					Title "Site Name:" Position 15, 35
+					Control StaticText
+					Title namex Position 75, 35
+					Control StaticText
+					Title "Cell ID:" Position 15, 50
+					Control StaticText
+					Title cellx(1) Position 75, 50
+					Control StaticText
+					Title "Pci/Sc/Pn/Bcch:" Position 15, 75
+					Control StaticText
+					Title pnx(1) Position 75, 75 
+					Control StaticText
+					Title "Zcrs/Bsic:" Position 15, 90
+					Control StaticText
+					Title bsicx(1) Position 75, 90
+					Control StaticText
+					Title "Cnt:" Position 110, 90
+					Control StaticText
+					Title zcrsx(1) Position 125, 90
+					Control StaticText
+					Title "Azimuth (deg):" Position 15, 105
+					Control StaticText
+					Title azx(1) Position 75, 105
+					Control StaticText
+					Title "Ant HBW (deg):" Position 15, 120
+					Control StaticText
+					Title hbwx(1) Position 75, 120
+					Control StaticText
+					Title "Object Size (m):" Position 15, 135
+					Control StaticText
+					Title sizex(1) Position 75, 135
+					Control StaticText
+					Title "Height (m/ft):" Position 15, 150
+					Control StaticText
+					Title htx(1) Position 75, 150
+					Control StaticText
+					Title "MDT (deg):" Position 15, 165
+					Control StaticText
+					Title mdtx(1) Position 75, 165
+					Control StaticText
+					Title "EDT (deg):" Position 15, 180
+					Control StaticText
+					Title edtx(1) Position 75, 180
+					Control StaticText
+					Title "Status:" Position 15, 195
+					Control StaticText
+					Title statusx(1) Position 75, 195
+					Control StaticText
+					Title "Comments:" Position 15, 210
+					Control StaticText
+					Title Commentx(1) Position 75, 210
+					Control StaticText
+					Title "Type:" Position 15, 225
+					Control StaticText
+					Title typex(1) Position 75, 225
+
+					Control OKButton
+					Position 60, 250
+
+					Exit Sub
+				End If
+
+
+				'----------------------------------------------------------------------------
+				'----------------------------------------------------------------------------
+				'----------------------------------------------------------------------------
+'				set map redraw off
+			 	Call prepare_nbr_sub
+
+				If s_click = True Then						' here is the case where we had the shift pressed while clicking
+					Select * From table_selected Where rowid = i_row_id Into query1
+					sitex =  query1.Site
+					Close Table query1
+
+OnError GoTo query_temp_open
+					If TableInfo("query1_temp", TAB_INFO_NAME) <> "" Then
+						Close Table query1_temp
+					End If
+returnpoint_1:
+OnError Goto general_error
+
+					Select * From table_selected Where site = sitex Into query1_temp Order by Cell
+					count = SelectionInfo(SEL_INFO_NROWS)
+					Commit table query1_temp As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+					Open Table pf_user_path & "nbrs_RFDT.TAB"
+					Add Map Layer nbrs_RFDT
+				Else
+					Select * From table_selected Where rowid = i_row_id Into query1_temp
+					count = 1
+					Commit table query1_temp As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+					Open Table pf_user_path & "nbrs_RFDT.TAB"
+					Add Map Layer nbrs_RFDT
+					single_sector_flag = True
+				End If
+
+				'Here count = the number of cells to show in the dialog (either 1 or all on the site)
+
+				' this changes the display properties of the host object in the nbrs_RFDT table and reads in the current data values
+				'--------------------------------------
+				'Need to normalise all vars first, get a crash in the dialog otherwise
+				'------------------------------------------------------
+				sitex = ""
+				namex = ""
+				For k = 1 to 6
+					cellx(k) = ""
+					pnx(k) = "0"
+					bsicx(k) = "0"
+					zcrsx(k) = "0"
+					htx(k) = "0"
+					azx(k) = "0"
+					mdtx(k) = "0"
+					edtx(k) = "0"
+					statusx(k) = ""
+					commentx(k) = ""
+					hbwx(k) = "0"
+					sizex(k) = "0"
+					latx(k) = 0
+					lat_disp(k) = "0"
+					lonx(k) = 0
+					lon_disp(k) = "0"
+					statusi(k) = 0
+					typex(k) = ""
+				Next
+
+				'Here we read the values to the vars for each cell in the dialog
+				'------------------------------------------------------------------
+				Fetch First From nbrs_RFDT
+					sitex = nbrs_RFDT.Site
+					namex = nbrs_RFDT.Sitename
+					table_selected_sites = "sites_" & sys_selected 
+
+				For k = 1 to Minimum(6,count)
+					Fetch rec k From nbrs_RFDT
+						cellx(k) = nbrs_RFDT.Cell
+						statusx(k) = nbrs_RFDT.Status
+						pnx(k) = nbrs_RFDT.PCI_SC_BCCH_PN
+						bsicx(k) = nbrs_RFDT.ZCRS_BSIC
+						zcrsx(k) = nbrs_RFDT.ZCRS_Cnt
+						latx(k) = nbrs_RFDT.LAT
+						lonx(k) = nbrs_RFDT.LON
+						azx(k) = nbrs_RFDT.Az
+						hbwx(k) = nbrs_RFDT.Ant_HBW
+						mdtx(k) = nbrs_RFDT.MDT
+						edtx(k) = nbrs_RFDT.EDT
+						htx(k) = nbrs_RFDT.Ht
+						sizex(k) = nbrs_RFDT.Obj_Size
+						commentx(k) = nbrs_RFDT.Comment
+						sector = nbrs_RFDT.obj
+						typex(k) = nbrs_RFDT.Type
+
+					'This converts the lat/lon to strings for display in the dialog => needed to avoid rounding error, this can cause major fuckups if it fails, right now it seems stable
+					'you must split the number into the whole and the decimal part, the decimal part needs to be mult by a const 10000000000, then checked to account for cases where there are 0's
+					'at the front as these get removed, so you must add them back in after it has been converted to a string...   What a fucking hassle
+					'------------------------------------------------------		
+					If latx(k) < 0 Then
+						lat_disp(k) = "-" + str$(abs(fix(latx(k))))+"."+String$(10 - len(str$(abs(latx(k)-fix(latx(k)))*10000000000)),"0")+str$(abs(latx(k)-fix(latx(k)))*10000000000)
+					Else
+						lat_disp(k) = str$(abs(fix(latx(k))))+"."+String$(10 - len(str$(abs(latx(k)-fix(latx(k)))*10000000000)),"0")+str$(abs(latx(k)-fix(latx(k)))*10000000000)
+					End If
+					If lonx(k) < 0 Then
+						lon_disp(k) = "-" + str$(abs(fix(lonx(k))))+"."+String$(10 - len(str$(abs(lonx(k)-fix(lonx(k)))*10000000000)),"0")+str$(abs(lonx(k)-fix(lonx(k)))*10000000000)
+					Else
+						lon_disp(k) = str$(abs(fix(lonx(k))))+"."+String$(10 - len(str$(abs(lonx(k)-fix(lonx(k)))*10000000000)),"0")+str$(abs(lonx(k)-fix(lonx(k)))*10000000000)
+					End If
+
+					
+					'This updates the cell object to show that it has been selected
+					'------------------------------------------------------		
+					Alter Object sector
+						Info OBJ_INFO_BRUSH, brush_host(sysind_selected)
+						Info OBJ_INFO_PEN, pen_host(sysind_selected)
+					Update nbrs_RFDT
+						set obj = sector where rowid = k
+
+
+					'This converts status values to numbers for the dialog
+					'---------------------------------------------------
+					For j = 1 to 100
+						If statusx(k) = "" Then
+							statusi(k) = 1
+							Exit For
+						ElseIf status_value(j) = statusx(k) Then 
+							statusi(k) = j+1
+							Exit For
+						ElseIf status_value(j) = "" Then
+							statusi(k) = 1   'this means this cell had a status that is not in the current list, so we will show a status of "-"
+							Exit For
+						End If
+					Next
+				Next
+
+				'This builds the status string for the status pulldown list
+				'----------------------------------------------			
+				status_string = "-"
+				For j = 1 to 100
+					If status_value(j) <> "" Then
+						status_string = status_string & ";" & status_value(j)
+					Else
+						Exit For 
+					End If
+				Next
+
+Back_to_dialog_all:
+returnpoint_2:
+				If sus_input <> "null" Then
+					Dialog Title "Edit " & sys_selected & " Cells" width 245 height 100	 Position 20,20
+					Control StaticText
+					Title "One of the values you entered seems strange or is out of range." Position 15, 20
+					Control StaticText
+					Title sus_input Position 15, 35
+					Control StaticText
+					Title "Please enter a valid value." Position 15, 50
+
+					Control OKButton
+					Position 20, 70
+					Control CancelButton
+					Position 180, 70
+
+					If CommandInfo(CMD_INFO_DLG_OK) = False Then
+						Call prepare_nbr_sub
+						Exit Sub
+					End If
+
+					sus_input = "null"
+				End If
+
+
+
+				'This sets up some parameters for the dialog
+				'--------------------------------------------
+				width_temp_1 = 175+75*count
+				If count = 1 Then 
+					title_temp  = "Edit Single " & sys_selected & " Cell"
+				Else 
+					title_temp  = "Edit " & sys_selected & " Cells" 
+				End If
+				If count > 1 Then width_temp_2 = 75*2 Else width_temp_2 = 10000 End If
+				If count > 2 Then width_temp_3 = 75*3 Else width_temp_3 = 10000 End If
+				If count > 3 Then width_temp_4 = 75*4 Else width_temp_4 = 10000 End If
+				If count > 4 Then width_temp_5 = 75*5 Else width_temp_5 = 10000 End If
+				If count > 5 Then width_temp_6 = 75*6 Else width_temp_6 = 10000 End If
+				If single_sector_flag = False Then
+					width_temp_1 = 175+75*(count-1)
+					width_temp_7 = 10000
+				Else
+					width_temp_7 = width_temp_1 - 95
+				End If
+
+				'This creates the edit dialog for cells
+				'--------------------------------------------
+				Dialog Title title_temp width width_temp_1 height 305	 Position 20,40
+				Control GroupBox
+				Title "Cell Details" 
+				Position 10, 10 Width width_temp_1-20 Height 55
+				Control StaticText
+				Title "Site:" Position 15, 20
+				Control EditText
+				Value sitex Position 75, 20 Width 60
+				Into sitex2
+				Control StaticText
+				Title "Site Name:" Position 15, 35
+				Control EditText
+				Value namex Position 75, 35 Width 150
+				Into namex2
+
+				Control StaticText
+				Title "Cell ID:" Position 15, 52
+				Control StaticText
+				Title "Pci/Sc/Pn/Bcch:" Position 15, 77
+				Control StaticText
+				Title "Zcrs/Bsic:" Position 15, 92
+				Control StaticText
+				Title "Cnt:" Position 100, 92
+				Control StaticText
+				Title "Lat:" Position 15, 107
+				Control StaticText
+				Title "Lon:" Position 15, 122
+				Control StaticText
+				Title "Azimuth (deg):" Position 15, 137
+				Control StaticText
+				Title "Ant HBW (deg):" Position 15, 152
+				Control StaticText
+				Title "Object Size (m):" Position 15, 167
+				Control StaticText
+				Title "Height (m/ft):" Position 15, 182
+				Control StaticText
+				Title "MDT (deg):" Position 15, 197
+				Control StaticText
+				Title "EDT (deg):" Position 15, 212
+				Control StaticText
+				Title "Status:" Position 15, 227
+				Control StaticText
+				Title "Comments:" Position 15, 242
+				Control StaticText
+				Title "Type:" Position 15, 257
+
+				Control EditText
+				Value cellx(1) Position 75, 50 Width 60
+				Into cellx2(1)
+				Control EditText
+				Value cellx(2) Position width_temp_2, 50 Width 60
+				Into cellx2(2)
+				Control EditText
+				Value cellx(3) Position width_temp_3, 50 Width 60
+				Into cellx2(3)
+				Control EditText
+				Value cellx(4) Position width_temp_4, 50 Width 60
+				Into cellx2(4)
+				Control EditText
+				Value cellx(5) Position width_temp_5, 50 Width 60
+				Into cellx2(5)
+				Control EditText
+				Value cellx(6) Position width_temp_6, 50 Width 60
+				Into cellx2(6)
+
+				Control EditText
+				Value pnx(1) Position 75, 75 Width 40
+				Into pnx2(1)
+				Control EditText
+				Value pnx(2) Position width_temp_2, 75 Width 40
+				Into pnx2(2)
+				Control EditText
+				Value pnx(3) Position width_temp_3, 75 Width 40
+				Into pnx2(3)
+				Control EditText
+				Value pnx(4) Position width_temp_4, 75 Width 40
+				Into pnx2(4)
+				Control EditText
+				Value pnx(5) Position width_temp_5, 75 Width 40
+				Into pnx2(5)
+				Control EditText
+				Value pnx(6) Position width_temp_6, 75 Width 40
+				Into pnx2(6)
+
+				Control EditText
+				Value bsicx(1) Position 75, 90 Width 20
+				Into bsicx2(1)
+				Control EditText
+				Value bsicx(2) Position width_temp_2, 90 Width 20
+				Into bsicx2(2)
+				Control EditText
+				Value bsicx(3) Position width_temp_3, 90 Width 20
+				Into bsicx2(3)
+				Control EditText
+				Value bsicx(4) Position width_temp_4, 90 Width 20
+				Into bsicx2(4)
+				Control EditText
+				Value bsicx(5) Position width_temp_5, 90 Width 20
+				Into bsicx2(5)
+				Control EditText
+				Value bsicx(6) Position width_temp_6, 90 Width 20
+				Into bsicx2(6)
+
+				Control EditText
+				Value zcrsx(1) Position 75+40, 90 Width 20
+				Into zcrsx2(1)
+				Control StaticText
+				Title "Cnt:" Position width_temp_2+25, 92
+				Control EditText
+				Value zcrsx(2) Position width_temp_2+40, 90 Width 20
+				Into zcrsx2(2)
+				Control StaticText
+				Title "Cnt:" Position width_temp_3+25, 92
+				Control EditText
+				Value zcrsx(3) Position width_temp_3+40, 90 Width 20
+				Into zcrsx2(3)
+				Control StaticText
+				Title "Cnt:" Position width_temp_4+25, 92
+				Control EditText
+				Value zcrsx(4) Position width_temp_4+40, 90 Width 20
+				Into zcrsx2(4)
+				Control StaticText
+				Title "Cnt:" Position width_temp_5+25, 92
+				Control EditText
+				Value zcrsx(5) Position width_temp_5+40, 90 Width 20
+				Into zcrsx2(5)
+				Control StaticText
+				Title "Cnt:" Position width_temp_6+25, 92
+				Control EditText
+				Value zcrsx(6) Position width_temp_6+40, 90 Width 20
+				Into zcrsx2(6)
+
+				Control EditText
+				Value lat_disp(1) Position 75, 105 Width 60
+				Into lat_disp2(1)  'latx2(1)
+				Control EditText
+				Value lat_disp(2) Position width_temp_2, 105 Width 60
+				Into lat_disp2(2)  'latx2(2)
+				Control EditText
+				Value lat_disp(3) Position width_temp_3, 105 Width 60
+				Into lat_disp2(3)   'latx2(3)
+				Control EditText
+				Value lat_disp(4) Position width_temp_4, 105 Width 60
+				Into lat_disp2(4)   'latx2(4)
+				Control EditText
+				Value lat_disp(5) Position width_temp_5, 105 Width 60
+				Into lat_disp2(5)   'latx2(5)
+				Control EditText
+				Value lat_disp(6) Position width_temp_6, 105 Width 60
+				Into lat_disp2(6)   'latx2(6)
+
+				Control EditText
+				Value lon_disp(1) Position 75, 120 Width 60
+				Into lon_disp2(1)   'lonx2(1)
+				Control EditText
+				Value lon_disp(2) Position width_temp_2, 120 Width 60
+				Into lon_disp2(2)   'lonx2(2)
+				Control EditText
+				Value lon_disp(3) Position width_temp_3, 120 Width 60
+				Into lon_disp2(3)   'lonx2(3)
+				Control EditText
+				Value lon_disp(4) Position width_temp_4, 120 Width 60
+				Into lon_disp2(4)   'lonx2(4)
+				Control EditText
+				Value lon_disp(5) Position width_temp_5, 120 Width 60
+				Into lon_disp2(5)   'lonx2(5)
+				Control EditText
+				Value lon_disp(6) Position width_temp_6, 120 Width 60
+				Into lon_disp2(6)   'lonx2(6)
+
+				Control EditText
+				Value azx(1) Position 75, 135 Width 40
+				Into azx2(1)
+				Control EditText
+				Value azx(2) Position width_temp_2, 135 Width 40
+				Into azx2(2)
+				Control EditText
+				Value azx(3) Position width_temp_3, 135 Width 40
+				Into azx2(3)
+				Control EditText
+				Value azx(4) Position width_temp_4, 135 Width 40
+				Into azx2(4)
+				Control EditText
+				Value azx(5) Position width_temp_5, 135 Width 40
+				Into azx2(5)
+				Control EditText
+				Value azx(6) Position width_temp_6, 135 Width 40
+				Into azx2(6)
+
+				Control EditText
+				Value hbwx(1) Position 75, 150 Width 40
+				Into hbwx2(1)
+				Control EditText
+				Value hbwx(2) Position width_temp_2, 150 Width 40
+				Into hbwx2(2)
+				Control EditText
+				Value hbwx(3) Position width_temp_3, 150 Width 40
+				Into hbwx2(3)
+				Control EditText
+				Value hbwx(4) Position width_temp_4, 150 Width 40
+				Into hbwx2(4)
+				Control EditText
+				Value hbwx(5) Position width_temp_5, 150 Width 40
+				Into hbwx2(5)
+				Control EditText
+				Value hbwx(6) Position width_temp_6, 150 Width 40
+				Into hbwx2(6)
+
+				Control EditText
+				Value sizex(1) Position 75, 165 Width 40
+				Into sizex2(1)
+				Control EditText
+				Value sizex(2) Position width_temp_2, 165 Width 40
+				Into sizex2(2)
+				Control EditText
+				Value sizex(3) Position width_temp_3, 165 Width 40
+				Into sizex2(3)
+				Control EditText
+				Value sizex(4) Position width_temp_4, 165 Width 40
+				Into sizex2(4)
+				Control EditText
+				Value sizex(5) Position width_temp_5, 165 Width 40
+				Into sizex2(5)
+				Control EditText
+				Value sizex(6) Position width_temp_6, 165 Width 40
+				Into sizex2(6)
+
+				Control EditText
+				Value htx(1) Position 75, 180 Width 40
+				Into htx2(1)
+				Control EditText
+				Value htx(2) Position width_temp_2, 180 Width 40
+				Into htx2(2)
+				Control EditText
+				Value htx(3) Position width_temp_3, 180 Width 40
+				Into htx2(3)
+				Control EditText
+				Value htx(4) Position width_temp_4, 180 Width 40
+				Into htx2(4)
+				Control EditText
+				Value htx(5) Position width_temp_5, 180 Width 40
+				Into htx2(5)
+				Control EditText
+				Value htx(6) Position width_temp_6, 180 Width 40
+				Into htx2(6)
+
+				Control EditText
+				Value mdtx(1) Position 75, 195 Width 40
+				Into mdtx2(1)
+				Control EditText
+				Value mdtx(2) Position width_temp_2, 195 Width 40
+				Into mdtx2(2)
+				Control EditText
+				Value mdtx(3) Position width_temp_3, 195 Width 40
+				Into mdtx2(3)
+				Control EditText
+				Value mdtx(4) Position width_temp_4, 195 Width 40
+				Into mdtx2(4)
+				Control EditText
+				Value mdtx(5) Position width_temp_5, 195 Width 40
+				Into mdtx2(5)
+				Control EditText
+				Value mdtx(6) Position width_temp_6, 195 Width 40
+				Into mdtx2(6)
+
+				Control EditText
+				Value edtx(1) Position 75, 210 Width 40
+				Into edtx2(1)
+				Control EditText
+				Value edtx(2) Position width_temp_2, 210 Width 40
+				Into edtx2(2)
+				Control EditText
+				Value edtx(3) Position width_temp_3, 210 Width 40
+				Into edtx2(3)
+				Control EditText
+				Value edtx(4) Position width_temp_4, 210 Width 40
+				Into edtx2(4)
+				Control EditText
+				Value edtx(5) Position width_temp_5, 210 Width 40
+				Into edtx2(5)
+				Control EditText
+				Value edtx(6) Position width_temp_6, 210 Width 40
+				Into edtx2(6)
+
+				Control PopupMenu
+				Title status_string Position 75, 225 Width 70
+				Value statusi(1)
+				Into statusx2(1)
+				Control PopupMenu
+				Title status_string Position width_temp_2, 225 Width 70
+				Value statusi(2)
+				Into statusx2(2)
+				Control PopupMenu
+				Title status_string Position width_temp_3, 225 Width 70
+				Value statusi(3)
+				Into statusx2(3)
+				Control PopupMenu
+				Title status_string Position width_temp_4, 225 Width 70
+				Value statusi(4)
+				Into statusx2(4)
+				Control PopupMenu
+				Title status_string Position width_temp_5, 225 Width 70
+				Value statusi(5)
+				Into statusx2(5)
+				Control PopupMenu
+				Title status_string Position width_temp_6, 225 Width 70
+				Value statusi(6)
+				Into statusx2(6)
+
+				Control EditText
+				Value commentx(1) Position 75, 240 Width 70
+				Into commentx2(1)
+				Control EditText
+				Value commentx(2) Position width_temp_2, 240 Width 70
+				Into commentx2(2)
+				Control EditText
+				Value commentx(3) Position width_temp_3, 240 Width 70
+				Into commentx2(3)
+				Control EditText
+				Value commentx(4) Position width_temp_4, 240 Width 70
+				Into commentx2(4)
+				Control EditText
+				Value commentx(5) Position width_temp_5, 240 Width 70
+				Into commentx2(5)
+				Control EditText
+				Value commentx(6) Position width_temp_6, 240 Width 70
+				Into commentx2(6)
+
+				Control EditText
+				Value typex(1) Position 75, 255 Width 70
+				Into typex2(1)
+				Control EditText
+				Value typex(2) Position width_temp_2, 255 Width 70
+				Into typex2(2)
+				Control EditText
+				Value typex(3) Position width_temp_3, 255 Width 70
+				Into typex2(3)
+				Control EditText
+				Value typex(4) Position width_temp_4, 255 Width 70
+				Into typex2(4)
+				Control EditText
+				Value typex(5) Position width_temp_5, 255 Width 70
+				Into typex2(5)
+				Control EditText
+				Value typex(6) Position width_temp_6, 255 Width 70
+				Into typex2(6)
+
+
+				Control Checkbox 
+				Position width_temp_7,114
+				Into site_update_move
+				Value False
+				Control StaticText
+				Title "Apply to whole site?" Position width_temp_7 + 13, 114
+
+				Control Checkbox 
+				Position width_temp_7+40,225
+				Into site_update
+				Value False
+				Control StaticText
+				Title "Update" Position width_temp_7 + 56, 222
+				Control StaticText
+				Title "all cells?" Position width_temp_7 + 56, 232
+
+				Control OKButton
+				Position 20, 280
+				Control CancelButton
+				Position width_temp_1-65, 280
+
+				If CommandInfo(CMD_INFO_DLG_OK) = False Then
+					Call prepare_nbr_sub
+					Close Table query1_temp
+'					Set Map Redraw Off
+					Exit Sub
+				End If
+'				Set Map Redraw Off
+
+				'This is the sanity check on the values and updates tables based on any changes I made, except lat/lon and status
+				'--------------------------------------------------------------------------
+				If sitex <> sitex2 Then
+					'check if this site id is used already
+					'--------------------------------------
+					Select * From table_selected_sites Where Site = sitex2 Into query1
+					If TableInfo(query1, TAB_INFO_NROWS) > 0 Then
+						sus_input = "The Site_Id '" & sitex2 & "' is already assigned to another site"
+						Goto back_to_dialog_all
+					End If
+					Close Table query1
+
+					'update the cells and sites tables
+					'-----------------------------------
+					Select * From table_selected_sites Where Site = sitex Into query1
+					Update query1
+						Set Site = sitex2
+					Close Table query1
+					Commit Table table_selected_sites
+					Select * From table_selected Where Site = sitex Into query1
+					Update query1
+						Set Site = sitex2
+					Close Table query1				
+					Commit Table table_selected
+				End If
+
+				If namex <> namex2 Then
+					'check if this sitename is used already
+					'--------------------------------------
+					Select * From table_selected_sites Where Sitename = namex2 Into query1
+					If TableInfo(query1, TAB_INFO_NROWS) > 0 Then
+						sus_input = "The Sitename '" & namex2 & "' is already assigned to another site"
+						Goto back_to_dialog_all
+					End If
+					Close Table query1
+
+					'update the cells and sites tables
+					'-----------------------------------
+					Select * From table_selected_sites Where Sitename = namex Into query1
+					Update query1
+						Set Sitename = namex2
+					Close Table query1
+					Commit Table table_selected_sites
+					Select * From table_selected Where Sitename = namex Into query1
+					Update query1
+						Set Sitename = namex2
+					Close Table query1				
+					Commit Table table_selected
+				End If
+
+
+				For k = 1 to Minimum(6,count)				' use 6 here as opposed to count as our dialog only handles up to 6 sectors
+					If cellx(k) <> cellx2(k) Then
+						'check if this cell id is used already
+						'--------------------------------------
+						Select * From table_selected Where Cell = cellx2(k) Into query1
+						If TableInfo(query1, TAB_INFO_NROWS) > 0 Then
+							sus_input = "The Cell_Id '" & cellx2(k) & "' is already assigned to another cell"
+							Goto back_to_dialog_all
+						End If
+						Close Table query1
+
+						'update the cells table
+						'--------------------------
+						Select * From table_selected Where Cell = cellx(k) Into query1
+						Update query1
+							Set Cell = cellx2(k)
+						Close Table query1
+						Commit Table table_selected
+
+						'update the nbrs_DB table
+						'--------------------------
+						Select * From nbrs_DB Where Host_Cell = cellx(k) And Host_Sys = sys_selected Into query1
+						Update query1
+							Set Host_Cell = cellx2(k)
+						Close Table query1
+						Select * From nbrs_DB Where Nbr_Cell = cellx(k) And Nbr_Sys = sys_selected Into query1
+						Update query1
+							Set Nbr_Cell = cellx2(k)
+						Close Table query1
+						Commit Table nbrs_DB
+					End If
+
+					If pnx(k) <> pnx2(k) Then
+						If (val(pnx2(k)) = 0 and pnx2(k) <> "0") or val(pnx2(k)) < 0 Then     ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = " & cellx(k) & ".... PCI/SC/BCCH/PN = " & pnx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update Query1_temp
+								set PCI_SC_BCCH_PN = val(pnx2(k)) where rowid = k
+						End If
+					End If
+					If bsicx(k) <> bsicx2(k) Then
+						' do not need this as we put ZCRS in the field too
+						'If (val(bsicx2(k)) = 0 and bsicx2(k) <> "0") or val(left$(str$(val(bsicx2(k))),1)) > 7 or val(right$(str$(val(bsicx2(k))),1)) > 7 or val(bsicx2(k)) < 0 or len(str$(val(bsicx2(k)))) > 2 Then     ' then it has a character in it or is out of range
+						If (val(bsicx2(k)) = 0 and bsicx2(k) <> "0") or val(bsicx2(k)) < 0 or len(str$(val(bsicx2(k)))) > 3 Then     ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... ZCRS/BSIC = " + bsicx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update query1_temp
+								set ZCRS_BSIC = val(bsicx2(k)) where rowid = k
+						End If
+					End If
+					If zcrsx(k) <> zcrsx2(k) Then
+						If (val(zcrsx2(k)) = 0 and zcrsx2(k) <> "0") or val(zcrsx2(k)) < 0 or len(str$(val(zcrsx2(k)))) > 3 Then     ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... ZCRS_Count = " + zcrsx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update query1_temp
+								set ZCRS_Cnt = val(zcrsx2(k)) where rowid = k
+						End If
+					End If
+					If lat_disp(k) <> lat_disp2(k) Then
+OnError Goto non_number_error
+						If (val(lat_disp2(k)) = 0 and lat_disp2(k) <> "0") Then     ' then it has a character in it
+							sus_input = "Cell_Id = "+cellx(k)+".... Lattitude = " + lat_disp2(k)
+							Goto back_to_dialog_all
+						End If
+					End If
+					latx2(k) = val(lat_disp2(k))
+					shifty = latx2(k) - latx(k)
+
+					If lon_disp(k) <> lon_disp2(k) Then
+						If (val(lon_disp2(k)) = 0 and lon_disp2(k) <> "0") Then     ' then it has a character in it
+							sus_input = "Cell_Id = "+cellx(k)+".... Longitude = " + lon_disp2(k)
+							Goto back_to_dialog_all
+						End If
+					End If
+					lonx2(k) = val(lon_disp2(k))
+					shiftx = lonx2(k) - lonx(k)
+
+OnError Goto general_error
+					If azx(k) <> azx2(k) Then
+						If (val(azx2(k)) = 0 and azx2(k) <> "0") or val(azx2(k)) < 0 or val(azx2(k)) > 360 Then        ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... Azimuth = " + azx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update Query1_temp
+								set az = val(azx2(k)) where rowid = k
+						End If
+					End If
+					If hbwx(k) <> hbwx2(k) Then
+						If (val(hbwx2(k)) = 0 and hbwx2(k) <> "0") or val(hbwx2(k)) < 0 or val(hbwx2(k)) > 360 Then         ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... HBW = " + hbwx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update Query1_temp
+								set ant_hbw = val(hbwx2(k)) where rowid = k
+						End If
+					End If
+					If mdtx(k) <> mdtx2(k) Then
+						If (val(mdtx2(k)) = 0 and mdtx2(k) <> "0") or val(mdtx2(k)) < -90 or val(mdtx2(k)) > 90 Then        ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... MDT = " + mdtx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update Query1_temp
+								set mdt = val(mdtx2(k)) where rowid = k
+						End If
+					End If
+					If edtx(k) <> edtx2(k) Then
+						If (val(edtx2(k)) = 0 and edtx2(k) <> "0") or val(edtx2(k)) < -90 or val(edtx2(k)) > 90 Then         ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... EDT = " + edtx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update Query1_temp
+								set edt = val(edtx2(k)) where rowid = k
+						End If
+					End If
+					If htx(k) <> htx2(k) Then
+						If (val(htx2(k)) = 0 and htx2(k) <> "0") or val(htx2(k)) < 0 Then        ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... Ht = " + htx2(k)
+							Goto back_to_dialog_all
+						Else
+							Update Query1_temp
+								set ht = val(htx2(k)) where rowid = k
+						End If
+					End If
+					If sizex(k) <> sizex2(k) Then
+						If (val(sizex2(k)) = 0 and sizex2(k) <> "0") or val(sizex2(k)) < 0 or val(sizex2(k)) > 100000000 Then         ' then it has a character in it or is out of range
+							sus_input = "Cell_Id = "+cellx(k)+".... Object Size (m) = " + sizex2(k)
+							Goto back_to_dialog_all
+						Else
+							Update Query1_temp
+								set obj_size = val(sizex2(k)) where rowid = k
+						End If
+					End If
+					If commentx(k) <> commentx2(k) Then
+						Update  Query1_temp
+							set comment = commentx2(k) where rowid = k
+					End If
+					If typex(k) <> typex2(k) Then
+						If typex2(k) = "Macro" Or typex2(k) = "Non-Macro" Then
+							Update  query1_temp
+								set type = typex2(k) where rowid = k
+
+							Select * From table_selected_sites Where Site = sitex2 Into query1
+							Update query1
+								Set Type = typex2(k)
+							Close Table query1
+						Else
+							sus_input = "Cell_Id = " & cellx(k) & ".... Type = " & typex2(k) & " (Macro/Non-Macro)"
+							Goto back_to_dialog_all
+						End If
+					End If
+				Next
+
+
+
+				' This deals with the status updating of the cells
+				'----------------------------------------------------------
+				'This converts the numeric output of the dialog to the actual status, surely there is a more elegant way to do this.
+				'--------------------------------------------
+				For k = 1 to Minimum(6,count)
+					'This converts status numbers back to values again
+					'---------------------------------------------------
+					If statusx2(k) = "1" Then
+						statusx2(k) = ""
+					Else
+						statusx2(k) = status_value(val(statusx2(k))-1)
+					End If
+					'----------------------------------------------------
+
+					If site_update = True Then				'Here we update the status of all cells on the site
+						Select * From table_selected Where site = sitex Into Query1
+						count_2 = SelectionInfo(SEL_INFO_NROWS)
+						For j = 1 to count_2
+							Fetch Rec j From Query1
+								sector = Query1.obj
+
+							' this sets the colour for all sectors on the site
+							'-----------------------------------------------
+							If statusx2(1) = "On-Air" Then
+								Alter Object sector 
+								Info OBJ_INFO_BRUSH, brush_on_air(sysind_selected)
+								Alter Object sector 
+								Info OBJ_INFO_PEN, pen_on_air(sysind_selected)
+							Else
+								Alter Object sector 
+								Info OBJ_INFO_BRUSH, brush_not_on_air(sysind_selected)
+								Alter Object sector 
+								Info OBJ_INFO_PEN, pen_not_on_air(sysind_selected)
+							End If
+
+							Update Query1
+								Set status = statusx2(1), obj = sector where rowid = j
+
+						Next
+						Close Table Query1
+
+					Else             'here we update the status as set in the dialog
+						' this sets the colour for only the sector changed
+						'-----------------------------------------------
+						Fetch Rec k From Query1_temp
+							sector = Query1_temp.obj
+
+						' Put here the different colouring options based on status
+						'--------------------------
+						If statusx2(k) = "On-Air" Then
+							Alter Object sector 
+							Info OBJ_INFO_BRUSH, brush_on_air(sysind_selected)
+							Alter Object sector 
+							Info OBJ_INFO_PEN, pen_on_air(sysind_selected)
+						Else
+							Alter Object sector 
+							Info OBJ_INFO_BRUSH, brush_not_on_air(sysind_selected)
+							Alter Object sector 
+							Info OBJ_INFO_PEN, pen_not_on_air(sysind_selected)
+						End If
+
+
+						Update Query1_temp
+							Set Status = statusx2(k), obj = sector where rowid = k
+
+					End If
+
+
+					' this is for the sites table status
+					'-----------------------------------------------
+					If sites_ok = True Then
+						got_on_air_flag = False
+						Select * From table_selected Where site = sitex Into Query1
+						count_2 = SelectionInfo(SEL_INFO_NROWS)
+						For j = 1 to count_2
+							Fetch Rec j From Query1
+							If 	Query1.status = "On-Air" Then
+								got_on_air_flag = True
+								Exit For
+							End If
+						Next
+						Close Table Query1
+
+						Select * From table_selected_sites Where site = sitex Into Query1
+						For j = 1 to SelectionInfo(SEL_INFO_NROWS)
+							Fetch Rec j From Query1
+								sector = Query1.obj
+							If got_on_air_flag = True Then
+								Update Query1
+									set status = "On-Air" Where rowid = j
+								Alter Object sector
+								Info OBJ_INFO_SYMBOL, sym_on_air(sysind_selected)
+							Else
+								Update Query1
+									set status = "Fault" Where rowid = j
+								Alter Object sector
+								Info OBJ_INFO_SYMBOL, sym_not_on_air(sysind_selected)
+							End If
+							Update Query1
+								Set obj = sector Where rowid = j
+						Next
+						Close Table Query1
+					End If
+				Next
+
+
+				' This deals with the lat lon changes and redraws the objects to show any parameter changes
+				'------------------------------------------------------
+				If single_sector_flag = True and site_update_move = True Then  					' we put all the cells that we will move into the query1_temp table
+					Close Table Query1_temp
+					Select * From table_selected Where site = sitex Into Query1_temp
+					count = SelectionInfo(SEL_INFO_NROWS)
+				End If
+
+				For k = 1 to Minimum(6,count)
+					'This sets the shifts if there are any
+					'-------------------------------------------
+					If single_sector_flag = False Then
+						shiftx = lonx2(k) - lonx(k)
+						shifty = latx2(k) - latx(k)
+					Else
+						shiftx = lonx2(1) - lonx(1)
+						shifty = latx2(1) - latx(1)
+					End If
+
+
+					'Need this to check that the site_sys(x) table is open, otherwise it gives the user and option to continue or exit the sub
+					'-----------------------------------------------------------
+					If k = 1 and site_update_move = True Then 
+						If sites_ok = False and Distance(lonx(k), latx(k), lonx2(k), latx2(k),"km") > 0.00001 Then
+							Dialog Title "Edit " & sys_selected & " Cells" width 245 height 100	 Position 400,400
+							Control StaticText
+							Title "The " & table_selected_sites & " table must be open as it needs to be modified!" Position 15, 20
+							Control StaticText
+							Title "Do you want to continue and not update the sites table?" Position 15, 35
+
+							Control OKButton
+							Position 20, 70
+							Control CancelButton
+							Position 180, 70
+	
+							If CommandInfo(CMD_INFO_DLG_OK) = False Then
+								Call prepare_nbr_sub
+								Exit Sub
+							End If
+						ElseIf sites_ok = True Then
+							Select * From table_selected_sites Where site = sitex Into Query1
+							count_2 = SelectionInfo(SEL_INFO_NROWS)
+							For j = 1 to count_2
+								Fetch Rec j From Query1
+									sector1 = Query1.obj
+									status_temp = Query1.status
+									finalx = Query1.LON + shiftx
+									finaly = Query1.LAT + shifty
+
+								sector1 = CreatePoint(finalx, finaly)
+								If status_temp = "On-Air" Then
+									Alter Object sector1
+									Info OBJ_INFO_SYMBOL, sym_on_air(sysind_selected)
+								Else
+									Alter Object sector1
+									Info OBJ_INFO_SYMBOL, sym_not_on_air(sysind_selected)
+								End If
+								Update Query1
+									Set obj = sector1, LON = finalx, LAT = finaly Where rowid = j
+							Next
+							Close Table Query1
+						End If
+					End If
+
+
+					' This applies the changes to the sector objects in the cells table
+					'------------------------------------------------------------------------------------
+					Fetch Rec k From "Query1_temp"
+						status_temp = Query1_temp.status
+						finalx = Query1_temp.LON + shiftx
+						finaly = Query1_temp.LAT + shifty
+						hbw_temp = Query1_temp.ANT_HBW
+						size_temp = Query1_temp.OBJ_SIZE
+						az_temp = Query1_temp.AZ
+						type_temp = query1_temp.Type
+
+					'############################################
+					Call draw_cells_algo_sub(finalx, finaly, hbw_temp, size_temp, az_temp, type_temp, sector1)
+					'############################################
+
+					' Put here the different colouring options based on status
+					'--------------------------
+					If status_temp = "On-Air" Then
+						Alter Object sector1 
+						Info OBJ_INFO_BRUSH, brush_on_air(sysind_selected)
+						Alter Object sector1 
+						Info OBJ_INFO_PEN, pen_on_air(sysind_selected)
+					Else
+						Alter Object sector1 
+						Info OBJ_INFO_BRUSH, brush_not_on_air(sysind_selected)
+						Alter Object sector1 
+						Info OBJ_INFO_PEN, pen_not_on_air(sysind_selected)
+					End If
+
+					Update Query1_temp
+						Set LON = finalx, LAT = finaly, obj = sector1 Where rowid = k
+				Next
+
+				' this makes change requests for the az, ht and mdt/edt changes
+				'---------------------------------------
+				If single_sector_flag = True Then
+					count = 1
+				End If
+
+
+				For k = 1 to Minimum(6,count)
+					If azx(k) <> azx2(k) Then
+						Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+							Values ("Change Azimuth (" & sys_selected & ")", cellx(k), azx2(k) & " deg","old azimuth = " & azx(k) & " deg")
+					End If
+					If htx(k) <> htx2(k) Then
+						Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+							Values ("Change Antenna Height (" & sys_selected & ")", cellx(k), htx2(k) & " m","old height = " & htx(k) & " m")
+					End If
+					If mdtx(k) <> mdtx2(k) Then
+						Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+							Values ("Change Mechanical Downtilt (" & sys_selected & ")", cellx(k), mdtx2(k) & " deg","old MDT = " & mdtx(k) & " deg")
+					End If
+					If edtx(k) <> edtx2(k) Then
+						Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+							Values ("Change Electrical Downtilt (" & sys_selected & ")", cellx(k), edtx2(k) & " deg","old EDT = " & edtx(k) & " deg")
+					End If
+					If pnx(k) <> pnx2(k) Then
+						Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+							Values ("Change PN/SC/BCCH (" & sys_selected & ")", cellx(k), pnx2(k),"old PN/SC = " & pnx(k))
+					End If
+					If bsicx(k) <> bsicx2(k) Then
+						Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+							Values ("Change ZCRS/BSIC (" & sys_selected & ")", cellx(k), bsicx2(k),"old ZCRS/BSIC = " & bsicx(k))
+					End If
+					If zcrsx(k) <> zcrsx2(k) Then
+						Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+							Values ("Change ZCRS Count (" & sys_selected & ")", cellx(k), zcrsx2(k),"old ZCRS Count = " & zcrsx(k))
+					End If
+
+				Next
+
+				Close Table Query1_temp
+				Call prepare_nbr_sub
+				Exit Sub
+					'----------------------------------------------------------------------------------------------------						
+			End If
+		Next
+	End If
+returnpoint_3:
+Call prepare_nbr_sub
+Exit Sub
+
+
+
+Error Handlers
+'-------------------------------------------
+query_temp_open:
+Resume returnpoint_1
+
+non_number_error:
+sus_input = "Cell_Id = " & cellx(k) & ".... param value = " & lat_disp2(k)
+Resume returnpoint_2
+
+general_error:
+note "Error details are: " & error$()
+Resume returnpoint_3
+End Sub
+'---------------------------------------------------
+
+
+
+
+

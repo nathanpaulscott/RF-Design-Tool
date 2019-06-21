@@ -1,0 +1,122 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_search_prop_sub
+
+
+
+'---------------------------------------------------
+' this lets the user set the current pn/sc/bcch/bsic search properties, as well as co or adj toggle
+'---------------------------------------------------
+Sub set_search_prop_sub
+Dim radio_co_adj, radio_temp, i As Integer
+Dim adj_inc_s As String
+
+
+
+	If co_flag = "On" Then
+		radio_co_adj = 1
+	Elseif co_flag = "Off" Then
+		radio_co_adj = 2		
+	End If
+
+	If search_pn_flag = "SC/PN/BCCH" Then
+		radio_temp = 1
+	Elseif search_pn_flag = "BSIC" Then
+		radio_temp = 2
+	Elseif search_pn_flag = "BCCH-BSIC" Then
+		radio_temp = 3
+	End If
+
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "Please set your SC/PN/BCCH/BSIC Search Preferences." width 250 height 200
+
+	Control GroupBox
+	Title "Co. or Adj. Searching"
+	Position 10, 10 Width 110 Height 60
+
+	Control RadioGroup
+	Title "Co.Search;Adj.Search" 
+	Position 20, 23 Width 80 
+	Value radio_co_adj
+	Into radio_co_adj
+
+	Control StaticText
+	Title "PN_Inc/PCI_Mod:"
+	Position 20, 55
+	Control EditText
+	Value adj_inc
+	Position 83, 52 Width 25
+	Into adj_inc_s
+
+	Control GroupBox
+	Title "Parameter to Search"
+	Position 125, 10 Width 100 Height 60
+
+	Control RadioGroup
+	Title "PCI/SC/PN/BCCH;BSIC;BCCH-BSIC"
+	Position 135, 23 Width 80 
+	Value radio_temp
+	Into radio_temp
+
+	Control GroupBox
+	Title "Other Parameters" 
+	Position 10, 80 Width 156 Height 45
+
+	Control StaticText
+	Title "Max Dist (km) for Search:"
+	Position 15, 90
+	Control EditText
+	Value co_dist
+	Position 135, 88 Width 25
+	Into co_dist
+
+'	Control StaticText
+'	Title "Max Dist (km) for ADJ analysis:"
+'	Position 15, 110
+'	Control EditText
+'	Value adj_dist
+'	Position 135, 108 Width 25
+'	Into adj_dist
+
+
+
+	Control StaticText
+	Title "NOTE: Co/Adj is only used for PCI/SC/PN/BCCH,"
+	Position 10, 135
+	Control StaticText
+	Title "BSIC only searches for co-BSICs"
+	Position 10, 148
+
+	Control OKButton
+	Position 30, 170
+	Control CancelButton
+	Position 180, 170
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Exit Sub
+	End If
+
+	adj_inc = val(adj_inc_s)
+
+	If radio_co_adj = 1 Then
+		co_flag = "On"
+	Elseif radio_co_adj = 2 Then
+		co_flag = "Off"
+	End If
+
+	If radio_temp = 1 Then
+		search_pn_flag = "SC/PN/BCCH"
+	Elseif radio_temp = 2 Then
+		search_pn_flag = "BSIC"
+	Elseif radio_temp = 3 Then
+		search_pn_flag = "BCCH-BSIC"
+	End If
+
+End Sub
+'---------------------------------------------------
+

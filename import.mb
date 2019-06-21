@@ -1,0 +1,705 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub pre_import_sub
+Declare Sub import_sub
+Declare Sub import_nbrs_sub(ByVal input_filename As String)
+Declare Sub set_display_sub
+Declare Sub draw_cells_sub
+Declare Sub prepare_nbr_sub
+Declare Sub toolbar_sub 
+Declare Sub x_factor_sub
+Declare Sub check_template_and_status_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+Declare Sub save_project_file_sub
+Declare Sub test_nbrq1_sub
+
+
+
+'---------------------------------------------------
+' pre import sub to prepare and cleanup after the import sub
+'---------------------------------------------------
+Sub pre_import_sub
+Dim i_win_id As String	
+Dim i As Integer
+
+Onerror goto no_mapper
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+returnpoint1:
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+	' This resets all important global table name vars
+	'----------------------------------------------------
+	For i = 1 to 10
+		cells_sys(i) = ""
+		sites_sys(i) = "" 
+		sys(i) = ""
+	Next
+
+	For i = 1 to 100
+		status_value(i) = ""
+	Next
+
+	Call test_nbrq1_sub
+	If q1_exists = "On" Then
+		Close Table query1
+		q1_exists = "Off"
+	End If
+	If q2_exists = "On" Then
+		Close Table query2
+		q2_exists = "Off"
+	End If
+
+'	'This opens the import log for writing
+'	'---------------------------------------
+'	Open File pf_user_path & "import_log.txt" For Output As #100
+
+	Call import_sub
+
+'	Close File #100
+
+	If pf_filename = "" Then
+		Exit Sub		
+	End if
+
+	'check here that the templates and the status have some values, if there are none, use defaults
+	'------------------------------------------------------------
+	Call check_template_and_status_sub
+
+
+	' We need to check all tables after the import and ask the user what they want to do about the cr table
+	'------------------------------------------------------------
+	Call check_tables_sub
+
+	Call save_tables_sub
+
+	Call save_project_file_sub
+
+	Print Chr$(12)
+	Print "Import Finished."
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'------------------
+no_mapper:
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this sub imports a text file with the correct format and creates cells_sys(1).tab, sites_sys(1).tab, sys(2)_cells.tab and sys(2)_sites.tab
+'---------------------------------------------------
+Sub import_sub
+Dim sector1, center, endpnt, bore, site1 As Object
+Dim cellxb4, cellx, sysx, cell_data, statusx, user_path_import, temp_site_1, temp_status_1, temp_row_1, temp_site_2, temp_status_2, temp_row_2, s_title, temp_string As String	 
+Dim i_win_id, h, i, j, k, k_old, count, count1, count2, row_0, num_sys As Integer
+Dim finalx, finaly As Float
+Dim cell_data_alias As Alias
+Dim no_mapper_flag, first_table_flag As Logical
+Dim input_filename_cell, input_filename_nbrs, input_filename_cell_short, input_filename_nbrs_short As String
+
+
+
+
+	Set Distance Units "km"
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+	first_table_flag = True
+	new_site_pointer = 1
+
+	pf_user_path = ""
+	pf_filename = ""
+
+	Call prepare_nbr_sub
+
+	'This makes sure the input tables are closed if they are open
+	'-------------------------------------------------------
+OnError GoTo input_open
+	If TableInfo(input, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Close Table input
+	End If
+returnpoint_2:
+OnError GoTo inputx_open
+	If TableInfo(inputx, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Close Table inputx
+	End If
+returnpoint_3:
+OnError GoTo sites_temp_open
+	If TableInfo(sites_temp, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Close Table sites_temp
+	End If
+returnpoint_6:
+OnError Goto general_error
+
+
+
+	'this imports the cells (and possibly nbrs) .csv file with the correct column headers and data
+	'-------------------------------------------------------------------------------------------------
+	input_filename_cell = ""
+	input_filename_nbrs = ""
+returnpoint_fileused:
+OnError Goto general_error
+	input_filename_cell = FileOpenDlg("","","csv","Please select the location of your cell database file...")
+	If input_filename_cell = "" Then
+		Exit Sub
+	ElseIf Right$(input_filename_cell,14) = "_RFDT-nbrs.csv" Then			'it is the associated nbrs file, exit
+		If FileExists(Left$(input_filename_cell,Len(input_filename_cell) - 8) & "cell.csv") Then
+			input_filename_cell = Left$(input_filename_cell,Len(input_filename_cell) - 8) & "cell.csv"
+			input_filename_nbrs = Left$(input_filename_cell,Len(input_filename_cell) - 8) & "nbrs.csv"
+		Else
+			Exit Sub
+		End If
+	ElseIf Right$(input_filename_cell,14) = "_RFDT-cell.csv" Then			'it may be a previously exported file, so look for the associated nbrs file also
+		If FileExists(Left$(input_filename_cell,Len(input_filename_cell) - 8) & "nbrs.csv") Then
+			input_filename_nbrs = Left$(input_filename_cell,Len(input_filename_cell) - 8) & "nbrs.csv"
+		End If
+	End If
+
+	pf_user_path = PathToDirectory$(input_filename_cell)               'this will overwrite any user_path already set
+	If Right$(input_filename_cell,14) = "_RFDT-cell.csv" Then
+		pf_filename = left$(input_filename_cell,len(input_filename_cell) - 14) + ".pro"
+	Else
+		pf_filename = left$(input_filename_cell,len(input_filename_cell) - 4) + ".pro"
+	End If
+	pf_bypass = True								' this makes sure the save project files sub, bypasses promting the user for the filename this time
+
+
+	'The assoc nbrs file was not found, so ask the user if they have one
+	'--------------------------------------------------------------------- 	
+	If input_filename_nbrs = "" Then
+		input_filename_nbrs = FileOpenDlg("","","csv","!Do you have an associated nbrs file?  Please select the location OR cancel if not...")
+	End If
+
+	'this gets the projection off the user, then makes the tables mappable
+	'----------------------------------------------------------------------
+	proj = ChooseProjection$( "", True)
+
+
+	' This works out Z from the proj
+	'------------------------------------
+	i = InStr(1,proj,"CoordSys Earth Projection 1,")
+	j = InStr(1,proj,"CoordSys Earth Projection 8,")
+	k = InStr(1,proj,"m")
+	If proj = "" OR (i = 0 and (j = 0 or k = 0)) Then
+		Note "The projection system must be chosen and must be either lat-lon based or Easting Northings (UTM-m) based."
+		pf_user_path = ""
+		pf_filename = ""
+		Exit Sub
+	Elseif i > 0 Then
+		set_z_flag = "Off"
+	Elseif j > 0 and k > 0 Then
+		Z_x = 1
+		Z_y = 1
+		set_z_flag = "Off"
+	End If
+
+
+	' This sets the projection
+	'------------------------------------
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+
+	Print Chr$(12)
+	Print "Please wait, importing..."
+
+OnError Goto file_used
+	Register Table input_filename_cell  TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into pf_user_path + "inputx.tab"
+OnError Goto general_error
+	Open Table pf_user_path + "inputx.tab"
+	Commit Table inputx As pf_user_path + "input.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Open Table pf_user_path + "input.tab"
+	Close Table inputx
+	If FileExists(pf_user_path + "inputx.tab") = True Then
+		Kill pf_user_path + "inputx.tab"
+	End If
+
+
+	'This checks to make sure no float fields have non-float values in them, it sets the value to a default if it finds one
+	'------------------------------------------------------------------------------------------------------------
+	If Columninfo("input","PCI_SC_BCCH_PN",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set PCI_SC_BCCH_PN = val(PCI_SC_BCCH_PN)
+	End If
+	If Columninfo("input","ZCRS_BSIC",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set ZCRS_BSIC = val(ZCRS_BSIC)
+	End If
+	If Columninfo("input","ZCRS_Cnt",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set ZCRS_Cnt = val(ZCRS_Cnt)
+	End If
+	If Columninfo("input","Az",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set Az = val(Az)
+	End If
+	If Columninfo("input","Ant_HBW",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set Ant_HBW = val(Ant_HBW)
+	End If
+	If Columninfo("input","EDT",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set EDT = val(EDT)
+	End If
+	If Columninfo("input","MDT",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set MDT = val(MDT)
+	End If
+	If Columninfo("input","Ht",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set Ht = val(Ht)
+	End If
+	If Columninfo("input","Obj_Size",COL_INFO_TYPE) = 1 Then           ' Then there is a non number value in this column
+		Update input
+			Set Obj_Size = val(Obj_Size)
+	End If
+
+	'This finds the values for sys(x), cells_sys(x), sites_sys(x) and there are no blanks etc
+	'--------------------------------------------------------------------------------------------
+	Print Chr$(12)
+	Print "Finding the Different Systems....."
+
+	Select * From input Where Len(System) = 0 Into query1                  'looks for erroneous inputs
+	If TableInfo("query1", TAB_INFO_NROWS) > 0 Then
+		Note "The System column has blank fields, check it and import again."
+		pf_user_path = ""
+		pf_filename = ""
+		Exit Sub
+	End If
+
+	Select * From input Into query1 Group By System Order by System  	     		' this orders the table by system so we can determine how many different systems are in the file
+
+	'tests for too many systemnames
+	'-----------------------------------
+	If Tableinfo("query1",TAB_INFO_NROWS) > 10 Then
+		Note "There are more than 10 systems defined => the tool can handle up to a max of 10 systems, fix and try again.  Exiting..."
+		pf_user_path = ""
+		pf_filename = ""
+		Close Table query1
+		Exit Sub
+	End If
+
+	'goes through and checks each system name
+	'---------------------------------------------
+	Fetch First From query1
+	i = 1
+	Do While Not EOT (query1)
+		'sets the system name
+		'-------------------------
+		sys(i) = query1.system			
+
+		'tests for non-conformant system names
+		'----------------------------------------
+		If 	InStr(1,sys(i),".") <> 0
+			Or	InStr(1,sys(i)," ") <> 0
+			Or	InStr(1,sys(i),"-") <> 0
+			Or	InStr(1,sys(i),"+") <> 0
+		Then          					' then there is a forbidden char in the system type (need to expand this to look for other forbidden chars later
+			Note "The system type:   ''" & sys(i) & "''   has a forbidden character in it ('.','-','+',' '), remove or use '_' and import again."
+			pf_user_path = ""
+			pf_filename = ""
+			Exit Sub
+		End If
+
+		'tests for numeric only system names
+		'--------------------------------------
+		For j = 1 to Len(sys(i))
+			If NOT InStr(1, "0123456789", mid$(sys(i),j,1)) Then
+				Exit For
+			End If
+			If j = Len(sys(i)) Then		'we have got to the end of the system name wihtout a non-number char, this is unacceptable
+				Note "The system type:   ''" & sys(i) & "''   is only numeric, it must be alphanumeric, fix and import again."
+				pf_user_path = ""
+				pf_filename = ""
+				Exit Sub
+			End If
+		Next
+
+		'Tests passed, set the sites and cells table names
+		'----------------------------------------------------
+		cells_sys(i) = "cells_" & sys(i)
+		sites_sys(i) = "sites_" & sys(i)
+
+		Fetch Next From query1
+		i = i + 1
+	Loop
+	Close Table query1
+
+	Print Chr$(12)
+	Print "Checking for duplicate Cell_Ids..."
+
+	'This looks for duplicated cellids and deletes the duplicates (on a per system type basis)
+	'--------------------------------------------------------------------------------------------
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		Select * From input Where System = sys(i) into query1 Order by Site, Cell
+		sysx = query1.System
+		If TableInfo("query1", TAB_INFO_NROWS) > 0 Then
+			cellxb4 = ""
+			Fetch First From query1
+			Do While Not EOT(query1)
+				cellx = query1.Cell
+				If cellx = cellxb4 Then
+					Note "Found a duplicated Cell_Id (" & cellx & ") on System (" & sysx & ").  Please check your input file, each Cell_Id must be unique within each system for this tool."
+					pf_user_path = ""
+					pf_filename = ""
+					Exit Sub
+				End If
+				Fetch Next From query1
+				cellxb4 = cellx
+			Loop
+		End If
+		Close Table query1
+	Next
+
+	Print Chr$(12)
+	Print "Done."
+	Print "Checking for bad input in the Az and Ant_HBW fields..."
+
+	'This checks for bad or missing inputs in other fields
+
+
+	'-----------------------------------------------------
+	Select * From input Where Ant_HBW <= 0 or Ant_HBW > 360 Into query1                  'looks for erroneous inputs
+	If TableInfo("query1", TAB_INFO_NROWS) > 0 Then
+		Note "The Ant_HBW columns have blank fields or values out of range (valid range: 1 to 360 deg), check it and import again."
+		pf_user_path = ""
+		pf_filename = ""
+		Exit Sub
+	End If
+	Close Table query1
+
+	Select * From input Where Az < 0 or Az > 360 Into query1                  'looks for erroneous inputs
+	If TableInfo("query1", TAB_INFO_NROWS) > 0 Then
+		Note "The Az columns have values out of range (valid range: 0 to 360 deg), check it and import again."
+		pf_user_path = ""
+		pf_filename = ""
+		Exit Sub
+	End If
+	Close Table query1
+
+	Select * From input Where Az = 360 Into query1                  'looks for erroneous inputs
+	If TableInfo("query1", TAB_INFO_NROWS) > 0 Then
+		Update query1
+			set Az = 0
+	End If
+	Close Table query1
+
+	Select * From input Where Type <> "Macro" And Type <> "Non-Macro" Into query1                  'looks for erroneous inputs
+	If TableInfo("query1", TAB_INFO_NROWS) > 0 Then
+		Note "There are Type fields that are non 'Macro' or 'Non-Macro', exiting..."
+		pf_user_path = ""
+		pf_filename = ""
+		Exit Sub
+	End If
+	Close Table query1
+
+	Print Chr$(12)
+	Print "Done."
+	Print "Please wait, importing..."
+
+
+	' This closes any cells, sites tables if they are open
+	'--------------------------------------------------------------
+	For i = 1 to 10
+OnError GoTo cells_table_open
+		If TableInfo(cells_sys(i), TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+			Close Table cells_sys(i)
+		End If
+returnpoint_4:
+OnError GoTo sites_table_open
+		If TableInfo(sites_sys(i), TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+			Close Table sites_sys(i)
+		End If
+returnpoint_5:
+	Next
+
+	'Check the tool is being used in the authorised location
+	'----------------------------------------------------
+	Call x_factor_sub
+
+	
+	' This gets the display properties from the user
+	'-------------------------------------------
+	Call set_display_sub
+
+	If pf_filename = "" Then         'you need to change the set-display sub to have a passed var indicating when it is used, i.e. on startup => this will affect how it responds to the user cancelling the dialog
+		pf_user_path = ""
+		Exit Sub
+	End If
+
+	Set Event Processing On
+
+	'Now we are ready to go, we have our sys(x) values and we have checked the input file for erroneous data
+	'creates cells and sites tables from the input
+	'-----------------------------------------------------
+OnError Goto general_error
+
+	Print Chr$(12)
+	Print "Creating the Cells and Sites Tables........."
+
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		Print Chr$(12)
+		Print "Creating the Cells and Sites Tables........."
+		Print "Creating the cells table for system " & i
+
+		Select * From input Where System = sys(i) Into query1 Order by Site, Cell
+		Commit Table query1 As pf_user_path + "sites_temp.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Commit Table query1 As pf_user_path + cells_sys(i) + ".tab" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+
+		Open Table pf_user_path + "sites_temp.tab"
+		Set Table sites_temp Fastedit On
+		Open Table pf_user_path + cells_sys(i) + ".tab"
+		Set Table cells_sys(i) Fastedit On
+
+OnError GoTo record_size_error
+		Alter Table cells_sys(i) 
+			(Modify Site Char(80),Sitename Char(80),Cell Char(100), System Char(20),Status Char(30),Type Char(10),PCI_SC_BCCH_PN Float,ZCRS_BSIC Float,ZCRS_Cnt Float,LON Decimal(12,6),LAT Decimal(12,6), Ant_type Char(20),Comment Char(300),Az Float, Ant_HBW Float, EDT Float, MDT Float, Ht Float, Obj_Size Float)
+OnError GoTo general_error
+
+		Commit Table cells_sys(i)
+
+OnError GoTo record_size_error
+		Alter Table sites_temp 
+			(Modify Site Char(80),Sitename Char(80),Cell Char(100), System Char(20),Status Char(30), Type Char(10), LON Decimal(12,6), LAT Decimal(12,6), Comment Char(300), Ht Float
+			Drop Cell, PCI_SC_BCCH_PN , ZCRS_BSIC, ZCRS_Cnt, Ant_type ,Comment ,Az , Ant_HBW , EDT , MDT , Obj_Size)
+OnError GoTo general_error
+
+		Commit Table sites_temp
+
+		Print Chr$(12)
+		Print "Creating the sites table for system " & i
+
+		' this gets rid of duplicated site_ids for the site table and sets the site status to "on-air" if any sectors are "on-air"
+		'---------------------------------------------------------------------------------------
+		Fetch First from sites_temp
+			temp_site_1 = sites_temp.Site
+			temp_status_1 = sites_temp.Status
+			temp_row_1 = sites_temp.rowid
+
+			'This adds any new status values to the default status values
+			'----------------------------------------------------------
+			If temp_status_1 <> "" Then
+				For j = 1 to 100
+					If temp_status_1 = status_value(j) Then    'means we have a match so we stop looking
+						Exit For
+					ElseIf status_value(j) = "" Then    ' we have reached the end of the list with no match => a new status value
+						status_value(j) = temp_status_1
+						Exit For
+					End If
+				Next
+			End If
+
+		Fetch Rec 2 From sites_temp
+
+		Do While Not EOT(sites_temp)
+			temp_site_2 = sites_temp.Site
+			temp_status_2 = sites_temp.Status
+			temp_row_2 = sites_temp.rowid
+
+			'This adds any new status values to the default status values
+			'----------------------------------------
+			If temp_status_2 <> "" Then
+				For j = 1 to 100
+					If temp_status_2 = status_value(j) Then    'means we have a match so we stop looking
+						Exit For
+					ElseIf status_value(j) = "" Then    ' we have reached the end of the list with no match => a new status value
+						status_value(j) = temp_status_2
+						Exit For
+					End If
+				Next
+			End If
+
+			If temp_site_1 = temp_site_2 Then
+				If temp_status_2 = "On-Air" and temp_status_1 <> "On-Air" Then           'this is the part that makes the site status = "On-Air" if any sector is on air.
+					temp_status_1 = "On-Air"
+					Update sites_temp
+						Set Status = "On-Air" Where rowid = temp_row_1
+				End If
+				Update sites_temp
+					Set Site = "Delete" Where rowid = temp_row_2
+			Else    	'we have a new site so we load in the new numbers
+				temp_site_1 = temp_site_2
+				temp_status_1 = temp_status_2
+				temp_row_1 = temp_row_2
+			End If
+			Fetch Next From sites_temp
+		Loop
+
+		Select * From sites_temp where (site <> "0" and site <> "Delete") Into query1
+		Commit Table query1 As pf_user_path + sites_sys(i)+".tab" TYPE NATIVE Charset "WindowsLatin1"
+		Open Table pf_user_path + sites_sys(i)+".TAB"
+		Set Table sites_sys(i) Fastedit On
+		Close Table query1	 
+		Drop Table sites_temp
+	Next
+
+
+	Close Table input
+	If FileExists(pf_user_path + "input.tab") = True Then
+		Kill pf_user_path + "input.tab"	 
+	End If 
+	If FileExists(pf_user_path + "input.dat") = True Then
+		Kill pf_user_path + "input.dat"	 
+	End If
+
+	Set ProgressBars Off
+	Set Event Processing Off
+
+	' This makes the tables mappable and indexes the important columns
+	'-----------------------------------------------------------------------
+	Print Chr$(12)
+	Print "Preparing to Draw Sites and Cells...."
+
+	For i = 1 to 10
+		If sys(i) <> "" Then
+			Create Index On cells_sys(i) (Site)
+			Create Index On cells_sys(i) (Sitename)
+			Create Index On cells_sys(i) (Cell)
+			Create Index On cells_sys(i) (System)
+			Create Index On cells_sys(i) (Status)
+			Create Index On cells_sys(i) (Type)
+			Create Index On cells_sys(i) (PCI_SC_BCCH_PN)
+			Create Index On cells_sys(i) (ZCRS_BSIC)
+			Create Index On cells_sys(i) (ZCRS_Cnt)
+			Create Index On sites_sys(i) (Site)
+			Run Command "Create Map for " + cells_sys(i) + " " + proj 
+			Run Command "Create Map for " + sites_sys(i) + " " + proj 
+		End If
+	Next
+
+
+	'This calls the import NL sub
+	'---------------------------------
+	'---------------------------------
+	'---------------------------------
+	Print Chr$(12)
+	Print "Importing the nbrs........"
+	If input_filename_nbrs = "" Then
+		input_filename_nbrs = "no nbrs table given"
+	End If
+
+	Call import_nbrs_sub(input_filename_nbrs)
+
+	Print Chr$(12)
+	Print "Drawing Sites and Cells.  Please wait a moment."
+	Print "Objects will be added to the top-most mapper."
+
+
+
+	' this draws the cells and sites
+	'---------------------------------------------
+	'---------------------------------------------
+	'---------------------------------------------
+	Call draw_cells_sub 	
+
+
+	'this maps the tables
+	'--------------------------------------------------------------------------
+	no_mapper_flag = False
+
+	i_win_id = FrontWindow()
+	If i_win_id = 0 Then               'this means nothing was open in MI, all tables are closed
+		no_mapper_flag = True
+		Set ProgressBars Off
+		Set Event Processing Off
+	ElseIf WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this in case there are no mappers open or in front
+		no_mapper_flag = True
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Map Redraw Off
+		Set Event Processing Off
+	End If
+
+	For i = 10 to 1 Step -1 								'count down so as to put the top most sys(x) table on the top of the mapper
+		If sys(i) = "" Then
+			Goto skip_mapper
+		End If
+		If first_table_flag = True Then
+			If no_mapper_flag = True then				
+				Map From cells_sys(i),sites_sys(i)
+				no_mapper_flag = False
+				Set Map Display position Zoom Entire Layer cells_sys(i)    			'this shows the whole layer on the map
+			Else
+				Add Map Layer sites_sys(i), cells_sys(i)
+			End If
+		Else
+			Add Map Layer sites_sys(i), cells_sys(i)
+			first_table_flag = False
+		End If
+		temp_string = "PCI_SC_BCCH_PN"      
+		Run Command "Set Map Layer "+cells_sys(i)+" Label Position Center " + font_for_cells(i) + " With " + temp_string + " Auto Off Overlap On Duplicates On Offset 0 Parallel Off"
+		temp_string = "Site"        'doing this as sometimes get an error when MI tries to create labels for the col. Site_Id even though Site is specified!?!?!?
+		Run Command "Set Map Layer "+sites_sys(i)+" Label Position Right " + font_for_sites(i) + " With " + temp_string + " Auto On Overlap On Duplicates Off Offset 8 Parallel Off"
+skip_mapper:
+	Next
+	
+	Print Chr$(12)
+	Print "Import Almost Finished."
+	
+	enable_toolbar = True                  	' now the toolbar is enabled as a project file has been created
+	Call toolbar_sub
+
+general_returnpoint:
+	Exit Sub
+'------------------------------
+general_error:
+Note "There was an error, the code is: " & Error$() & ".  Exiting..."
+Resume general_returnpoint
+
+record_size_error:
+Note "There was an error, the code is: " + Error$() + "  The most likely cause is that your import file has too many extra cols for MI to handle, reduce the number of extra cols"
+Resume general_returnpoint
+
+file_used:
+Note "The input file is being used by another program, close it and try again!"
+Resume returnpoint_fileused
+
+input_open:
+Resume returnpoint_2
+
+inputx_open:
+Resume returnpoint_3
+
+cells_table_open:
+Resume returnpoint_4
+
+sites_table_open:
+Resume returnpoint_5
+
+sites_temp_open:
+Resume returnpoint_6
+
+End Sub
+'---------------------------------------------------
+
+

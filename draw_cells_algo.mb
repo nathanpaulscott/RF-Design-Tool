@@ -1,0 +1,195 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+
+
+
+
+'---------------------------------------------------
+' this is the raw algorithm for drawing the cells
+'---------------------------------------------------
+Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+Dim center, endpnt, temppnt As Object
+Dim x(12), y(12) As Float
+Dim x2(12), y2(12) As Float
+Dim h(12) As Float
+Dim i As Integer
+Dim z_x_new, z_y_new, omni_adjust As Float
+
+
+	If 	val(dc_hbw) = 360 Then   'this draws a circle for omnis 
+		'This applies the IBS size reduction factor to all IBS objects
+		'---------------------------------------------------------------
+		If dc_ibs = "Non-Macro" Then
+			z_x_new = Z_x*g_ibs_factor
+			z_y_new = Z_y*g_ibs_factor
+			omni_adjust = omni_factor*g_ibs_factor
+		Else
+			z_x_new = Z_x
+			z_y_new = Z_y
+			omni_adjust = omni_factor
+		End If
+
+		If draw_cells_type = "hexagons" Then
+			'this adjusts the cell size by the user defined margin for hexagons
+			'----------------------------------------------------------------------
+			dc_size = Val(dc_size)*hex2cell/hex2cell_default		'/omni_factor
+
+			'this creates a hexagon of size to fit with the cell radius specified (intersite_dist/2) => hexagon radius_omni = 2/sqr(3) x Obj_Size (1/sqrt(3)xISD), 
+			'this is because I define the cell radius to be the intersite dist/2, thus from trig we can determine the intersite dist = sqr(3) x hex radius => cell radius = sqr(3)/2 x hex radius
+			'----------------------------------------------------------------------
+			'This is the new calc that includes rotation so we get no object shape errors, could use for pies, but will slow it down too much and it is not required
+			'---------------------------------------------------------------------------------------------------------------------------------------------------
+			x(1) = -2/sqr(3)*val(dc_size)
+			y(1) = 1e-10
+			x(2) = -1/sqr(3)*val(dc_size)
+			y(2) = -val(dc_size)
+			x(3) = 1/sqr(3)*val(dc_size)
+			y(3) = -val(dc_size)
+			x(4) = -x(1)
+			y(4) = -y(1)
+			x(5) = -x(2)
+			y(5) = -y(2)
+			x(6) = -x(3)
+			y(6) = -y(3)
+
+			For i = 1 to 6
+				h(i) = sqr(x(i)^2+y(i)^2)*y(i)/abs(y(i))
+				x2(i) = h(i)*sin(DEG_2_RAD*Val(dc_az)+atn(x(i)/y(i)))
+				y2(i) = h(i)*cos(DEG_2_RAD*Val(dc_az)+atn(x(i)/y(i)))
+			Next
+
+			Create PLine Into Variable dc_obj 6 	(dc_lon + x2(1)/z_x_new, dc_lat + y2(1)/z_y_new)
+														(dc_lon + x2(2)/z_x_new, dc_lat + y2(2)/z_y_new)
+														(dc_lon + x2(3)/z_x_new, dc_lat + y2(3)/z_y_new)
+														(dc_lon + x2(4)/z_x_new, dc_lat + y2(4)/z_y_new)
+														(dc_lon + x2(5)/z_x_new, dc_lat + y2(5)/z_y_new)
+														(dc_lon + x2(6)/z_x_new, dc_lat + y2(6)/z_y_new)
+			dc_obj = ConvertToRegion(dc_obj)
+
+		ElseIf draw_cells_type = "pies" Or draw_cells_type = "footprints" Then
+			'creates a circle for the omni
+			'--------------------------------
+			dc_obj = CreateCircle (dc_lon, dc_lat, val(dc_size)/1000/omni_adjust)   'as distance units are set in km and obj size is in m
+			dc_obj = ConvertToRegion(dc_obj)
+		End If
+	
+	Else 'this is for non-omnis
+		'This applies the IBS size reduction factor to all IBS objects
+		'---------------------------------------------------------------
+		If dc_ibs = "Non-Macro" Then
+			z_x_new = Z_x*g_ibs_factor
+			z_y_new = Z_y*g_ibs_factor
+		Else
+			z_x_new = Z_x
+			z_y_new = Z_y
+		End If
+
+		If draw_cells_type = "hexagons" Then
+			'this adjusts the cell size by the user defined margin for hexagons
+			'----------------------------------------------------------------------
+			dc_size = Val(dc_size)*hex2cell/hex2cell_default
+
+			'this creates a hexagon of size to fit with the cell radius specified (Intersite_Dist/2) => hexagon diameter = 4/3 x Obj_Size (2/3xISD) for sectored cells, 
+			'this is because I define the cell radius to be the intersite dist/2, thus from trig we can determine the intersite dist = 3*hex diameter/2 => cell radius = 3*hex diameter/4
+			'This is the new calc that includes rotation so we get no object shape errors, could use for pies, but will slow it down too much and it is not required
+			'---------------------------------------------------------------------------------------------------------------------------------------------------
+			x(1) = 1e-10
+			y(1) = 1e-10
+			x(2) = -1/sqr(3)*val(dc_size)
+			y(2) = (1/3)*val(dc_size)
+			x(3) = -1/sqr(3)*val(dc_size)
+			y(3) = val(dc_size)
+			x(4) = x(1)
+			y(4) = 4*y(2)
+			x(5) = -x(2)
+			y(5) = y(3)
+			x(6) = -x(3)
+			y(6) = y(2)
+
+			x(7) = x(1)		'for the label
+			y(7) = y(4)*Zx	'for the label
+
+			For i = 1 to 7
+				h(i) = sqr(x(i)^2+y(i)^2)*y(i)/abs(y(i))
+				x2(i) = h(i)*sin(DEG_2_RAD*Val(dc_az)+atn(x(i)/y(i)))
+				y2(i) = h(i)*cos(DEG_2_RAD*Val(dc_az)+atn(x(i)/y(i)))
+			Next
+
+			Create PLine Into Variable dc_obj 6 	(dc_lon + x2(1)/z_x_new, dc_lat + y2(1)/z_y_new)
+														(dc_lon + x2(2)/z_x_new, dc_lat + y2(2)/z_y_new)
+														(dc_lon + x2(3)/z_x_new, dc_lat + y2(3)/z_y_new)
+														(dc_lon + x2(4)/z_x_new, dc_lat + y2(4)/z_y_new)
+														(dc_lon + x2(5)/z_x_new, dc_lat + y2(5)/z_y_new)
+														(dc_lon + x2(6)/z_x_new, dc_lat + y2(6)/z_y_new)
+			Create Point Into Variable endpnt (dc_lon + x2(7)/z_x_new, dc_lat + y2(7)/z_y_new)
+
+			dc_obj = ConvertToRegion(dc_obj)
+
+			'this moves the centroid to the outside of the sector object so the text is near the edge
+			'-----------------------------------------------------------------------
+			Alter Object dc_obj Geography OBJ_GEO_CENTROID, endpnt
+
+		ElseIf draw_cells_type = "pies" Or draw_cells_type = "footprints" Then
+			x(1) = 1e-10
+			y(1) = 1e-10
+			x(2) = val(dc_size)*tan(4*val(dc_hbw)/180*PI/8)*cos(4*val(dc_hbw)/180*PI/8)
+			y(2) = val(dc_size)*cos(4*val(dc_hbw)/180*PI/8)
+			x(3) = val(dc_size)*tan(3*val(dc_hbw)/180*PI/8)*cos(3*val(dc_hbw)/180*PI/8)
+			y(3) = val(dc_size)*cos(3*val(dc_hbw)/180*PI/8)
+			x(4) = val(dc_size)*tan(2*val(dc_hbw)/180*PI/8)*cos(2*val(dc_hbw)/180*PI/8)
+			y(4) = val(dc_size)*cos(2*val(dc_hbw)/180*PI/8)
+			x(5) = val(dc_size)*tan(val(dc_hbw)/180*PI/8)*cos(val(dc_hbw)/180*PI/8)
+			y(5) = val(dc_size)*cos(val(dc_hbw)/180*PI/8)
+			x(6) = 1e-10
+			y(6) = val(dc_size)
+			x(7) = -x(5)
+			y(7) =  y(5)
+			x(8) = -x(4)
+			y(8) =  y(4)
+			x(9) = -x(3)
+			y(9) =  y(3)
+			x(10) = -x(2)
+			y(10) =  y(2)
+
+			x(11) = 1e-10					'for the label
+			y(11) = val(dc_size)*Zx		'for the label
+
+			For i = 1 to 11
+				h(i) = sqr(x(i)^2+y(i)^2)*y(i)/abs(y(i))
+				x2(i) = h(i)*sin(DEG_2_RAD*Val(dc_az)+atn(x(i)/y(i)))
+				y2(i) = h(i)*cos(DEG_2_RAD*Val(dc_az)+atn(x(i)/y(i)))
+			Next
+
+			Create PLine Into Variable dc_obj 10 	(dc_lon + x2(1)/z_x_new, dc_lat + y2(1)/z_y_new)
+														(dc_lon + x2(2)/z_x_new, dc_lat + y2(2)/z_y_new)
+														(dc_lon + x2(3)/z_x_new, dc_lat + y2(3)/z_y_new)
+														(dc_lon + x2(4)/z_x_new, dc_lat + y2(4)/z_y_new)
+														(dc_lon + x2(5)/z_x_new, dc_lat + y2(5)/z_y_new)
+														(dc_lon + x2(6)/z_x_new, dc_lat + y2(6)/z_y_new)
+														(dc_lon + x2(7)/z_x_new, dc_lat + y2(7)/z_y_new)
+														(dc_lon + x2(8)/z_x_new, dc_lat + y2(8)/z_y_new)
+														(dc_lon + x2(9)/z_x_new, dc_lat + y2(9)/z_y_new)
+														(dc_lon + x2(10)/z_x_new, dc_lat + y2(10)/z_y_new)
+			Create Point Into Variable endpnt (dc_lon + x2(11)/z_x_new, dc_lat + y2(11)/z_y_new)
+
+			dc_obj = ConvertToRegion(dc_obj)
+
+			'this moves the centroid to the outside of the sector object so the text is near the edge
+			'-----------------------------------------------------------------------
+			Alter Object dc_obj Geography OBJ_GEO_CENTROID, endpnt
+		End If
+	End If
+
+Exit Sub
+'--------------
+
+
+End Sub
+'---------------------------------------------------
+
+
+

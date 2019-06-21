@@ -1,0 +1,248 @@
+'need to add in a system choice, right this only works on cells_sys(1)
+
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub analyse_sc_plan_sub
+Declare Sub prepare_nbr_sub
+Declare Sub check_tables_sub
+Declare Sub date_check_sub
+Declare Sub test_nbrq1_sub
+
+'---------------------------------------------------
+' this lets the user run an approximate analysis on the SC plan
+'---------------------------------------------------
+Sub analyse_sc_plan_sub
+Dim table_selected, s_cell_max_dist, s_pair_max_dist, s_cell0, s_cell2, sys0, sys2 As String
+Dim area0, area2, f_overlap, dist, cell_max_dist, pair_max_dist, lon0, lat0, az0, hbw0, lon2, lat2, az2, hbw2, x0, y0, x2, y2 As Float
+Dim i, j, k, l, numcells0, numcells2, found, sc0, sc2, i_row_id, i_win_id As Integer
+Dim cell_data_alias as Alias
+Dim center0, center2, sel0, sel2 as Object
+
+
+
+	Set ProgressBars Off
+	Set Event Processing On
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+	Call test_nbrq1_sub
+	If q1_exists = "On" Then 
+		Close Table Query1 
+	End If
+	If nbrs_exists = "On" Then 
+		Close Table nbrs_RFDT 
+	End If
+
+
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "CO SC Analysis Parameters" width 200 height 100
+
+	Control GroupBox
+	Title "Co SC Searching"
+	Position 10, 10 Width 180 Height 60
+
+	Control StaticText
+	Title "Cell Max Dist (km):"
+	Position 40, 30
+	Control EditText
+	Value 10
+	Position 105, 28 Width 40
+	Into cell_max_dist
+
+	Control StaticText
+	Title "Pair Max Dist (km):"
+	Position 40, 50
+	Control EditText
+	Value 20
+	Position 105, 48 Width 40
+	Into pair_max_dist
+
+	Control OKButton
+	Position 30, 80
+	Control CancelButton
+	Position 130, 80
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Goto returnpoint2
+	End If
+
+
+
+
+OnError Goto file_open
+returnpoint1:
+
+	'This creates the output table
+	'----------------------------
+	Create Table SC_Analysis_Output
+		(Host_Cell Char(50), Host_Sys Char(20), Nbr_Cell Char(50), Nbr_Sys Char(20), Dist_km Float, Overlap_% Float)
+		File pf_user_path + "SC_Analysis_Output.tab"
+	Commit Table SC_Analysis_Output
+
+OnError Goto general_error
+
+	numcells0 = 0
+	found = 0
+	l = 0
+	 		
+	'This finds the number of cells
+	'------------------------------
+	i = 1  			'this sets the system, I should put in a choice later into the dialog with a radio button
+	numcells0 = TableInfo(cells_sys(i), TAB_INFO_NROWS)
+	table_selected = cells_sys(i)
+    
+	'this does the calcs
+	'---------------------
+	For j = 1 to numcells0
+		Fetch Rec j from table_selected
+			cell_data_alias = table_selected + ".Cell"
+			s_cell0 = cell_data_alias
+			cell_data_alias = table_selected + ".System"
+			sys0 = cell_data_alias
+			cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+			sc0 = cell_data_alias
+			cell_data_alias = table_selected + ".LON"
+			lon0 = cell_data_alias
+			cell_data_alias = table_selected + ".LAT"
+			lat0 = cell_data_alias
+			cell_data_alias = table_selected + ".Az"
+			az0 = cell_data_alias
+			cell_data_alias = table_selected + ".Ant_HBW"
+			hbw0 = cell_data_alias
+			If hbw0 <> 360 Then
+				hbw0 = 90
+			End If
+
+		'Draws the approx. radiation test zone
+		'----------------------------------------
+		'For omnis
+		'---------------------
+		If 	hbw0 = 360 Then   'this draws a circle for omnis
+			Create Point Into Variable center0 (lon0,lat0)
+			sel0 = CreateCircle (lon0, lat0, cell_max_dist)
+			sel0 = ConvertToRegion(sel0)
+
+		'For sectored cells
+		'---------------------
+		Else
+			Create Point Into Variable center0 (lon0,lat0)
+			Create PLine Into Variable sel0 11 (lon0,lat0)(lon0+(tan(4*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(4*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(4*(hbw0/180)*PI/8)/Z_y))(lon0+(tan(3*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(3*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(3*(hbw0/180)*PI/8)/Z_y))(lon0+(tan(2*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(2*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(2*(hbw0/180)*PI/8)/Z_y))(lon0+(tan(1*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(1*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(1*(hbw0/180)*PI/8)/Z_y))(lon0,lat0+(1000*cell_max_dist/Z_y))(lon0-(tan(1*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(1*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(1*(hbw0/180)*PI/8)/Z_y))(lon0-(tan(2*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(2*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(2*(hbw0/180)*PI/8)/Z_y))(lon0-(tan(3*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(3*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(3*(hbw0/180)*PI/8)/Z_y))(lon0-(tan(4*(hbw0/180)*PI/8)*1000*cell_max_dist*cos(4*(hbw0/180)*PI/8)/Z_x), lat0+(1000*cell_max_dist*cos(4*(hbw0/180)*PI/8)/Z_y))(lon0,lat0)
+			sel0 = ConvertToRegion(sel0)
+
+			'this rotates the sector object about the site
+			'-------------------------------------------
+			sel0 = RotateAtPoint(sel0,-az0,center0)
+		End If
+		area0 = Area(sel0,"sq km")
+
+
+		'Finds all the Co-SCs
+		'----------------------
+		Select * from table_selected
+			Where PCI_SC_BCCH_PN = sc0 and Cell <> s_cell0
+			Into query1
+		numcells2 = TableInfo(query1, TAB_INFO_NROWS)
+		If numcells2 = 0 Then
+			Goto skip
+		End If
+
+		'Checks them all for red flag sites to add to the output file
+		'----------------------------------
+		For k = 1 to numcells2
+			Fetch Rec k from Query1
+				s_cell2 = Query1.Cell
+				sys2 = Query1.System
+				sc2 = Query1.PCI_SC_BCCH_PN
+				lon2 = Query1.LON
+				lat2 = Query1.LAT
+				az2 = Query1.Az
+				hbw2 = Query1.Ant_HBW
+				If hbw2 <> 360 Then
+					hbw2 = 90
+				End If
+
+			'Draws the approx. radiation test zone
+			'----------------------------------------
+			'For omnis
+			'---------------------
+			If 	hbw2 = 360 Then   'this draws a circle for omnis 
+				Create Point Into Variable center2 (lon2,lat2)
+				sel2 = CreateCircle (lon2, lat2, cell_max_dist)
+				sel2 = ConvertToRegion(sel2)
+
+			'For sectored cells
+			'---------------------
+			Else
+				Create Point Into Variable center2 (lon2,lat2)
+				Create PLine Into Variable sel2 11 (lon2,lat2)(lon2+(tan(4*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(4*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(4*(hbw2/180)*PI/8)/Z_y))(lon2+(tan(3*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(3*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(3*(hbw2/180)*PI/8)/Z_y))(lon2+(tan(2*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(2*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(2*(hbw2/180)*PI/8)/Z_y))(lon2+(tan(1*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(1*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(1*(hbw2/180)*PI/8)/Z_y))(lon2,lat2+(1000*cell_max_dist/Z_y))(lon2-(tan(1*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(1*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(1*(hbw2/180)*PI/8)/Z_y))(lon2-(tan(2*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(2*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(2*(hbw2/180)*PI/8)/Z_y))(lon2-(tan(3*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(3*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(3*(hbw2/180)*PI/8)/Z_y))(lon2-(tan(4*(hbw2/180)*PI/8)*1000*cell_max_dist*cos(4*(hbw2/180)*PI/8)/Z_x), lat2+(1000*cell_max_dist*cos(4*(hbw2/180)*PI/8)/Z_y))(lon2,lat2)				
+				sel2 = ConvertToRegion(sel2)
+
+				'this rotates the sector object about the site
+				'-------------------------------------------
+				sel2 = RotateAtPoint(sel2,-az2,center2)
+			End If
+			area2 = Area(sel2,"sq km")
+			f_overlap = Round(100*Area(Overlap(sel0,sel2),"sq km")/area0,1)
+			dist = Distance(lon0, lat0, lon2, lat2, "km")
+
+
+			'We do the analysis logic here
+			'-----------------------------
+			If (dist < pair_max_dist and f_overlap > 10) or dist < 5 Then      'I have to think about this one
+				found = found + 1
+				Insert Into SC_Analysis_Output
+					Values (s_cell0, sys0, s_cell2, sys2, dist , f_overlap)
+			End If
+		Next
+skip:
+		Close Table Query1
+		l = l + 1
+		If l = 10 Then
+			l = 0
+			Print Chr$(12)
+			Print "Found: " + found
+			Print Round(j / numcells0 * 100, 1) + "% Done"
+		End If
+	Next
+	Commit Table SC_Analysis_Output
+	Export "SC_Analysis_Output" Into pf_user_path + "SC_Analysis_Output.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+	Close Table SC_Analysis_Output
+	If FileExists(pf_user_path + "SC_Analysis_Output.tab") = True Then
+		Kill pf_user_path + "SC_Analysis_Output.tab"
+	End If
+	If FileExists(pf_user_path + "SC_Analysis_Output.dat") = True Then
+		Kill pf_user_path + "SC_Analysis_Output.dat"
+	End If
+
+
+returnpoint2:
+	Set ProgressBars On
+	Set Event Processing On
+
+Exit Sub
+'-------------------------------
+'Error Handlers
+'-------------------
+file_open:
+Close Table SC_Analysis_Output
+Resume returnpoint1
+
+general_error:
+Note "There was some kind of processing error, details are: " + error$()
+Call test_nbrq1_sub
+If q1_exists = "On" Then 
+	Close Table Query1 
+End If
+Resume returnpoint2
+
+End Sub
+'------------------------------------

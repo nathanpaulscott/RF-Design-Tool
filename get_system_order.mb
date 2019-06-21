@@ -1,0 +1,106 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub get_system_order_sub
+
+
+
+'---------------------------------------------------
+' This is for the user to specify which systems should go in which order
+'---------------------------------------------------
+Sub get_system_order_sub
+Dim i As Integer
+Dim sys_temp(10) As String
+
+
+
+screwup:
+	For i = 1 to 10
+		sys_temp(i) = sys(i)
+	Next
+
+
+	Dialog Title "System Display Order Settings...." width 400 height 350
+
+	Control StaticText
+	Title "Please the select system display order" 
+	Position 10, 10
+
+	Control StaticText
+	Title "The first system should be the most important.  It will always be displayed on top by default." 
+	Position 10, 25
+
+	Control GroupBox
+	Title "System Order"
+	Position 10, 33 Width 270 Height 250
+
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 1
+	Into sys(1)
+	Position 10, 40 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 2
+	Into sys(2)
+	Position 10, 60 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 3
+	Into sys(3)
+	Position 10, 80 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 4
+	Into sys(4)
+	Position 10, 100 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 5
+	Into sys(5)
+	Position 10, 120 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 6
+	Into sys(6)
+	Position 10, 140 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 7
+	Into sys(7)
+	Position 10, 160 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 8
+	Into sys(8)
+	Position 10, 180 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 9
+	Into sys(9)
+	Position 10, 200 Height 15
+	Control ListBox
+	Title sys_temp(1) & ";" & sys_temp(2) & ";" & sys_temp(3) & ";" & sys_temp(4) & ";" & sys_temp(5) & ";" & sys_temp(6) & ";" & sys_temp(7) & ";" & sys_temp(8) & ";" & sys_temp(9) & ";" & sys_temp(10)
+	Value 10
+	Into sys(10)
+	Position 10, 220 Height 15
+
+
+	Control OKButton
+	Position 30, 320
+
+	If CommandInfo(CMD_INFO_DLG_OK) = True Then
+		For i = 2 to 10
+			If sys(1) = sys(i) And len(sys(1)) > 0 Then
+				Note "You have doubled the tables in the order, try again...."
+				Goto screwup
+			End If
+		Next
+		Exit Sub
+	End If
+
+End Sub
+'---------------------------------------------------
+

@@ -1,0 +1,11 @@
+!table
+!version 300
+!charset WindowsLatin1
+
+Definition Table
+  Type NATIVE Charset "Neutral"
+  Fields 4
+    Action Char (50) ;
+    Host_Cell Char (20) ;
+    Parameter Char (30) ;
+    Comment Char (100) ;

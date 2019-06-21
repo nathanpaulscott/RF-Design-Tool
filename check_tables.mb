@@ -1,0 +1,261 @@
+'Need to put code to sort out the layers, they are coming out in the wrong order
+
+' want to put in here code to go through the layers and determine where the cells/sites tables.  If a table needs to be opened, it needs to go into the right layer and 
+' also with the right labels from the preferences.  So this only changes things if we open a table here
+' I have to put a label (duplicates, ovelapping, position, offset) dialog in the drawing style), then make it apply it properly in the apply drawing styles.  
+' Will require reading all layers and determining which ones are the desired tables and then setting the label params with "Set Map Layer 2 Label Position Below Right Offset 8" etc
+
+
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub check_tables_sub
+Declare Sub set_z_sub
+Declare Sub pre_import_sub
+Declare Sub prepare_cr_load_pf_sub
+Declare Sub prepare_cr_sub
+Declare Sub prepare_nbrs_DB_sub
+Declare Sub initial_dialog_sub
+Declare Sub set_user_path_sub
+Declare Sub main
+
+
+
+'--------------------------------------------------
+' this looks at the projection of any of the cells tables and sets Z from it, which affects how the objects are drawn
+' this is called from within check_tables_sub
+'---------------------------------------------------
+Sub set_z_sub
+Dim i, j, k As Integer
+
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		ElseIf is_open_cells_sys(i) = "On" Then
+			proj = TableInfo(cells_sys(i),TAB_INFO_COORDSYS_CLAUSE)
+			Exit For
+		End If
+	Next
+
+	'this determines whether the proj is lat-lon (1) or a utm based projection in "m" (8,XX,"m")
+	'--------------------------------------------------
+	k = InStr(1,proj,"CoordSys Earth Projection 1,")
+	j = InStr(1,proj,"CoordSys Earth Projection 8,")
+	If k > 0 and j = 0 Then               ' the proj is lat lon
+'		Z_x = 92123
+'		Z_y = 107000
+		Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+		set_z_flag = "Off"
+	Elseif k = 0 and j > 0 Then				' the proj is utm
+		If InStr(1,proj,"m") > 0 Then
+			Z_x = 1
+			Z_y = 1
+			Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+			set_z_flag = "Off"
+		End If
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this checks that certain important tables are open or not
+' The outputs are the is_open flags as well, it checks the cr table
+'---------------------------------------------------
+Sub check_tables_sub
+Dim input_filename, user_path_temp As String	
+Dim i, j, k As Integer
+Dim min_requirement_flag As Logical
+Dim i_win_id, i_num_layer As Integer	
+
+
+
+OnError Goto general_error
+
+no_files_point:
+	'This is the flag to tell whether or not we have the files for at least 1 table, if not, we have to import or move
+	'-------------------------------------------------------------
+	min_requirement_flag = False
+	'-------------------------------------------------------------
+	If pf_user_path = "" Then
+		pf_error = True
+		Call set_user_path_sub
+		Call initial_dialog_sub
+		Exit Sub
+	End If
+
+	Call prepare_nbrs_DB_sub				' this is a standard check of the nbrs_DB table
+
+	If check_cr_flag = "On" Then
+		Call prepare_cr_load_pf_sub     	' this is a special initial check of the cr table
+		check_cr_flag = "Off"
+	Else
+		Call prepare_cr_sub				' this is a standard check of the cr table
+	End If
+
+
+'----------------------------------------------------------------------------------------------------------------------------------------
+	For i = 10 to 1 Step -1
+		If sys(i) = "" Then
+			Goto skip_sys
+		Else
+			'This is for the cells tables
+			'If it is open, we do nothing, if it is open but, the wrong version/dir, we close it and open the correct file, if it is closed, we open it
+			'in the case we open something, we only make it visible if the status flag allows it
+			'-------------------------------------------------
+OnError GoTo closed_cells
+			If TableInfo(cells_sys(i), TAB_INFO_NAME) <> "" and PathToDirectory$(TableInfo(cells_sys(i), TAB_INFO_TABFILE)) = pf_user_path Then        						'This is the case when it is all good
+				is_open_cells_sys(i) = "On"
+			ElseIf TableInfo(cells_sys(i), TAB_INFO_NAME) <> "" and PathToDirectory$(TableInfo(cells_sys(i), TAB_INFO_TABFILE)) <> pf_user_path Then								'This is the case where an imposter file with the same name from another dir is open
+				Commit Table cells_sys(i)
+				Close Table cells_sys(i)
+				is_open_cells_sys(i) = "Off"
+			ElseIf is_open_cells_sys(i) = "we had an error" Then
+returnpoint_cells:
+				is_open_cells_sys(i) = "Off"
+			End If
+OnError Goto general_error
+
+			'Now we know the status of the table, we open it if the files are there
+			'-------------------------------------------------------
+			If is_open_cells_sys(i) = "Off" 
+			and FileExists(pf_user_path + cells_sys(i) + ".tab") = True 
+			and FileExists(pf_user_path + cells_sys(i) + ".map") = True 
+			and FileExists(pf_user_path + cells_sys(i) + ".ind") = True 
+			and FileExists(pf_user_path + cells_sys(i) + ".dat") = True 
+			and FileExists(pf_user_path + cells_sys(i) + ".id") = True Then
+				Open Table pf_user_path + cells_sys(i) + ".tab"
+				Set Table cells_sys(i) Fastedit On
+				i_win_id = FrontWindow()
+				If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this in case there are no mappers open or in front
+					Map From cells_sys(i)
+				Else
+					Add Map Layer cells_sys(i)
+				End If
+				is_open_cells_sys(i) = "On"
+			End If
+
+
+			'This is for the sites tables
+			'-------------------------------------------------
+OnError GoTo closed_sites
+			If TableInfo(sites_sys(i), TAB_INFO_NAME) <> "" 
+			and PathToDirectory$(TableInfo(sites_sys(i), TAB_INFO_TABFILE)) = pf_user_path Then								'This is the case when it is all good
+				'This is the case when it is all good
+				'----------------------------------------------------
+				is_open_sites_sys(i) = "On"
+			ElseIf TableInfo(sites_sys(i), TAB_INFO_NAME) <> "" 
+			and PathToDirectory$(TableInfo(sites_sys(i), TAB_INFO_TABFILE)) <> pf_user_path Then								'This is the case where an imposter file with the same name from another dir is open
+				Commit Table sites_sys(i)
+				Close Table sites_sys(i)
+				is_open_sites_sys(i) = "Off"
+			ElseIf is_open_sites_sys(i) = "we had an error" Then
+returnpoint_sites:
+				is_open_sites_sys(i) = "Off"
+			End If
+OnError Goto general_error
+
+			'Now we know the status of the table, we open it if the files are there
+			'-------------------------------------------------------
+			If is_open_sites_sys(i) = "Off" 
+			And FileExists(pf_user_path + sites_sys(i) + ".tab") = True 
+			And FileExists(pf_user_path + sites_sys(i) + ".map") = True 
+			And FileExists(pf_user_path + sites_sys(i) + ".ind") = True 
+			And FileExists(pf_user_path + sites_sys(i) + ".dat") = True 
+			And FileExists(pf_user_path + sites_sys(i) + ".id") = True Then
+				Open Table pf_user_path + sites_sys(i) + ".tab"
+				Set Table sites_sys(i) Fastedit On
+				i_win_id = FrontWindow()
+				If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this in case there are no mappers open or in front
+					Map From sites_sys(i)
+				Else
+					Add Map Layer sites_sys(i)
+				End If
+				is_open_sites_sys(i) = "On"
+			End If
+			'---------------------------------------------------------------
+
+			If is_open_cells_sys(i) = "On" and min_requirement_flag = False Then
+				min_requirement_flag = True
+			End If
+		End If
+skip_sys:
+	Next
+
+
+	If min_requirement_flag = False Then        																				'Then there are no table files available for any tables
+		If	Ask("Can't find any cells tables in: "+ pf_user_path +"...  Please move them here and check again or create a new project.","Check Again","Create New") = True Then
+			Goto no_files_point
+		Else
+			Call pre_import_sub		
+		End If
+
+	End If
+
+	Call set_z_sub              ' this sets Z depending on the projection system
+
+	'This checks the whether or not the cells/sites tables are in the mapper and/or visible
+	'--------------------------------------------------------------------------------------------
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) = WIN_MAPPER Then				' we need to check this in case there are no mappers open or in front
+		i_num_layer = MapperInfo(i_win_id, Mapper_Info_Layers)
+	Else			'the topmost window is not a mapper
+		i_num_layer = 0
+	End If
+	If check_map_display Then
+		For i = 1 to 10
+			If sys(i) = "" Then
+				Exit For
+			Else
+				cells_map_status(i) = False
+				sites_map_status(i) = False
+				cells_display_status(i) = False
+				sites_display_status(i) = False
+				If i_num_layer > 0 Then
+					For j = 1 to i_num_layer
+						If LayerInfo(i_win_id, j, LAYER_INFO_NAME) = cells_sys(i) Then
+							cells_map_status(i) = True
+							If LayerInfo(i_win_id, j, LAYER_INFO_DISPLAY) <> 0 Then
+								cells_display_status(i) = True
+							End If
+						ElseIf LayerInfo(i_win_id, j, LAYER_INFO_NAME) = sites_sys(i) Then
+							sites_map_status(i) = True
+							If LayerInfo(i_win_id, j, LAYER_INFO_DISPLAY) <> 0 Then
+								sites_display_status(i) = True
+							End If
+						End If
+					Next
+				End If
+			End If
+		Next
+	End If	
+
+
+general_returnpoint:
+	Exit Sub
+
+' All the error handling shite is here
+'-----------------------------------------------------------
+general_error:
+Note "There was an error checking tables, details are... " + error$()
+Resume general_returnpoint
+
+closed_cells:
+Resume returnpoint_cells
+
+closed_sites:
+Resume returnpoint_sites
+
+'file_used:
+'Note "The input file is being used by another program, close it and try again!"
+'Resume returnpoint_1
+
+End Sub	
+'---------------------------------------------------

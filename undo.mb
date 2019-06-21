@@ -1,0 +1,455 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub pre_undo_sub
+Declare Sub undo_az_sub
+Declare Sub undo_delete_site_sub
+Declare Sub undo_move_sub
+Declare Sub date_check_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+Declare Sub prepare_nbr_sub
+Declare Sub draw_cells_sub
+Declare Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+
+
+'---------------------------------------------------
+Sub pre_undo_sub
+Dim i_win_id As String	
+
+
+Onerror goto no_mapper
+	'This cancels the sub if there is no mapper as the top window
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+returnpoint1:
+		Exit Sub
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call prepare_nbr_sub
+
+	Call check_tables_sub
+
+	If undo_type = "az" then
+		Call undo_az_sub
+	ElseIf undo_type = "move" then
+		Call undo_move_sub
+	ElseIf undo_type = "delete_cell" or undo_type = "delete_site" or undo_type = "delete_only_cell" Then
+		Call undo_delete_site_sub
+	Else
+		note "There is nothing to undo!"
+	End If
+
+	'Resets undo info here to remove memory effect
+	'------------------------
+	undo_type = ""
+
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'--------------
+no_mapper:
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for undo az mode
+'---------------------------------------------------
+Sub undo_az_sub
+Dim finalx, finaly, shiftx, shifty, x, y, x2, y2 As Float
+Dim row_id_cell(10), row_id_site(10), h, i, j, k, l, m, i_found, i_row_id, i_win_id As Integer
+Dim sitex, namex, cellx, pnx, bsicx, zcrsx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, sitex2, namex2, cellx2, pnx2, bsicx2, zcrsx2, htx2, mdtx2, edtx2, azx2, statusx2, commentx2, hbwx2, sizex2, typex As String
+Dim sector2, sector1, center, endpnt, sel, sector, temppnt As Object
+Dim table_selected_alias, cell_data_alias As Alias
+Dim table_selected As String
+
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+	site_update = False
+
+	' This all determines whether the correct tables are open
+	' -----------------------------------------------------------
+	For i = 1 to 10
+		ok_cells_sys(i) = "Off"
+		If undo_cell_table = cells_sys(i) Then
+			If is_open_cells_sys(i) = "Off" Then
+				Note "You need to have the "+cells_sys(i)+" table open to undo the az change"
+			Exit Sub
+			End if
+			ok_cells_sys(i) = "On"
+		End If
+
+		'if the undo refers to the sys(i) table we go here
+		'---------------------------------------------------
+		If ok_cells_sys(i) = "On" Then
+
+			Fetch First from cells_sys(i)
+			Do While Not EOT (cells_sys(i))
+				cell_data_alias = cells_sys(i) + ".cell"	
+				If cell_data_alias = undo_cellid Then
+					cell_data_alias = cells_sys(i) + ".rowid"	
+					row_id_cell(1) = cell_data_alias
+					Exit Do
+				End If
+				Fetch Next from cells_sys(i)
+			Loop
+
+			Fetch  Rec row_id_cell(1) From cells_sys(i)
+				cell_data_alias = cells_sys(i) + ".status"	
+				statusx = cell_data_alias
+				cell_data_alias = cells_sys(i) + ".LON"	
+				finalx = cell_data_alias
+				cell_data_alias = cells_sys(i) + ".LAT"	
+				finaly = cell_data_alias
+				azx = str$(undo_az)			
+
+			' this changes the lat/lon for the selected sector in the cells_sys(i) table
+			'---------------------------------------
+			Update cells_sys(i) 
+				Set Az = undo_az
+				Where rowid = row_id_cell(1)
+
+			' this does the changing of the objects
+			'-------------------------------------------
+			'This draws the new object at the new co-ordinates
+			'----------------------------------------------------------
+			cell_data_alias = cells_sys(i) + ".ANT_HBW"
+			hbwx = cell_data_alias
+			cell_data_alias = cells_sys(i) + ".OBJ_SIZE"
+			sizex = cell_data_alias
+			cell_data_alias = cells_sys(i) + ".Type"
+			typex = cell_data_alias
+
+			'############################################
+			Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx, typex, sector1)
+			'############################################
+
+			' Put here the different colouring options based on status
+			'--------------------------
+			If statusx = "On-Air" Then
+				Alter Object sector1 
+				Info OBJ_INFO_BRUSH, brush_on_air(i)
+				Alter Object sector1 
+				Info OBJ_INFO_PEN, pen_on_air(i)
+			Else
+				Alter Object sector1 
+				Info OBJ_INFO_BRUSH, brush_not_on_air(i)
+				Alter Object sector1 
+				Info OBJ_INFO_PEN, pen_not_on_air(i)			
+			End If
+
+			Update cells_sys(i)
+				Set obj = sector1 
+				Where rowid = row_id_cell(1)
+
+			Exit Sub
+		End If
+	Next
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for site move mode
+'---------------------------------------------------
+Sub undo_move_sub
+Dim finalx, finaly, shiftx, shifty, x, y, x2, y2 As Float
+Dim row_id_cell(10), row_id_site(10), h, i, j, k, l, m, i_found, i_row_id, i_win_id As Integer
+Dim sitex, namex, cellx, pnx, bsicx, zcrsx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, sitex2, namex2, cellx2, pnx2, bsicx2, zcrsx2, htx2, mdtx2, edtx2, azx2, statusx2, commentx2, hbwx2, sizex2, typex As String
+Dim sector2, sector1, center, endpnt, sel, sector, temppnt As Object
+Dim shift_move As Logical
+Dim table_selected_alias, cell_data_alias As Alias
+Dim table_selected As String
+
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+	site_update = False
+
+	' This all determines whether the correct tables are open
+	' -----------------------------------------------------------
+	For i = 1 to 10
+		ok_cells_sys(i) = "Off"
+		If undo_cell_table = cells_sys(i) Then
+			If is_open_cells_sys(i) = "Off" Then
+				Note "You need to have the "+cells_sys(i)+" table open to undo the move"
+				Exit Sub
+			ElseIf undo_shift_move = false and is_open_sites_sys(i) = "Off" Then           'then the move was for the whole site
+				If Ask("The "+sites_sys(i)+" table is closed.  If you continue, only the "+cells_sys(i)+" table will be updated.","Continue","Cancel") = False Then
+					Exit Sub
+				End If
+			End if
+			ok_cells_sys(i) = "On"
+		End If
+
+		'if the undo refers to the sys(i) table we go here
+		'---------------------------------------------------
+		If ok_cells_sys(i) = "On" Then
+
+			If undo_shift_move = False Then    	' this finds the row ids of all the sites sectors
+				Fetch First from cells_sys(i)
+				k = 0
+				Do While Not EOT (cells_sys(i))
+					cell_data_alias = cells_sys(i) + ".site"	
+					If cell_data_alias = undo_siteid Then
+						k = k + 1
+						cell_data_alias = cells_sys(i) + ".rowid"	
+						row_id_cell(k) = cell_data_alias
+					End If
+					Fetch Next from cells_sys(i)
+				Loop
+
+				If is_open_sites_sys(i) = "On" Then			
+					Fetch First from sites_sys(i)        ' this finds the row ids of the site in the site table
+					l = 0
+					Do While Not EOT (sites_sys(i))
+						cell_data_alias = sites_sys(i) + ".site"	
+						If cell_data_alias = undo_siteid Then
+							l = l + 1
+							cell_data_alias = sites_sys(i) + ".rowid"	
+							row_id_site(l) = cell_data_alias
+						End If
+						Fetch Next from sites_sys(i)
+					Loop
+
+					For j = 1 to l                      ' this shifts the site object in the site table
+						Fetch  Rec row_id_site(j) From sites_sys(i)
+							cell_data_alias = sites_sys(i) + ".status"	
+							statusx = cell_data_alias
+							cell_data_alias = sites_sys(i) + ".LON"	
+							finalx = cell_data_alias - undo_shiftx
+							cell_data_alias = sites_sys(i) + ".LAT"	
+							finaly = cell_data_alias - undo_shifty
+
+						' this changes the lat/lon for the selected site in the sites_sys(1) table
+						'---------------------------------------
+						Update sites_sys(i) 
+							Set LON = finalx, LAT = finaly
+							Where rowid = row_id_site(j)
+
+						' This does the changing of the objects
+						'-------------------------------------------
+						'This draws the new object at the new co-ordinates
+						'----------------------------------------------------------
+						sector1 = CreatePoint(finalx, finaly)
+
+						If statusx = "On-Air" Then
+							Alter Object sector1
+							Info OBJ_INFO_SYMBOL, sym_on_air(i)
+						Else
+							Alter Object sector1
+							Info OBJ_INFO_SYMBOL, sym_not_on_air(i)
+						End If
+						Update sites_sys(i)
+
+							Set obj = sector1 where rowid = row_id_site(j)
+					Next
+				End If
+
+			Else            							' this finds the row ids of the selected sector only
+				Fetch First from cells_sys(i)
+				k = 0
+				Do While Not EOT (cells_sys(i))
+					cell_data_alias = cells_sys(i) + ".cell"	
+					If cell_data_alias = undo_cellid Then
+						k = k + 1
+						cell_data_alias = cells_sys(i) + ".rowid"	
+						row_id_cell(k) = cell_data_alias
+					End If
+					Fetch Next from cells_sys(i)
+				Loop
+			End If
+
+			For j = 1 to k
+				Fetch  Rec row_id_cell(j) From cells_sys(i)
+					cell_data_alias = cells_sys(i) + ".status"	
+					statusx = cell_data_alias
+					cell_data_alias = cells_sys(i) + ".LON"	
+					finalx = cell_data_alias - undo_shiftx
+					cell_data_alias = cells_sys(i) + ".LAT"	
+					finaly = cell_data_alias - undo_shifty
+
+				' this changes the lat/lon for the selected sector in the cells_sys(i) table
+				'---------------------------------------
+				Update cells_sys(i) 
+					Set LON = finalx, LAT = finaly
+					Where rowid = row_id_cell(j)
+
+				' this does the changing of the objects
+				'-------------------------------------------
+				'This draws the new object at the new co-ordinates
+				'----------------------------------------------------------
+				cell_data_alias = cells_sys(i) + ".ANT_HBW"
+				hbwx = cell_data_alias
+				cell_data_alias = cells_sys(i) + ".OBJ_SIZE"
+				sizex = cell_data_alias
+				cell_data_alias = cells_sys(i) + ".AZ"
+				azx = cell_data_alias
+				cell_data_alias = cells_sys(i) + ".Type"
+				typex = cell_data_alias
+
+				'############################################
+				Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx, typex, sector1)
+				'############################################
+
+				' Put here the different colouring options based on status
+				'--------------------------
+				If statusx = "On-Air" Then
+					Alter Object sector1 
+					Info OBJ_INFO_BRUSH, brush_on_air(i)
+					Alter Object sector1 
+					Info OBJ_INFO_PEN, pen_on_air(i)
+				Else
+					Alter Object sector1 
+					Info OBJ_INFO_BRUSH, brush_not_on_air(i)
+					Alter Object sector1 
+					Info OBJ_INFO_PEN, pen_not_on_air(i)			
+				End If
+
+				Update cells_sys(i)
+					Set obj = sector1 Where rowid = row_id_cell(j)
+			Next
+			Exit Sub
+		End If
+	Next
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for undoing a deleted site
+'---------------------------------------------------
+Sub undo_delete_site_sub
+Dim h, i, j, k, l, m As Integer
+
+
+Onerror Goto general_error
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	' This all determines whether the correct tables are open
+	' -----------------------------------------------------------
+	For i = 1 to 10
+		ok_cells_sys(i) = "Off"
+		If undo_cell_table = cells_sys(i) Then
+			If is_open_cells_sys(i) = "Off" or is_open_sites_sys(i) = "Off" Then
+				Note "The "+cells_sys(i)+" & "+sites_sys(i)+" tables must be open to undo the delete"
+				Exit Sub
+			End If
+			ok_cells_sys(i) = "On"     'check if need this
+		End If
+
+		If ok_cells_sys(i) = "On" Then
+			If undo_type = "delete_site" Then         			'we have to add back the site and all cells
+				'Inserts the site
+				'---------------------
+				Insert Into undo_site_table (Site, Sitename, System, Status, Type, LON, LAT, Ht)
+					Values (undo_siteid, undo_site_name, undo_site_sys, undo_site_status, undo_site_type, undo_site_lon, undo_site_lat, undo_site_ht)
+
+				'Inserts the cell/s
+				'-------------------
+				For h = 1 to 10
+					If undo_cell_data((h-1)*20+1) = "null" Then
+						Exit For
+					Else			'we have a cell
+						Insert Into undo_cell_table (Site, Sitename, Cell, System, Status, Type, PCI_SC_BCCH_PN, ZCRS_BSIC, ZCRS_Cnt, LON, LAT, Az, Ant_HBW, Ant_type, MDT, EDT, Ht, Obj_Size, Comment)
+							Values (undo_siteid, undo_site_name, undo_cell_data((h-1)*20+1), undo_cell_data((h-1)*20+3), undo_cell_data((h-1)*20+4), undo_cell_data((h-1)*20+1), undo_cell_data((h-1)*20+5), undo_cell_data((h-1)*20+6),  undo_cell_data((h-1)*20+7), undo_cell_data_lon(h), undo_cell_data_lat(h), undo_cell_data((h-1)*20+9), undo_cell_data((h-1)*20+10), undo_cell_data((h-1)*20+11), undo_cell_data((h-1)*20+12), undo_cell_data((h-1)*20+13), undo_cell_data((h-1)*20+14), undo_cell_data((h-1)*20+15), undo_cell_data((h-1)*20+16))
+					End If
+				Next
+
+			ElseIf undo_type = "delete_cell" Then        		'we only have to add back 1 cell
+				'Inserts the cell
+				'-------------------
+				h = 1
+				Insert Into undo_cell_table (Site, Sitename, Cell, System, Status, Type, PCI_SC_BCCH_PN, ZCRS_BSIC, ZCRS_Cnt, LON, LAT, Az, Ant_HBW, Ant_type, MDT, EDT, Ht, Obj_Size, Comment)
+					Values (undo_siteid, undo_site_name, undo_cell_data((h-1)*20+1), undo_cell_data((h-1)*20+3), undo_cell_data((h-1)*20+4), undo_cell_data((h-1)*20+1), undo_cell_data((h-1)*20+5), undo_cell_data((h-1)*20+6), undo_cell_data((h-1)*20+7), undo_cell_data_lon(h), undo_cell_data_lat(h), undo_cell_data((h-1)*20+9),	undo_cell_data((h-1)*20+10), undo_cell_data((h-1)*20+11), undo_cell_data((h-1)*20+12), undo_cell_data((h-1)*20+13), undo_cell_data((h-1)*20+14), undo_cell_data((h-1)*20+15),	undo_cell_data((h-1)*20+16))
+
+			ElseIf undo_type = "delete_only_cell" Then          'we have to add back the site and only cell
+				'Inserts the site
+				'---------------------
+				Insert Into undo_site_table (Site, Sitename, System, Status, Type, LON, LAT, Ht)
+					Values (undo_siteid, undo_site_name, undo_site_sys, undo_site_status, undo_site_type, undo_site_lon, undo_site_lat, undo_site_ht)
+
+				'Inserts the cell
+				'-------------------
+				h = 1
+				Insert Into undo_cell_table (Site, Sitename, Cell, System, Status, Type, PCI_SC_BCCH_PN, ZCRS_BSIC, ZCRS_Cnt, LON, LAT, Az, Ant_HBW, Ant_type, MDT, EDT, Ht, Obj_Size, Comment)
+					Values (undo_siteid, undo_site_name, undo_cell_data((h-1)*20+1), undo_cell_data((h-1)*20+3), undo_cell_data((h-1)*20+4), undo_cell_data((h-1)*20+1), undo_cell_data((h-1)*20+5), undo_cell_data((h-1)*20+6), undo_cell_data((h-1)*20+7), undo_cell_data_lon(h), undo_cell_data_lat(h), undo_cell_data((h-1)*20+9),	undo_cell_data((h-1)*20+10), undo_cell_data((h-1)*20+11), undo_cell_data((h-1)*20+12), undo_cell_data((h-1)*20+13), undo_cell_data((h-1)*20+14), undo_cell_data((h-1)*20+15),	undo_cell_data((h-1)*20+16))
+
+			End If
+
+			'This draws the objects (NOTE: this will redraw the last site in the site table each time even if it is not a freshly added site, it is ok, though, it is fast and will just overwrite the old object....)
+			'------------------------
+			draw_subset_flag = True
+			undo_delete_flag = True
+			Call draw_cells_sub
+			undo_delete_flag = False
+			draw_subset_flag = False
+
+		End If
+	Next
+
+returnpoint1:
+
+Exit Sub
+
+
+'Error Handler
+'-----------------
+general_error:
+Note "Error details are: "+error$()
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+

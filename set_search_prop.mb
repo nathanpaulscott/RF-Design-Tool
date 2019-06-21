@@ -1,0 +1,171 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_search_prop_sub
+
+
+
+'---------------------------------------------------
+' this lets the user set the current pn/sc/bcch/bsic search properties
+'---------------------------------------------------
+Sub set_search_prop_sub
+Dim radio_co_adj, radio_temp, i As Integer
+Dim pn_inc_s, pci_mod_s, dist_s As String
+
+
+
+	If find_co_type = "PCI" Then
+		radio_temp = 1
+	Elseif find_co_type = "ZCRS" Then
+		radio_temp = 2
+	Elseif find_co_type = "SC" Then
+		radio_temp = 3
+	Elseif find_co_type = "PN" Then
+		radio_temp = 4
+	Elseif find_co_type = "BCCH" Then
+		radio_temp = 5
+	Elseif find_co_type = "BSIC" Then
+		radio_temp = 6
+	End If
+
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "Please set your PCI/ZCRS/SC/PN/BCCH/BSIC Search Preferences." width 222 height 320
+
+	Control GroupBox
+	Title "Parameter to Search"
+	Position 10, 10 Width 200 Height 100
+
+	Control RadioGroup
+	Title "PCI;ZCRS;SC;PN;BCCH;BSIC"
+	Position 20, 23 Width 35 
+	Value radio_temp
+	Into radio_temp
+
+	Control Checkbox
+	Title "Show Modulo N"
+	Position 60, 24 Width 70
+	Value find_co_use_pci_mod
+	Into find_co_use_pci_mod
+	Control StaticText
+	Title "Modulo:"
+	Position 147, 24
+	Control EditText
+	Position 175, 23 Width 20
+	Value find_co_pci_mod
+	Into pci_mod_s
+
+	Control Checkbox
+	Title "Include ZCRS Count"
+	Position 60, 37 Width 80
+	Value find_co_use_zcrs_count
+	Into find_co_use_zcrs_count
+
+	Control Checkbox
+	Title "Show Adjacent PN"
+	Position 60, 65 Width 70
+	Value find_co_show_adj_pn
+	Into find_co_show_adj_pn
+	Control StaticText
+	Title "PNinc:"
+	Position 150, 65
+	Control EditText
+	Position 175, 64 Width 20
+	Value find_co_pn_inc
+	Into pn_inc_s
+
+	Control Checkbox
+	Title "Include BSIC"
+	Position 60, 79 Width 60
+	Value find_co_incl_bsic
+	Into find_co_incl_bsic
+	Control Checkbox
+	Title "Show Adjacent BCCH"
+	Position 120, 79 Width 80
+	Value find_co_show_adj_bcch
+	Into find_co_show_adj_bcch
+
+	Control StaticText
+	Title "Max Dist (km) for Search:"
+	Position 15, 120
+	Control EditText
+	Position 100, 118 Width 25
+	Value find_co_dist
+	Into dist_s
+
+	Control OKButton
+	Position 30, 140
+	Control CancelButton
+	Position 150, 140
+
+	Control StaticText
+	Title "The PCI modulo function will show all modulo versions of a PCI"
+	Position 10, 165
+	Control StaticText
+	Title ""
+	Position 10, 175
+	Control StaticText
+	Title "The ZCRS cnt fn shows all other cell ZCRS that are"
+	Position 10, 185
+	Control StaticText
+	Title "possibly co ZCRS with the host, including all counts"
+	Position 10, 195
+	Control StaticText
+	Title "NOTE: HW only allows you to specify the ZCRS, but not"
+	Position 10, 205
+	Control StaticText
+	Title "the count, its not parameterised, but during planning"
+	Position 10, 215
+	Control StaticText
+	Title "this is derived from the cell radius.  In operation, the HW"
+	Position 10, 225
+	Control StaticText
+	Title "eNB uses a CP => number of ZCRS that it needs based on the dist"
+	Position 10, 235
+	Control StaticText
+	Title "of users accessing the cell, so if we assume 10km cell rad,"
+	Position 10, 245
+	Control StaticText
+	Title "we should set the count to that needed for 10km etc etc"
+	Position 10, 255
+	Control StaticText
+	Title "so for analysis, we should set the count to the expected cell"
+	Position 10, 265
+	Control StaticText
+	Title "radius based on the cell plan and then test the ZCRS plan"
+	Position 10, 275
+	Control StaticText
+	Title "We need to calc to convert expected cell radius in km to"
+	Position 10, 285
+	Control StaticText
+	Title "number of ZCRS required (ZCRS_Cnt)"
+	Position 10, 295
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Exit Sub
+	End If
+
+	find_co_pci_mod = Val(pci_mod_s)
+	find_co_pn_inc = Val(pn_inc_s)
+	find_co_dist = Val(dist_s)
+
+	If radio_temp = 1 Then
+		find_co_type = "PCI"
+	Elseif radio_temp = 2 Then
+		find_co_type = "ZCRS"
+	Elseif radio_temp = 3 Then
+		find_co_type = "SC"
+	Elseif radio_temp = 4 Then
+		find_co_type = "PN"
+	Elseif radio_temp = 5 Then
+		find_co_type = "BCCH"
+	Elseif radio_temp = 6 Then
+		find_co_type = "BSIC"
+	End If
+
+End Sub
+'---------------------------------------------------
+

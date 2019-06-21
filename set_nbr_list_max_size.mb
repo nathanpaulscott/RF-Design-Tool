@@ -1,0 +1,551 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_nl_max_size_sub
+
+
+
+'--------------------------------------------
+'This lets the user edit the max nl size matrix values
+'---------------------------------------------
+Sub set_nl_max_size_sub
+Dim i, j, k, space_h, start_h, space_v, start_v As Integer
+
+	space_h = 40
+	start_h = 40
+	space_v = 20
+	start_v = 20
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "Please Set Max NL Sizes" width 480 height 270
+
+	Control GroupBox
+	Title sys(1) 
+	Position start_h, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(2) 
+	Position start_h+space_h*1, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(3)
+	Position start_h+space_h*2, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(4) 
+	Position start_h+space_h*3, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(5) 
+	Position start_h+space_h*4, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(6) 
+	Position start_h+space_h*5, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(7) 
+	Position start_h+space_h*6, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(8) 
+	Position start_h+space_h*7, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(9) 
+	Position start_h+space_h*8, 10 Width space_h Height 215
+
+	Control GroupBox
+	Title sys(10) 
+	Position start_h+space_h*9, 10 Width space_h Height 215
+
+
+	Control StaticText
+	Title sys(1)
+	Position 10, start_v+8
+	Control GroupBox
+	Position start_h, start_v Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(2)
+	Position 10, start_v+space_v*1+8
+	Control GroupBox
+	Position start_h, start_v+space_v*1 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(3)
+	Position 10, start_v+space_v*2+8
+	Control GroupBox
+	Position start_h, start_v+space_v*2 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(4)
+	Position 10, start_v+space_v*3+8
+	Control GroupBox
+	Position start_h, start_v+space_v*3 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(5)
+	Position 10, start_v+space_v*4+8
+	Control GroupBox
+	Position start_h, start_v+space_v*4 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(6)
+	Position 10, start_v+space_v*5+8
+	Control GroupBox
+	Position start_h, start_v+space_v*5 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(7)
+	Position 10, start_v+space_v*6+8
+	Control GroupBox
+	Position start_h, start_v+space_v*6 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(8)
+	Position 10, start_v+space_v*7+8
+	Control GroupBox
+	Position start_h, start_v+space_v*7 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(9)
+	Position 10, start_v+space_v*8+8
+	Control GroupBox
+	Position start_h, start_v+space_v*8 Width space_h*10 height space_v+5
+
+	Control StaticText
+	Title sys(10)
+	Position 10, start_v+space_v*9+8
+	Control GroupBox
+	Position start_h, start_v+space_v*9 Width space_h*10 height space_v+5
+
+	Control EditText
+	Value g_nl_max_size(10*0+1)
+	Into g_nl_max_size(10*0+1)
+	Position start_h+space_h*0+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+2)
+	Into g_nl_max_size(10*0+2)
+	Position start_h+space_h*1+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+3)
+	Into g_nl_max_size(10*0+3)
+	Position start_h+space_h*2+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+4)
+	Into g_nl_max_size(10*0+4)
+	Position start_h+space_h*3+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+5)
+	Into g_nl_max_size(10*0+5)
+	Position start_h+space_h*4+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+6)
+	Into g_nl_max_size(10*0+6)
+	Position start_h+space_h*5+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+7)
+	Into g_nl_max_size(10*0+7)
+	Position start_h+space_h*6+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+8)
+	Into g_nl_max_size(10*0+8)
+	Position start_h+space_h*7+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+9)
+	Into g_nl_max_size(10*0+9)
+	Position start_h+space_h*8+10, start_v+space_v*0+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*0+10)
+	Into g_nl_max_size(10*0+10)
+	Position start_h+space_h*9+10, start_v+space_v*0+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*1+1)
+	Into g_nl_max_size(10*1+1)
+	Position start_h+space_h*0+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+2)
+	Into g_nl_max_size(10*1+2)
+	Position start_h+space_h*1+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+3)
+	Into g_nl_max_size(10*1+3)
+	Position start_h+space_h*2+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+4)
+	Into g_nl_max_size(10*1+4)
+	Position start_h+space_h*3+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+5)
+	Into g_nl_max_size(10*1+5)
+	Position start_h+space_h*4+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+6)
+	Into g_nl_max_size(10*1+6)
+	Position start_h+space_h*5+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+7)
+	Into g_nl_max_size(10*1+7)
+	Position start_h+space_h*6+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+8)
+	Into g_nl_max_size(10*1+8)
+	Position start_h+space_h*7+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+9)
+	Into g_nl_max_size(10*1+9)
+	Position start_h+space_h*8+10, start_v+space_v*1+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*1+10)
+	Into g_nl_max_size(10*1+10)
+	Position start_h+space_h*9+10, start_v+space_v*1+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*2+1)
+	Into g_nl_max_size(10*2+1)
+	Position start_h+space_h*0+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+2)
+	Into g_nl_max_size(10*2+2)
+	Position start_h+space_h*1+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+3)
+	Into g_nl_max_size(10*2+3)
+	Position start_h+space_h*2+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+4)
+	Into g_nl_max_size(10*2+4)
+	Position start_h+space_h*3+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+5)
+	Into g_nl_max_size(10*2+5)
+	Position start_h+space_h*4+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+6)
+	Into g_nl_max_size(10*2+6)
+	Position start_h+space_h*5+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+7)
+	Into g_nl_max_size(10*2+7)
+	Position start_h+space_h*6+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+8)
+	Into g_nl_max_size(10*2+8)
+	Position start_h+space_h*7+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+9)
+	Into g_nl_max_size(10*2+9)
+	Position start_h+space_h*8+10, start_v+space_v*2+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*2+10)
+	Into g_nl_max_size(10*2+10)
+	Position start_h+space_h*9+10, start_v+space_v*2+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*3+1)
+	Into g_nl_max_size(10*3+1)
+	Position start_h+space_h*0+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+2)
+	Into g_nl_max_size(10*3+2)
+	Position start_h+space_h*1+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+3)
+	Into g_nl_max_size(10*3+3)
+	Position start_h+space_h*2+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+4)
+	Into g_nl_max_size(10*3+4)
+	Position start_h+space_h*3+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+5)
+	Into g_nl_max_size(10*3+5)
+	Position start_h+space_h*4+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+6)
+	Into g_nl_max_size(10*3+6)
+	Position start_h+space_h*5+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+7)
+	Into g_nl_max_size(10*3+7)
+	Position start_h+space_h*6+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+8)
+	Into g_nl_max_size(10*3+8)
+	Position start_h+space_h*7+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+9)
+	Into g_nl_max_size(10*3+9)
+	Position start_h+space_h*8+10, start_v+space_v*3+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*3+10)
+	Into g_nl_max_size(10*3+10)
+	Position start_h+space_h*9+10, start_v+space_v*3+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*4+1)
+	Into g_nl_max_size(10*4+1)
+	Position start_h+space_h*0+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+2)
+	Into g_nl_max_size(10*4+2)
+	Position start_h+space_h*1+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+3)
+	Into g_nl_max_size(10*4+3)
+	Position start_h+space_h*2+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+4)
+	Into g_nl_max_size(10*4+4)
+	Position start_h+space_h*3+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+5)
+	Into g_nl_max_size(10*4+5)
+	Position start_h+space_h*4+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+6)
+	Into g_nl_max_size(10*4+6)
+	Position start_h+space_h*5+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+7)
+	Into g_nl_max_size(10*4+7)
+	Position start_h+space_h*6+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+8)
+	Into g_nl_max_size(10*4+8)
+	Position start_h+space_h*7+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+9)
+	Into g_nl_max_size(10*4+9)
+	Position start_h+space_h*8+10, start_v+space_v*4+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*4+10)
+	Into g_nl_max_size(10*4+10)
+	Position start_h+space_h*9+10, start_v+space_v*4+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*5+1)
+	Into g_nl_max_size(10*5+1)
+	Position start_h+space_h*0+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+2)
+	Into g_nl_max_size(10*5+2)
+	Position start_h+space_h*1+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+3)
+	Into g_nl_max_size(10*5+3)
+	Position start_h+space_h*2+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+4)
+	Into g_nl_max_size(10*5+4)
+	Position start_h+space_h*3+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+5)
+	Into g_nl_max_size(10*5+5)
+	Position start_h+space_h*4+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+6)
+	Into g_nl_max_size(10*5+6)
+	Position start_h+space_h*5+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+7)
+	Into g_nl_max_size(10*5+7)
+	Position start_h+space_h*6+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+8)
+	Into g_nl_max_size(10*5+8)
+	Position start_h+space_h*7+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+9)
+	Into g_nl_max_size(10*5+9)
+	Position start_h+space_h*8+10, start_v+space_v*5+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*5+10)
+	Into g_nl_max_size(10*5+10)
+	Position start_h+space_h*9+10, start_v+space_v*5+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*6+1)
+	Into g_nl_max_size(10*6+1)
+	Position start_h+space_h*0+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+2)
+	Into g_nl_max_size(10*6+2)
+	Position start_h+space_h*1+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+3)
+	Into g_nl_max_size(10*6+3)
+	Position start_h+space_h*2+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+4)
+	Into g_nl_max_size(10*6+4)
+	Position start_h+space_h*3+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+5)
+	Into g_nl_max_size(10*6+5)
+	Position start_h+space_h*4+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+6)
+	Into g_nl_max_size(10*6+6)
+	Position start_h+space_h*5+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+7)
+	Into g_nl_max_size(10*6+7)
+	Position start_h+space_h*6+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+8)
+	Into g_nl_max_size(10*6+8)
+	Position start_h+space_h*7+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+9)
+	Into g_nl_max_size(10*6+9)
+	Position start_h+space_h*8+10, start_v+space_v*6+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*6+10)
+	Into g_nl_max_size(10*6+10)
+	Position start_h+space_h*9+10, start_v+space_v*6+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*7+1)
+	Into g_nl_max_size(10*7+1)
+	Position start_h+space_h*0+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+2)
+	Into g_nl_max_size(10*7+2)
+	Position start_h+space_h*1+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+3)
+	Into g_nl_max_size(10*7+3)
+	Position start_h+space_h*2+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+4)
+	Into g_nl_max_size(10*7+4)
+	Position start_h+space_h*3+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+5)
+	Into g_nl_max_size(10*7+5)
+	Position start_h+space_h*4+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+6)
+	Into g_nl_max_size(10*7+6)
+	Position start_h+space_h*5+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+7)
+	Into g_nl_max_size(10*7+7)
+	Position start_h+space_h*6+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+8)
+	Into g_nl_max_size(10*7+8)
+	Position start_h+space_h*7+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+9)
+	Into g_nl_max_size(10*7+9)
+	Position start_h+space_h*8+10, start_v+space_v*7+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*7+10)
+	Into g_nl_max_size(10*7+10)
+	Position start_h+space_h*9+10, start_v+space_v*7+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*8+1)
+	Into g_nl_max_size(10*8+1)
+	Position start_h+space_h*0+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+2)
+	Into g_nl_max_size(10*8+2)
+	Position start_h+space_h*1+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+3)
+	Into g_nl_max_size(10*8+3)
+	Position start_h+space_h*2+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+4)
+	Into g_nl_max_size(10*8+4)
+	Position start_h+space_h*3+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+5)
+	Into g_nl_max_size(10*8+5)
+	Position start_h+space_h*4+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+6)
+	Into g_nl_max_size(10*8+6)
+	Position start_h+space_h*5+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+7)
+	Into g_nl_max_size(10*8+7)
+	Position start_h+space_h*6+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+8)
+	Into g_nl_max_size(10*8+8)
+	Position start_h+space_h*7+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+9)
+	Into g_nl_max_size(10*8+9)
+	Position start_h+space_h*8+10, start_v+space_v*8+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*8+10)
+	Into g_nl_max_size(10*8+10)
+	Position start_h+space_h*9+10, start_v+space_v*8+8 Width 20
+
+	Control EditText
+	Value g_nl_max_size(10*9+1)
+	Into g_nl_max_size(10*9+1)
+	Position start_h+space_h*0+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+2)
+	Into g_nl_max_size(10*9+2)
+	Position start_h+space_h*1+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+3)
+	Into g_nl_max_size(10*9+3)
+	Position start_h+space_h*2+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+4)
+	Into g_nl_max_size(10*9+4)
+	Position start_h+space_h*3+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+5)
+	Into g_nl_max_size(10*9+5)
+	Position start_h+space_h*4+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+6)
+	Into g_nl_max_size(10*9+6)
+	Position start_h+space_h*5+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+7)
+	Into g_nl_max_size(10*9+7)
+	Position start_h+space_h*6+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+8)
+	Into g_nl_max_size(10*9+8)
+	Position start_h+space_h*7+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+9)
+	Into g_nl_max_size(10*9+9)
+	Position start_h+space_h*8+10, start_v+space_v*9+8 Width 20
+	Control EditText
+	Value g_nl_max_size(10*9+10)
+	Into g_nl_max_size(10*9+10)
+	Position start_h+space_h*9+10, start_v+space_v*9+8 Width 20
+
+	Control OKButton
+	Position 150, 240
+	Control CancelButton
+	Position 300, 240
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Exit Sub
+	End If
+
+
+	Exit Sub
+'------------------------------
+
+
+End Sub
+

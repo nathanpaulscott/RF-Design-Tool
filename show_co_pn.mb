@@ -1,0 +1,511 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub show_co_pn_sub
+Declare Sub pre_show_co_pn_sub
+Declare Sub add_nbr_sub
+Declare Sub del_nbr_sub
+Declare Sub prepare_nbr_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+Declare Sub date_check_sub
+Declare Sub set_search_prop_sub
+
+
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+
+'---------------------------------------------------
+Sub pre_show_co_pn_sub
+Dim host_val As String
+Dim i_win_id As String	
+
+
+	i_win_id = FrontWindow()
+
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+
+'---------------------------------------------------
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+OnError Goto closed1
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		Fetch First From nbrs_RFDT
+		host_val = nbrs_RFDT.cell
+	End If
+point1:
+OnError Goto 0
+
+	Call check_tables_sub
+
+	Call show_co_pn_sub
+
+' This is the logic for testing if nbrs_RFDT is open illegally
+'--------------------------------------
+OnError Goto closed2
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+	Else
+point2:
+OnError Goto 0
+		host_val = "nul"
+	End If
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+'	Set Map Redraw On
+	Set Event Processing On
+
+	Exit Sub
+
+
+'-----------------------------------------------------
+Closed1:
+Resume point1
+
+Closed2:
+Resume point2
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this lets the user click on a cell and it shows the co pn or sc or bcch, it also allows it to show adj pn - sc - bcch
+'---------------------------------------------------
+Sub show_co_pn_sub
+Dim distmin, host_zcrs_cnt_sys, host_bsic_sys, host_pn_sys, x, y, x2, y2, x3, y3, xy_ratio, label_dist, size0, size1 As Float
+Dim sysind_selected, num_rows, blank_space_num, host_row_id, nbr_row_id, count, i, j, k, z, i_found, i_row_id, i_win_id As Integer
+Dim table_selected_alias, cell_data_alias as Alias
+Dim sel0, sel, sel2 as object
+Dim line_deleted_flag, finished_flag, layer1, table_selected, found_blank, nbr_val, host_cell, sitex, namex, cellx, pnx, bsicx, zcrsx, typex, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex As String
+Dim c_click, select_ok As Logical
+Dim f_font As Font
+
+
+
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+
+	' this checks that the front window is a mapper
+	'---------------------------------------------------
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the point where the user clicked.
+	'---------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	c_click = CommandInfo(CMD_INFO_CTRL)
+	
+	' the user is using the point-mode tool (this is set in the dialog in main_sub), determine how many objects are at the chosen point.
+	'---------------------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+	If i_found = 0 Then
+		Beep ' No objects found where the user clicked.
+	Else
+		'This shows the cell info, if the CTRL key was pressed while clicking					
+		'-----------------------------------------------------------------------
+		If c_click = True Then
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+
+				' this tests to see which table is open and then which has been selected
+				'-------------------------------------
+				select_ok = False
+				For j = 1 to 10
+					If sys(j) = "" Then
+						Exit For
+					ElseIf table_selected = cells_sys(j) Then
+						select_ok = True
+						Exit For
+					End If
+				Next
+
+				
+				' Fetch the row of the object the user clicked on.
+				'------------------------------------------------------
+				If select_ok = True Then
+					Fetch rec i_row_id From table_selected
+						cell_data_alias = table_selected + ".Site"
+						sitex =  cell_data_alias
+						cell_data_alias = table_selected + ".Sitename"
+						namex = cell_data_alias
+						cell_data_alias = table_selected + ".Cell"
+						cellx = cell_data_alias
+						cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+						pnx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_BSIC"
+						bsicx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_Cnt"
+						zcrsx = cell_data_alias
+						cell_data_alias = table_selected + ".HT"
+						htx = cell_data_alias
+						cell_data_alias = table_selected + ".AZ"
+						azx = cell_data_alias
+						cell_data_alias = table_selected + ".MDT"
+						mdtx = cell_data_alias
+						cell_data_alias = table_selected + ".EDT"
+						edtx = cell_data_alias
+						cell_data_alias = table_selected + ".STATUS"
+						statusx = cell_data_alias
+						cell_data_alias = table_selected + ".Comment"
+						commentx = cell_data_alias
+						cell_data_alias = table_selected + ".ANT_HBW"
+						hbwx = cell_data_alias
+						cell_data_alias = table_selected + ".OBJ_SIZE"
+						sizex = cell_data_alias
+						cell_data_alias = table_selected + ".Type"
+						typex = cell_data_alias
+
+					Dialog Title "View Cells Parameters" width 180 height 290	 Position 20,40
+					Control GroupBox
+					Title "Cell Details" 
+					Position 10, 10 Width 160 Height 55
+					Control StaticText
+					Title "Site:" Position 15, 20
+					Control StaticText
+					Title sitex Position 75, 20
+					Control StaticText
+					Title "Site Name:" Position 15, 35
+					Control StaticText
+					Title namex Position 75, 35
+					Control StaticText
+					Title "Cell ID:" Position 15, 50
+					Control StaticText
+					Title cellx Position 75, 50
+					Control StaticText
+					Title "Pci/Sc/Pn/Bcch:" Position 15, 75
+					Control StaticText
+					Title pnx Position 75, 75 
+					Control StaticText
+					Title "Zcrs/Bsic:" Position 15, 90
+					Control StaticText
+					Title bsicx Position 75, 90
+					Control StaticText
+					Title "Cnt:" Position 110, 90
+					Control StaticText
+					Title zcrsx Position 125, 90
+					Control StaticText
+					Title "Azimuth (deg):" Position 15, 105
+					Control StaticText
+					Title azx Position 75, 105
+					Control StaticText
+					Title "Ant HBW (deg):" Position 15, 120
+					Control StaticText
+					Title hbwx Position 75, 120
+					Control StaticText
+					Title "Object Size (m):" Position 15, 135
+					Control StaticText
+					Title sizex Position 75, 135
+					Control StaticText
+					Title "Height (m/ft):" Position 15, 150
+					Control StaticText
+					Title htx Position 75, 150
+					Control StaticText
+					Title "MDT (deg):" Position 15, 165
+					Control StaticText
+					Title mdtx Position 75, 165
+					Control StaticText
+					Title "EDT (deg):" Position 15, 180
+					Control StaticText
+					Title edtx Position 75, 180
+					Control StaticText
+					Title "Status:" Position 15, 195
+					Control StaticText
+					Title statusx Position 75, 195
+					Control StaticText
+					Title "Comments:" Position 15, 210
+					Control StaticText
+					Title Commentx Position 75, 210
+					Control StaticText
+					Title "Type:" Position 15, 225
+					Control StaticText
+					Title typex Position 75, 225
+
+					Control OKButton
+					Position 60, 250
+
+					If CommandInfo(CMD_INFO_DLG_OK) = True Then
+						Exit Sub
+					End If
+				End If
+			Next
+
+
+		'This is regular mode
+		'-----------------------------
+		Else
+'			Set Map Redraw Off
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+				select_ok = False
+				For j = 1 to 10
+					If sys(j) = "" Then
+						Exit For
+					ElseIf table_selected = cells_sys(j) Then
+						sysind_selected = j
+						select_ok = True
+						Exit For									' Now we have the name of the table we process it
+					End If
+				Next
+
+				'if the point clicked on contains an object of the table cells_sys(x), we process it
+				'---------------------------------------------------
+				If select_ok = True Then
+					host_row_id = i_row_id
+
+					Call prepare_nbr_sub
+
+					Select * From table_selected Where rowid = i_row_id Into query1
+					Commit Table query1 As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+					Close Table query1
+					Open Table pf_user_path & "nbrs_RFDT.TAB"
+					Add Map Layer nbrs_RFDT
+
+
+					' this changes the display properties of the host object in the nbrs_RFDT table
+					'-------------------------------------------------------------------------------
+					Fetch First from nbrs_RFDT
+					sel = nbrs_RFDT.obj
+					x = centroidx(nbrs_RFDT.obj)
+					y = centroidy(nbrs_RFDT.obj)
+					size0 = nbrs_RFDT.Obj_Size
+					host_pn_sys = nbrs_RFDT.PCI_SC_BCCH_PN
+					host_bsic_sys = nbrs_RFDT.ZCRS_BSIC
+					host_zcrs_cnt_sys = nbrs_RFDT.ZCRS_Cnt
+					host_cell = nbrs_RFDT.Cell
+					Alter Object sel 
+						Info OBJ_INFO_BRUSH, brush_host(sysind_selected)
+						Info OBJ_INFO_PEN, pen_host(sysind_selected)
+					Update nbrs_RFDT
+						set obj = sel where rowid = 1
+
+					'-------------------------------------
+					'this is the actual query engine
+					'-------------------------------------
+					If find_co_type = "PCI" Then
+						If NOT find_co_use_pci_mod Then			
+							'This is the regular co PCI case
+							'--------------------------------
+							Select * From table_selected Where PCI_SC_BCCH_PN = host_pn_sys And Cell <> host_cell Into query1
+						Else		
+							'This is the modulo N PCI case (will not show the co in this case, only the modulo PCIs)
+							'---------------------------------------------------------------------------------------
+							Select * From table_selected Where Abs((host_pn_sys - PCI_SC_BCCH_PN) / find_co_pci_mod) - Abs(Fix((host_pn_sys - PCI_SC_BCCH_PN) / find_co_pci_mod)) = 0 AND Cell <> host_cell Into query1
+						End If
+						Insert Into nbrs_RFDT 
+							Select * From query1
+						Close Table query1
+					ElseIf find_co_type = "ZCRS" Then
+						If find_co_use_zcrs_count Then
+							For z = 1 to 100
+								If z > 5 Then
+									Select * From table_selected Where ZCRS_Cnt >= (z-1) Into query1
+									If TableInfo(query1,TAB_INFO_NROWS) = 0 Then
+										Close Table query1
+										Exit For
+									End If
+									Close Table query1
+								End If
+								Select * From table_selected Where ZCRS_Cnt >= (z-1) And ZCRS_BSIC >= host_bsic_sys - (z-1) And ZCRS_BSIC < host_bsic_sys + host_zcrs_cnt_sys - (z-1) And Cell <> host_cell Into query1
+								If TableInfo(query1,TAB_INFO_NROWS) > 0 Then
+									Insert Into nbrs_RFDT 
+										Select * From query1
+								End If
+								Close Table query1
+							Next
+						Else
+							Select * From table_selected Where ZCRS_BSIC >= host_bsic_sys And Cell <> host_cell Into query1
+							Insert Into nbrs_RFDT 
+								Select * From query1
+							Close Table query1
+						End If
+					ElseIf find_co_type = "SC" Then
+						Select * From table_selected Where PCI_SC_BCCH_PN = host_pn_sys And Cell <> host_cell Into query1
+						Insert Into nbrs_RFDT 
+							Select * From query1
+						Close Table query1
+					ElseIf find_co_type = "PN" Then
+						If NOT find_co_show_adj_pn TheN
+							'This is the regular co PN case
+							'------------------------------
+							Select * From table_selected Where PCI_SC_BCCH_PN = host_pn_sys And Cell <> host_cell Into query1
+						Else
+							'This is the adjacent PN case, uses PN inc to show the 2 PNs on either side of the co PN (separated by the PN inc)
+							'-------------------------------------------------------------------------------------------------------------
+							Select * From table_selected Where (PCI_SC_BCCH_PN = (host_pn_sys + find_co_pn_inc) Or PCI_SC_BCCH_PN = (host_pn_sys - find_co_pn_inc)) And Cell <> host_cell Into query1
+						End If
+						Insert Into nbrs_RFDT 
+							Select * From query1
+						Close Table query1
+					ElseIf find_co_type = "BCCH" Then
+						If NOT find_co_show_adj_bcch Then
+							'find co BCCH case
+							'----------------------
+							If NOT find_co_incl_bsic Then
+								Select * From table_selected Where PCI_SC_BCCH_PN = host_pn_sys And Cell <> host_cell Into query1
+							Else
+								Select * From table_selected Where PCI_SC_BCCH_PN = host_pn_sys And ZCRS_BSIC = host_bsic_sys And Cell <> host_cell Into query1
+							End If
+						Else
+							'find adj BCCH case
+							'----------------------
+							If NOT find_co_incl_bsic Then
+								Select * From table_selected Where (PCI_SC_BCCH_PN = (host_pn_sys + 1) Or PCI_SC_BCCH_PN = (host_pn_sys - 1)) And Cell <> host_cell Into query1
+							Else
+								Select * From table_selected Where (PCI_SC_BCCH_PN = (host_pn_sys + 1) Or PCI_SC_BCCH_PN = (host_pn_sys - 1)) And ZCRS_BSIC = host_bsic_sys And Cell <> host_cell Into query1
+							End If
+						End If
+						Insert Into nbrs_RFDT 
+							Select * From query1
+						Close Table query1
+					ElseIf find_co_type = "BSIC" Then
+						Select * From table_selected Where ZCRS_BSIC = host_bsic_sys And Cell <> host_cell Into query1
+						Insert Into nbrs_RFDT 
+							Select * From query1
+						Close Table query1
+					End If
+					'-------------------------------------
+					'at this point the queried results will be in nbrs_RFDT
+					'-------------------------------------
+
+					Fetch Last from nbrs_RFDT
+						nbr_row_id = nbrs_RFDT.rowid
+					For k = 2 to nbr_row_id
+						If nbr_lines_flag Then
+							Fetch rec k from nbrs_RFDT	
+							x2 = centroidx(nbrs_RFDT.obj)
+							y2 = centroidy(nbrs_RFDT.obj)
+							size1 = nbrs_RFDT.Obj_Size
+							nbr_val = nbrs_RFDT.cell
+
+
+							'this checks that the dist is acceptable before adding the line
+							'----------------------------------------------------------------
+							If Distance(x,y,x2,y2,"km") < find_co_dist Then
+								Insert Into nbrs_RFDT (Cell, System, obj)
+									Values (nbr_val,sys(j),CreateLine(x, y, x2, y2))
+								Fetch rec k from nbrs_RFDT
+									sel = nbrs_RFDT.obj
+								Alter Object sel 
+									Info OBJ_INFO_BRUSH, brush_nbr(sysind_selected)
+									Info OBJ_INFO_PEN, pen_nbr(sysind_selected)
+								Update nbrs_RFDT
+									set obj = sel where rowid = k
+								Fetch Last from nbrs_RFDT
+									sel = nbrs_RFDT.obj
+								Alter Object sel
+									Info OBJ_INFO_PEN, pen_connector(sysind_selected) 
+								Update nbrs_RFDT
+									set obj = sel where rowid = nbrs_RFDT.rowid
+
+'-----------------------------
+								'Add Text
+								'--------------------
+								distmin = distance(x,y,x2,y2,"km")
+								xy_ratio = abs((y2-y))/abs((x2-x))
+								label_dist = 500           'the labels will be this many m along their lines
+								x3 = sqr((label_dist/Z_x)^2/(1+xy_ratio^2))
+								y3 = xy_ratio*x3
+								If x2 < x Then
+									x3 = x - x3
+								Else
+									x3 = x + x3
+								End If
+								If y2 < y Then
+									y3 = y - y3
+								Else
+									y3 = y + y3
+								End If
+
+								f_font = CurrentFont()
+								Set Style Font font_for_search
+								sel0 = CreateText(i_win_id,x3,y3,Str$(Round(distmin,0.1))+"km",0,0,0)
+								Insert Into nbrs_RFDT (obj)
+									Values (sel0)			
+								Set Style Font f_font
+'-----------------------------
+
+							Else
+								Fetch rec k from nbrs_RFDT
+								sel = nbrs_RFDT.obj
+								Alter Object sel 
+									Info OBJ_INFO_BRUSH, brush_nbr(sysind_selected)
+									Info OBJ_INFO_PEN, pen_nbr(sysind_selected)
+								Update nbrs_RFDT
+									set obj = sel where rowid = k
+							End If
+						Else
+							Fetch rec k from nbrs_RFDT
+								sel = nbrs_RFDT.obj
+							Alter Object sel 
+								Info OBJ_INFO_BRUSH, brush_nbr(sysind_selected)
+								Info OBJ_INFO_PEN, pen_nbr(sysind_selected)
+							Update nbrs_RFDT
+								set obj = sel where rowid = k
+						End If
+					Next
+					Exit For
+				End If
+			Next
+		End If
+	End If
+
+End Sub
+'------------------------------------

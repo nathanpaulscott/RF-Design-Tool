@@ -1,0 +1,571 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub find_site_sub
+Declare Sub pre_find_site_sub
+Declare Sub check_tables_sub
+Declare Sub test_nbrq1_sub
+Declare Sub date_check_sub
+
+
+
+
+
+'---------------------------------------------------
+' 
+'---------------------------------------------------
+Sub pre_find_site_sub
+'---------------------------------------------------
+	' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check 		'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call find_site_sub
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this allows the user to search for a cell/site by cellid, siteid, name or pn/sc/bcch...  for the name option, it finds the closest match
+'---------------------------------------------------
+Sub find_site_sub
+Dim x, y, x2, y2, x3, y3, xmin, ymin, distmin, size0, size1, max_dist As Float
+Dim host_row, nbr_row, table_for_search_index, current_win, num_nbrs, pos1, k_old, num_rows_old, num_rows_i, radio_choice_2, radio_choice_1, blank_space_num, nbr_row_id, count, i, j, k, z, i_found, i_row_id, i_win_id As Integer
+Dim table_selected_alias, cell_data_alias as Alias
+Dim sel0, sel1, sel2 as object
+Dim table_for_search, radio_choice_2_s, table_selected, s_comb, s_comb_temp, num_rows_s, s_site_id, s_site_name, s_cell_id, s_pn, s_bcch, s_bsic, s_zcrs, s_cnt, s_host, s_nbr(100), line_deleted_flag, finished_flag, layer1, found_blank, host_pn, nbr_pn, host_cell As String
+Dim go_to_site_flag, exact_match1_flag, exact_match2_flag As Logical
+
+
+
+	radio_choice_1 = 1
+	radio_choice_2 = 1
+	s_comb = ""
+	s_site_id = ""
+	s_site_name = ""
+	s_cell_id = ""
+	s_pn = ""
+	s_bcch = ""
+	s_bsic = ""
+	s_zcrs = ""
+	s_cnt = ""
+
+'we come back to here if there was input in the combined field, but it had an error
+bad_input:
+Returnpoint100:
+	Print Chr$(12)
+
+	Call check_tables_sub
+
+	Set ProgressBars On
+'	Set Event Processing On
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+
+	'This sets up the radio buttons
+	'--------------------------------- 
+	radio_choice_2_s = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		If sys(i) <> "" Then
+			radio_choice_2_s = radio_choice_2_s + sys(i) + ";"
+		End If
+	Next
+
+
+	'This sets up the dialog
+	'--------------------------------- 
+	Dialog Title "Find Site, Cell, PCI/SC/BCCH/PN, BCCH-BSIC, ZCRS-Cnt" width 245 height 385	
+
+	Control GroupBox
+	Title "Search Parameters"
+	Position 10, 10 Width 225 Height 100
+	Control RadioGroup
+	Title "Site_ID;Site_Name;Cell_ID;PCI/SC/BCCH/PN;BCCH;ZCRS" 
+	Position 20, 20 Width 70 
+	Value radio_choice_1
+	Into radio_choice_1
+
+	Control EditText
+	Value s_site_id
+	Position 100, 20 Width 40
+	Into s_site_id
+
+	Control CheckBox
+	Position 145, 22
+	Into exact_match1_flag
+	Value False
+	Control StaticText	
+	Title "&exact match"
+	Position 160, 22
+
+	Control EditText
+	Value s_site_name 
+	Position 100, 34 Width 120
+	Into s_site_name
+	Control EditText
+	Value s_cell_id 
+	Position 100, 48 Width 40
+	Into s_cell_id
+
+	Control CheckBox
+	Position 145, 50
+	Into exact_match2_flag
+	Value False
+	Control StaticText	
+	Title "&exact match"
+	Position 160, 50
+
+	Control EditText
+	Value s_pn 
+	Position 100, 62 Width 40
+	Into s_pn
+	Control EditText
+	Value s_bcch 
+	Position 100, 76 Width 40
+	Into s_bcch
+	Control EditText
+	Value s_zcrs 
+	Position 100, 91 Width 40
+	Into s_zcrs
+
+	Control StaticText
+	Title "BSIC" 
+	Position 155, 77
+	Control EditText
+	Value s_bsic 
+	Position 180, 76 Width 40
+	Into s_bsic
+
+	Control StaticText
+	Title "Count" 
+	Position 155, 92
+	Control EditText
+	Value s_cnt
+	Position 180, 91 Width 40
+	Into s_cnt
+
+	Control GroupBox
+	Title "System Selection" 
+	Position 10, 114 Width 225 Height 165
+	Control StaticText
+	Title "Which System is the Search On?" Position 15,126
+	Control RadioGroup
+	Title radio_choice_2_s
+	Position 20, 136 Width 80 
+	Value radio_choice_2
+	Into radio_choice_2
+
+	Control GroupBox
+	Title "Find Nbrs - Cell_IDs Tab or Space Separated" 
+	Position 10, 285 Width 230 Height 40
+	Control StaticText
+	Title "Host Nbr Nbr Nbr..."                                                    '"""SC BCCH BSIC"""
+	Position 20, 300
+	Control EditText
+	Value s_comb
+	Position 90, 300 Width 130
+	Into s_comb
+
+	Control CheckBox
+	Position 20, 335
+	Into go_to_site_flag
+	Value False
+	Control StaticText	
+	Title "&go to search target...."
+	Position 35, 335
+
+	Control OKButton
+	Position 20, 355
+	Control CancelButton
+	Position 180, 355
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Set Map Redraw On
+		Exit Sub
+	End If
+
+'----------------------------------
+	
+'	Set Map Redraw Off
+
+	'This converts the radio input to a table name
+	'---------------------------------
+	table_for_search = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		ElseIf radio_choice_2 = i Then
+			table_for_search = cells_sys(i)
+			table_for_search_index = i
+			Exit For
+		End If
+	Next
+
+	Call test_nbrq1_sub
+
+	If q1_exists = "On" Then 
+		Close Table Query1 
+	End If
+	If nbrs_exists = "On" Then 
+		Close Table nbrs_RFDT 
+	End If
+
+
+	'This is only used with the combined search function - if this field is not blank, it will use it and ignore the other fields
+	'It searches for up to 100 nbrs to the first cell (the host), the nbrs and host can be from any system and can be space or tab delimited
+	'------------------------------------------------------------------------------------------------------
+	s_comb = LTrim$(s_comb)
+	s_comb = RTrim$(s_comb)
+	If s_comb <> "" Then
+		s_comb_temp = s_comb
+		num_nbrs = 0
+		If Instr(1,s_comb_temp,chr$(9)) > 0 Then          'tab delimited case first
+			pos1 = Instr(1,s_comb_temp,chr$(9))
+			s_host = Left$(s_comb_temp,pos1-1)					'read the leftmost value
+			s_comb_temp = Right$(s_comb_temp, len(s_comb_temp)-pos1)   	'remove the leftmost value and delimiter
+			For i = 1 to 100
+				num_nbrs = i
+				pos1 = Instr(1,s_comb_temp,chr$(9))				
+				If pos1 = 0 Then 
+					s_nbr(i) = s_comb_temp							'this is the last value
+					If len(s_nbr(i)) > 0 Then num_nbrs = i End If
+					Exit For
+				End If
+				s_nbr(i) = Left$(s_comb_temp,pos1-1)				'read the leftmost value
+				If len(s_nbr(i)) > 0 Then num_nbrs = i End If
+				s_comb_temp = Right$(s_comb_temp, len(s_comb_temp)-pos1)		'remove the leftmost value and delimiter
+			Next
+		Else												'then space delimited case if there is no tab
+			pos1 = Instr(1,s_comb_temp,chr$(32))
+			s_host = Left$(s_comb_temp,pos1-1)					'read the leftmost value
+			s_comb_temp = Right$(s_comb_temp, len(s_comb_temp)-pos1)   	'remove the leftmost value and delimiter
+			For i = 1 to 100
+				num_nbrs = i
+				pos1 = Instr(1,s_comb_temp,chr$(32))				
+				If pos1 = 0 Then
+					s_nbr(i) = s_comb_temp							'this is the last value
+					If len(s_nbr(i)) > 0 Then num_nbrs = i End If
+					Exit For
+				End If
+				s_nbr(i) = Left$(s_comb_temp,pos1-1)				'read the leftmost value
+				If len(s_nbr(i)) > 0 Then num_nbrs = i End If
+				s_comb_temp = Right$(s_comb_temp, len(s_comb_temp)-pos1)		'remove the leftmost value and delimiter
+			Next
+		End If
+		radio_choice_1 = -1
+	End If
+	'------------------------------------------------------------------
+
+
+	If radio_choice_1 = 1 and s_site_id <> "" Then
+		If exact_match1_flag Then
+			select * from table_for_search where Lcase$(Site) = Lcase$(s_site_id) Into query1
+		Else
+			select * from table_for_search where Like(Lcase$(Site),"%" & Lcase$(s_site_id) & "%","") Into query1
+		End If
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 2 and s_site_name <> "" Then
+		select * from table_for_search where Like(Lcase$(Sitename),"%" & Lcase$(s_site_name) & "%","") Into query1		'InStr(1,Lcase$(sitename),Lcase$(s_site_name)) > 0 Into Query1
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 3 and s_cell_id <> "" Then
+		If exact_match2_flag Then
+			select * from table_for_search where Lcase$(Cell) = Lcase$(s_cell_id) Into query1
+		Else
+			select * from table_for_search where Like(Lcase$(Cell),"%" & Lcase$(s_cell_id) & "%","") Into query1
+		End If
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 4 and s_pn <> "" Then
+		select * from table_for_search where PCI_SC_BCCH_PN = val(s_pn) Into Query1
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 5 and s_bcch <> "" and s_bsic <> "" Then
+		select * from table_for_search where PCI_SC_BCCH_PN = val(s_bcch) and ZCRS_BSIC = val(s_bsic) Into Query1
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 5 and s_bcch <> "" and s_bsic = "" Then
+		select * from table_for_search where PCI_SC_BCCH_PN = val(s_bcch) Into Query1
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 5 and s_bcch = "" and s_bsic <> "" Then
+		select * from table_for_search where ZCRS_BSIC = val(s_bsic) Into Query1
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 6 and s_zcrs <> "" and s_cnt <> "" Then
+		select * from table_for_search where ZCRS_BSIC = val(s_zcrs) and ZCRS_Cnt = val(s_cnt) Into query1
+		Commit table query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 6 and s_zcrs <> "" and s_cnt = "" Then
+		select * from table_for_search where ZCRS_BSIC = val(s_zcrs) Into query1
+		Commit table query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = 6 and s_zcrs = "" and s_cnt <> "" Then
+		select * from table_for_search where ZCRS_Cnt = val(s_cnt) Into query1
+		Commit table query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		add map layer nbrs_RFDT
+
+	ElseIf radio_choice_1 = -1 and s_host <> "" AND num_nbrs > 0 Then			' we have at least 1 nbr in the comb field
+		select * from table_for_search where cell = s_host Into Query1
+		If TableInfo(Query1,TAB_INFO_NROWS) = 0 Then 					'no host found, get out of here
+			Note "The host (" & s_host & ") was not found in table (" & table_for_search & "), please select the correct system"
+			Goto host_not_found
+		End If
+		Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table Query1
+		Open Table pf_user_path + "nbrs_RFDT.TAB"
+		For i = 1 to num_nbrs	'This finds the objects for all the nbrs in the input string
+			For j = 1 to 10	'This searches for the cell in each table and stops searching when it has found the first match
+				If sys(j) = "" Then
+					Print "Nbr pair " & s_host & " => " & s_nbr(i) & " was not found"
+					Exit For
+				Else
+					select * from cells_sys(j) where cell = s_nbr(i) Into query1
+					If TableInfo(Query1,TAB_INFO_NROWS) > 0 Then
+						Insert Into nbrs_RFDT
+							Select * from query1
+						Close Table query1
+						Exit for
+					End If
+				End If
+			Next
+		Next
+		add map layer nbrs_RFDT
+
+	Else
+		'There was no input data for the selected option
+		Note "There was no data to search for, check it and try again."
+		Goto bad_input
+	End If
+
+
+	' this changes the display properties of the object
+	'--------------------------------------
+	Call test_nbrq1_sub
+	If q1_exists = "On" Then Close Table Query1 End If
+	If nbrs_exists = "On" Then
+		num_rows_s = TableInfo(nbrs_RFDT, TAB_INFO_NROWS)
+		num_rows_i = val(num_rows_s)
+	Else
+		num_rows_i = 0 
+	End If
+
+	If num_rows_i = 0 or (num_rows_i < 2 AND radio_choice_1 = -1)  Then
+		Note "The search returned no results, try again."
+		If radio_choice_1 = -1 Then
+			Goto Returnpoint100
+		Else
+			Goto bad_input
+		End If
+	End If	
+
+
+	'This does the rest of the processing if there are objects found
+	'---------------------------------------------------------------
+	If radio_choice_1 = -1 and s_host <> "" and num_nbrs > 0 Then       'this is the new code for the combined case
+		'This gets the center of the 2 objects
+		'---------------------------------------------------------------
+		Fetch First From nbrs_RFDT
+			x = centroidx(nbrs_RFDT.obj)
+			y = centroidy(nbrs_RFDT.obj)
+			sel0 = nbrs_RFDT.obj
+			i_row_id = nbrs_RFDT.rowid
+			size0 = nbrs_RFDT.obj_size
+
+			'changes the host object appearance
+			'---------------------------------
+			Alter Object sel0 
+				Info OBJ_INFO_BRUSH, brush_host(table_for_search_index)
+				Info OBJ_INFO_PEN, pen_host(table_for_search_index)
+			Update nbrs_RFDT
+				set obj = sel0 where rowid = i_row_id
+
+		'Does the nbrs
+		'----------------
+		max_dist = 0
+		Fetch Next From nbrs_RFDT
+		For i = 1 to num_rows_i - 1
+			x2 = centroidx(nbrs_RFDT.obj)
+			y2 = centroidy(nbrs_RFDT.obj)
+			sel0 = nbrs_RFDT.obj
+			i_row_id = nbrs_RFDT.rowid
+			size0 = nbrs_RFDT.obj_size
+
+			'changes the nbr object appearance
+			'---------------------------------
+			Alter Object sel0 
+				Info OBJ_INFO_BRUSH, brush_nbr(table_for_search_index)
+				Info OBJ_INFO_PEN, pen_nbr(table_for_search_index)
+			Update nbrs_RFDT
+				set obj = sel0 where rowid = i_row_id
+
+			'draws the line between host and nbr
+			'------------------------------
+			sel1 = CreateLine(x,y,x2,y2)
+			If Distance(x,y,x2,y2,"km") > max_dist Then
+				max_dist = Distance(x,y,x2,y2,"km")			
+		 		Set Map Zoom Entire Layer nbrs_RFDT
+			End If
+			x3 = centroidx(sel1)
+			y3 = centroidy(sel1)
+			Alter Object sel1
+				Info OBJ_INFO_PEN, pen_connector(table_for_search_index)
+			Insert Into nbrs_RFDT (obj)
+				Values (sel1)
+
+			'writes the distance
+			'-----------------------------
+			current_win = FrontWindow()
+			If WindowInfo(current_win, WIN_INFO_TYPE) <> WIN_MAPPER Then
+				Note "This tool only works on Map windows."
+				Set Map Redraw On
+				Exit Sub
+			End If
+			distmin = distance(x,y,x2,y2,"km")
+			sel1 = CreateText(current_win,x3,y3,Str$(Round(distmin,0.1))+"km",0,3,5)
+			Alter Object sel1
+			Info OBJ_INFO_TEXTFONT, font_for_search
+			Insert Into nbrs_RFDT (obj)
+				Values (sel1)			
+			Fetch Next From nbrs_RFDT
+		Next
+	Else        'this is the old code
+		'This gets the center of the first found object
+		'---------------------------------------------------------------
+		Fetch First From nbrs_RFDT
+			x = centroidx(nbrs_RFDT.obj)
+			y = centroidy(nbrs_RFDT.obj)
+
+		'This stores the center of current mapper position
+		'-----------------------------------------------------------------------
+		current_win = FrontWindow()
+		If WindowInfo(current_win, WIN_INFO_TYPE) <> WIN_MAPPER Then
+			Note "This tool only works on Map windows."
+			Set Map Redraw On
+			Exit Sub
+		End If
+		x3 = MapperInfo(current_win,MAPPER_INFO_CENTERX)
+		y3 = MapperInfo(current_win,MAPPER_INFO_CENTERY)
+		distmin = 1000
+		'-----------------------------------------------------------------------
+
+		For k = 1 to num_rows_i
+			Fetch Rec k From nbrs_RFDT
+				sel0 = nbrs_RFDT.obj
+				i_row_id = nbrs_RFDT.rowid
+				size0 = nbrs_RFDT.obj_size
+			x = centroidx(sel0)
+			y = centroidy(sel0)
+			Alter Object sel0 
+				Info OBJ_INFO_BRUSH, brush_host(table_for_search_index)
+				Info OBJ_INFO_PEN, pen_host(table_for_search_index)
+
+			If nbr_lines_flag = "On" Then
+				'Use this if you want to draw a line from the center of the current map to the found item
+				'----------------------------------------------------------------
+				If distmin > distance(x,y,x3,y3,"km") Then
+					distmin = distance(x,y,x3,y3,"km")
+					xmin = x
+					ymin = y
+				End If
+
+	'************
+				If go_to_site_flag = False then
+					sel1 = CreateLine(x3, y3, x, y)
+					Alter Object sel1
+						Info OBJ_INFO_PEN, pen_for_search
+					Insert Into nbrs_RFDT (obj)
+						Values (sel1)
+				End If
+	'************
+				'adds a circle around the sector
+				'----------------------------------
+				sel2 = CreateCircle(x,y,1.4*(size0/1000))
+				Alter Object sel2 
+					Info OBJ_INFO_BRUSH, circle_brush
+					Info OBJ_INFO_PEN, pen_connector(table_for_search_index) 
+				'----------------------------------
+				Insert Into nbrs_RFDT (obj)
+					Values (sel2)
+			End If
+
+			Update nbrs_RFDT
+				set obj = sel0 where rowid = k
+		Next
+
+		If go_to_site_flag = True then
+			'Use this if you want the map to go to the found item
+			'------------------------------------------------------
+			Set Map Center (xmin,ymin)
+
+		Else
+			sel1 = CreateText(current_win,x3,y3,"Target: "+Str$(Round(distmin,0.1))+"km",0,3,5)
+			Alter Object sel1
+				Info OBJ_INFO_TEXTFONT, font_for_search
+			Insert Into nbrs_RFDT (obj)
+				Values (sel1)			
+			'---------------------------------------------------------------------------------
+		End If
+	End If
+
+	Set Map Redraw On
+
+Exit Sub
+'--------------------------------
+'Error Handlers
+'-------------------
+host_not_found:
+Note "Bad Host, can't find, try again."
+Goto returnpoint100
+
+End Sub
+'-------------------------------------

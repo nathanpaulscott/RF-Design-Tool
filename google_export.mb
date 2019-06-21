@@ -1,0 +1,472 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub google_export_sub
+Declare Sub pre_google_export_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+Declare Sub date_check_sub
+Declare Sub test_nbrq1_sub
+
+
+
+
+'---------------------------------------------------
+Sub pre_google_export_sub
+Dim i_win_id As String	
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Map Redraw Off
+		Set Event Processing Off
+	End If
+
+
+	' We need to check all tables before the export
+	'------------------------------------------------------------
+	Call check_tables_sub
+
+	Call save_tables_sub
+
+	Call google_export_sub
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this exports the sites to google in .kml format
+'---------------------------------------------------
+Sub google_export_sub
+
+Dim data_alias As Alias
+Dim data, output_filename_short, output_filename, output_path, temp_string, num_rows_s As String
+Dim i, j, k, l, m, mold, num_rows_i, i_row_id As Integer
+Dim first_table_flag As Logical
+Dim temp_lat, temp_lon As Float
+Dim test1, test2, test3, test4 As String
+
+
+OnError Goto general_error
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+'	Call date_check_sub
+
+	output_filename = FileSaveAsDlg(pf_user_path, "", "kml", "Choose Export Location and Filename")
+	If output_filename = "" Then
+		Exit Sub
+	End If
+
+	output_path = PathToDirectory$(output_filename)
+	output_filename_short = PathToFilename$(output_filename)
+
+	Print Chr$(12)
+	Print "Please wait.  Exporting....."
+
+
+	'This cleans the file
+	'---------------------------------------
+OnError Goto file_open_error
+
+	Open File output_filename For Output As #1
+
+OnError GoTo general_error
+
+	For i = 1 to 100000   ' I am cleaning up to 100,000 lines
+		data = ""
+		print #1, data
+	Next
+	Close File #1
+
+
+	'This opens the cleaned file for writing
+	'---------------------------------------
+	Open File output_filename For Output As #1
+
+	'Main Headers
+	'---------------------------------------
+	data = "<?xml version=""1.0"" encoding=""UTF-8""?>"
+	print #1, data
+	data = "<kml xmlns=""http://www.opengis.net/kml/2.2"" xmlns:gx=""http://www.google.com/kml/ext/2.2"" xmlns:kml=""http://www.opengis.net/kml/2.2"" xmlns:atom=""http://www.w3.org/2005/Atom"">"
+'	data = "<kml xmlns=""http://earth.google.com/kml/2.2"">"
+	print #1, data
+	data = "<Document>"
+	print #1, data
+
+	'Button Style Defs
+	'---------------------------------------
+	For i = 1 to 2
+		'Style for the symbol
+		'-------------------
+		data = "<Style id=""site_symbol_" & i & """>"
+		print #1, data
+		data = "<IconStyle>"
+		print #1, data
+		If i = 1 Then
+			data = "<color>ff0000ff</color>"   'red
+		Else
+			data = "<color>ff7fffff</color>"   'yellow
+		End If
+		print #1, data
+		data = "<scale>"+0.5+"</scale>"
+		print #1, data
+		data = "<Icon>"
+		print #1, data
+		data = "<href>http://maps.google.com/mapfiles/kml/shapes/donut.png</href>"
+		print #1, data
+		data = "</Icon>"
+		print #1, data
+		data = "<hotSpot x=""0.5"" y=""0.5"" xunits=""fraction"" yunits=""fraction""/>"
+		print #1, data
+		data = "</IconStyle>"
+		print #1, data
+		data = "<LabelStyle>"
+		print #1, data
+		data = "<scale>0.7</scale>"
+		print #1, data
+		data = "</LabelStyle>"
+		print #1, data
+		data = "</Style>"
+		print #1, data
+
+		'Style for the lines and fills
+		'----------------------------
+		data = "<Style id=""cell_obj_"+i+""">"
+		print #1, data
+		data = "<LineStyle>"
+		print #1, data
+		If i = 1 Then
+			data = "<color>ff0000ff</color>"   'red
+		Else
+			data = "<color>ff7fffff</color>"   'yellow
+		End If
+		print #1, data
+		data = "<width>"+6+"</width>"
+		print #1, data
+		data = "</LineStyle>"
+		print #1, data
+		data = "<PolyStyle>"
+		print #1, data
+		If i = 1 Then
+			data = "<color>990000ff</color>"   'red
+		Else
+			data = "<color>997fffff</color>"   'yellow
+		End If
+		print #1, data
+		data = "</PolyStyle>"
+		print #1, data
+		data = "</Style>"
+		print #1, data
+
+	Next
+
+
+	'Steps through the 10 systems
+	'---------------------------------
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+
+		If is_open_sites_sys(i) = "On" Then
+			data = "<Folder>"
+			print #1, data
+			data = "<name>" & sites_sys(i) & "</name>"
+			print #1, data
+			Select * from sites_sys(i) Into query
+			num_rows_s = TableInfo(query, TAB_INFO_NROWS)
+			num_rows_i = Val(num_rows_s)
+
+
+
+			'---------------------
+			'---------------------
+			'Sites folder Start
+			'---------------------
+			'---------------------
+			data = "<Folder>"
+			print #1, data
+			data = "<name>Sites</name>"
+			print #1, data
+			'------------------------------------------------------
+			'------------------------------------------------------
+			'------------------------------------------------------
+			'Steps through each site
+			'---------------------------
+			mold=0
+			m=0
+			Fetch First From query
+			Do While Not EOT (query)
+				'This creates the site point object
+				'-------------------------------------
+				data = "<Placemark>"
+				print #1, data
+
+				'this checks there are no "&" chars as it screws up GE
+				'-----------------------------
+				data = query.Site
+				If InStr(1,data,"&") <> 0 Then     'we have a forbidden GE char
+					Note "Your Site or Sitename fields have the forbidden GE char '&', please remove this and try again"
+					Goto exitpoint
+				End If
+
+				data = "<name>"+data+"</name>"
+				print #1, data
+
+				'this checks there are no "&" chars as it screws up GE
+				'-----------------------------
+				data = query.Sitename
+				If InStr(1,data,"&") <> 0 Then     'we have a forbidden GE char
+					Note "Your Site or Sitename fields have the forbidden GE char '&', please remove this and try again"
+					Goto exitpoint
+				End If
+
+				data = "<description>"+data+"</description>"
+				print #1, data
+				data = "<styleUrl>site_symbol_" + i + "</styleUrl>"
+				print #1, data
+				data = "<Point>"
+				print #1, data
+				data = "<extrude>1</extrude>"
+				print #1, data
+				data = "<altitudeMode>relativeToGround</altitudeMode>"
+				print #1, data
+				data = "<coordinates>"
+				print #1, data
+
+				temp_lat = query.Lat
+				test1 = str$(fix(temp_lat))
+				test2 = str$(format$(temp_lat - fix(temp_lat),"#.######"))
+				test2 = right$(test2,len(test2)-instr(1,test2,".")+1)
+				temp_lon = query.Lon
+				test3 = str$(fix(temp_lon))
+				test4 = str$(format$(temp_lon - fix(temp_lon),"#.######"))
+				test4 = right$(test4,len(test4)-instr(1,test4,".")+1)
+				data = test3 + test4 + "," + test1 + test2 + "," + query.Ht
+				print #1, data
+
+				data = "</coordinates>"
+				print #1, data
+				data = "</Point>"
+				print #1, data
+				data = "</Placemark>"
+				print #1, data
+
+				Fetch Next From query
+				i_row_id = query.rowid
+
+				mold = m
+				m = Minimum(100,int(100*i_row_id/num_rows_i))
+				If m <> mold Then
+					Print Chr$(12)
+					Print "Exporting "+sys(i)+" sites. Please wait."
+					Print m+"% "+String$(m,"|")
+				End If
+			Loop
+			'------------------------------------------------------
+			'------------------------------------------------------
+			'------------------------------------------------------
+			data = "</Folder>"
+			print #1, data
+			'Sites folder End
+			'--------------------
+			'---------------------
+
+
+
+			'Cells Folder Start
+			'---------------------
+			'---------------------
+			data = "<Folder>"
+			print #1, data
+			data = "<name>Cells</name>"
+			print #1, data
+			'---------------------------------------------------------
+			'---------------------------------------------------------
+			'---------------------------------------------------------
+			'Steps through each site
+			'---------------------------
+			mold=0
+			m=0
+			Fetch First From query
+			Do While Not EOT (query)
+				'This creates the cell lines
+				'-------------------------------------
+				If is_open_cells_sys(i) = "On" Then
+					data = "<Folder>"
+					print #1, data
+
+					'this checks there are no "&" chars as it screws up GE
+					'-----------------------------
+					data = query.Site
+
+					If InStr(1,data,"&") <> 0 Then     'we have a forbidden GE char
+						Note "Your Site or Sitename fields have the forbidden GE char '&', please remove this and try again"
+						Goto exitpoint
+					End If
+
+					data = "<name>"+data+"_Cells</name>"
+					print #1, data
+					temp_string = query.Site
+					Select * from cells_sys(i) Where Site = temp_string Into query1
+		
+					Fetch First From query1
+					Do While Not EOT (query1)
+						data = "<Placemark>"
+						print #1, data
+
+						'this checks there are no "&" chars as it screws up GE
+						'-----------------------------
+						data = query1.Cell
+						If InStr(1,data,"&") <> 0 Then     'we have a forbidden GE char
+							Note "Your Cell fields have the forbidden GE char '&', please remove this and try again"
+							Goto exitpoint
+						End If
+
+						data = "<name>"+data+"</name>"
+						print #1, data
+
+						'this checks there are no "&" chars as it screws up GE
+						'-----------------------------
+						data = query1.Sitename
+						If InStr(1,data,"&") <> 0 Then     'we have a forbidden GE char
+							Note "Your Site or Sitename fields have the forbidden GE char '&', please remove this and try again"
+							Goto exitpoint
+						End If
+						data = "<description>"+data+"</description>"
+						print #1, data
+						data = "<styleUrl>cell_obj_" + i + "</styleUrl>"
+						print #1, data
+						data = "<LineString>"
+						print #1, data
+						data = "<extrude>1</extrude>"
+						print #1, data
+						data = "<tessellate>1</tessellate>"
+						print #1, data
+						data = "<altitudeMode>relativeToGround</altitudeMode>"
+						print #1, data
+						data = "<coordinates>"
+						print #1, data
+
+						temp_lat = query1.Lat
+						test1 = str$(fix(temp_lat))
+						test2 = str$(format$(temp_lat - fix(temp_lat),"#.######"))
+						test2 = right$(test2,len(test2)-instr(1,test2,".")+1)
+						temp_lon = query1.Lon
+						test3 = str$(fix(temp_lon))
+						test4 = str$(format$(temp_lon - fix(temp_lon),"#.######"))
+						test4 = right$(test4,len(test4)-instr(1,test4,".")+1)
+						data = test3 + test4 + "," + test1 + test2 + "," + query1.Ht
+						print #1, data
+
+						temp_lat = query1.Lat + (query1.Obj_Size*Cos(Deg_2_Rad*query1.Az)*Zx/Z_y)
+						test1 = str$(fix(temp_lat))
+						test2 = str$(format$(temp_lat - fix(temp_lat),"#.######"))
+						test2 = right$(test2,len(test2)-instr(1,test2,".")+1)
+						temp_lon = query1.Lon + (query1.Obj_Size*Sin(Deg_2_Rad*query1.Az)*Zx/Z_x)
+						test3 = str$(fix(temp_lon))
+						test4 = str$(format$(temp_lon - fix(temp_lon),"#.######"))
+						test4 = right$(test4,len(test4)-instr(1,test4,".")+1)
+						data = test3 + test4 + "," + test1 + test2 + "," + query1.Ht
+						print #1, data
+
+						data = "</coordinates>"
+
+						print #1, data
+						data = "</LineString>"
+						print #1, data
+						data = "</Placemark>"
+						print #1, data
+
+						Fetch Next From query1
+					Loop
+					data = "</Folder>"
+		  			print #1, data
+					Close Table query1
+				End If
+
+				Fetch Next From query
+				i_row_id = query.rowid
+
+				mold = m
+				m = Minimum(100,int(100*i_row_id/num_rows_i))
+				If m <> mold Then
+					Print Chr$(12)
+					Print "Exporting "+sys(i)+" cells. Please wait."
+					Print m+"% "+String$(m,"|")
+				End If
+			Loop
+			'---------------------------------------------------
+			'---------------------------------------------------
+			'---------------------------------------------------
+			data = "</Folder>"
+			print #1, data
+			'Cells Folder End
+			'---------------------
+			'---------------------
+			Close Table query
+
+			data = "</Folder>"
+			print #1, data
+			'System Folder End
+
+			'---------------------
+			'---------------------
+		End If
+	Next
+	'----------------------------------------
+	'----------------------------------------
+	'----------------------------------------
+
+	data = "</Document>"
+	print #1, data
+	data = "</kml>"
+	print #1, data
+
+exitpoint:
+	Close File #1
+
+	Print Chr$(12)
+	Print "Finished Exporting"
+
+returnpoint1:
+Call test_nbrq1_sub
+If q1_exists = "On" Then
+	Close Table query1
+End If
+
+Exit Sub
+
+'Error Handlers
+'------------------------
+general_error:
+Note "Got an error, exiting now.  Details are: "+error$()
+Resume returnpoint1
+
+file_open_error:
+Note "Your ouput file is currently open in another program (like XL).  Close it and try again."
+Resume returnpoint1
+
+
+End Sub
+'---------------------------------------------------
+
+

@@ -1,0 +1,57 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub date_check_sub
+
+'---------------------------------------------------
+' this is a date copy protection sub
+'---------------------------------------------------
+Sub date_check_sub
+Dim i, day, mth, yr As Integer
+Dim today, start_date, end_date as Date
+
+'this disables the sub
+'------------------------
+'exit sub
+'------------------------
+
+	Set Format Date "US"
+
+	'does the end date
+	'---------------------
+	day = 1
+	mth = 1
+	yr = 2017
+	end_date = StringtoDate(mth+"/"+day+"/"+yr)                  'this needs to be the date when the tool expires 
+
+
+'	start_date = StringtoDate("10/14/2011")'this needs to be the date when you release the tool to the user 
+'	end_date = StringtoDate("1/14/2012")'this needs to be the date when the tool expires for the user
+	today = curdate()
+
+	If today > end_date Then
+
+		'this kills all the cell layers
+		'-----------------------------
+'		For i = 1 to 10
+'			If is_open_cells_sys(i) = "On" Then
+'				Drop Table cells_sys(i)
+'			End If
+'		Next
+
+		Note "The tool has expired, contact nathanpaulscott@yahoo.com"
+
+		Set Format Date "Local"
+
+		End Program
+
+	End If
+
+	Set Format Date "Local"
+
+End Sub
+'---------------------------------------------------
+
+

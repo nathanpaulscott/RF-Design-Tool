@@ -1,0 +1,1066 @@
+' need to verify that the projection stuff has not screwed up this sub, check that this scan data can be in lat lon and the cell data can be in utm etc
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub scan_pre_import_2G_sub
+Declare Sub scan_pre_import_3G_sub
+Declare Sub scan_pre_import_4G_sub
+Declare Sub scan_import_sub (ByVal tech As String)
+Declare Sub scan_prepare_sub  (ByVal tech As String)
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Function calc_angle_h (ByVal x1 As Float, ByVal y1 As Float, ByVal x2 As Float, ByVal y2 As Float, ByVal az As Float) As Float
+Declare Function calc_angle_v (ByVal dist As Float, ByVal h1 As Float, ByVal h2 As Float) As Float
+Declare Function calc_pl (ByVal dist As Float, ByVal freq As Float, ByVal edt As Float, ByVal mdt As Float, ByVal ang_h As Float, ByVal ang_v As Float, ByVal h1 As Float, ByVal h2 As Float) As Float
+
+
+
+
+'---------------------------------------------------
+' this launches the 2G scan import
+'---------------------------------------------------
+Sub scan_pre_import_2G_sub
+	Call scan_import_sub("2G")
+End Sub
+
+
+'---------------------------------------------------
+' this launches the 3G scan import
+'---------------------------------------------------
+Sub scan_pre_import_3G_sub
+	Call scan_import_sub("3G")
+End Sub
+
+
+'---------------------------------------------------
+' this launches the 4G scan import
+'---------------------------------------------------
+Sub scan_pre_import_4G_sub
+	Call scan_import_sub("4G")
+End Sub
+
+
+
+
+'---------------------------------------------------
+' this checks if tables to be used in the following sub are open, if so, it closes them
+'-----------------------------------------------------------------------------------
+Sub scan_prepare_sub (ByVal tech As String)
+
+OnError GoTo closed0
+	If TableInfo("scan_" & tech & "_raw", TAB_INFO_NAME) <> "" Then
+		Close Table "scan_" & tech & "_raw"
+	End  If	 
+returnpoint0:
+OnError GoTo closed1
+	If TableInfo("scan_" & tech, TAB_INFO_NAME) <> "" Then
+		Close Table "scan_" & tech
+	End  If	 
+returnpoint1:
+OnError GoTo closed2
+	If TableInfo("scan_" & tech & "_best_only", TAB_INFO_NAME) <> "" Then
+		Close Table "scan_" & tech & "_best_only"
+	End  If	 
+returnpoint2:
+OnError GoTo closed3
+	If TableInfo(test, TAB_INFO_NAME) <> "" Then
+		Close Table test
+	End  If	 
+returnpoint3:
+OnError GoTo closed4
+	If TableInfo(query1, TAB_INFO_NAME) <> "" Then
+		Close Table query1
+	End  If	 
+returnpoint4:
+OnError GoTo closed5
+	If TableInfo(query2, TAB_INFO_NAME) <> "" Then
+		Close Table query2
+	End  If	 
+returnpoint5:
+OnError GoTo closed6
+	If TableInfo(query3, TAB_INFO_NAME) <> "" Then
+		Close Table query3
+	End  If	 
+returnpoint6:
+OnError GoTo closed7
+	If TableInfo("overshooter_results_" & tech, TAB_INFO_NAME) <> "" Then
+		Close Table "overshooter_results_" & tech
+	End  If	 
+returnpoint7:
+OnError GoTo closed8
+	If TableInfo(os_analysis, TAB_INFO_NAME) <> "" Then
+		Close Table os_analysis
+	End  If	 
+returnpoint8:
+
+OnError GoTo closed9
+	If TableInfo(os_analysisx, TAB_INFO_NAME) <> "" Then
+		Close Table os_analysisx
+	End  If	 
+returnpoint9:
+
+	Exit Sub
+
+'----------------------------
+closed0:
+Resume returnpoint0
+
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+closed3:
+Resume returnpoint3
+
+closed4:
+Resume returnpoint4
+
+closed5:
+Resume returnpoint5
+
+closed6:
+Resume returnpoint6
+
+closed7:
+Resume returnpoint7
+
+closed8:
+Resume returnpoint8
+
+closed9:
+Resume returnpoint9
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+' this sub imports a text file with the 4G/3G/2G scan - lat-lon-PCI/SC/BCCH-BSIC-SINR/EcIo-RSRP/RSCP/RxLev... and creates scan_xG.tab
+'---------------------------------------------------
+Sub scan_import_sub  (ByVal tech As String)
+	Dim radio_sys_s, radio_bs_s, input_filename, cell_table_for_scan, scan_table_name, scan_table_name_raw, user_path_scan, freq_s As String	 
+	Dim radio_sys_i, radio_bs_i, i_win_id, i, j, k, num_id, max_id1, max_id2 As Integer
+	Dim pci_x, rsrp_x, sinr_x, sc_x, rscp_x, ecio_x, bcch_x, bsic_x, rxlev_x As Alias	
+	Dim os_min_s As String
+	Dim max_rsrp, max_rscp, max_rxlev As Float
+	Dim temp_s, temp_s2, temp_s3 As String
+	Dim ignore_distance As Float
+	Dim x1, x2, y1, y2, h1, h2, az1, freq, sig_f, c2i_f As Float
+	Dim edt1, mdt1, rank_i As Integer  	
+	Dim dist_f, ang_h_f, ang_v_f, pl_f, min_dist, min_ang_h, min_ang_v, min_pl As Float
+	Dim min_cell, cell_s, data As String
+	Dim no_cell_flag As Logical
+	Dim id1_s, id2_s, sig_s, c2i_s As String
+	Dim col_a(10) As Alias
+
+
+
+	Set ProgressBars Off
+	Set Distance Units "km"
+
+	Call date_check_sub
+	Call scan_prepare_sub(tech) 					'checks to see if table scan_xG is open, if so it closes it.
+
+	ignore_distance = 50 			'cells beyond this many kms from the meas data will be ignored
+
+	scan_table_name = "scan_" & tech
+	scan_table_name_raw = "scan_" & tech & "_raw"
+
+	freq_s = "2100"
+
+
+	'this imports a tab delimited .csv file with the correct column headers and data => has to have Latitude, Longitude, PCI_x/SC_x/(BCCH_x BSIC_x), RSRP_x/RSCP_x/RxLev_x, SINR_x/EcIo_x (where x = 0 to unlimited) ....
+	'---------------------------------------------------------------------------------------------------------------------------------------------------------
+	'This sets up the radio buttons
+	'--------------------------------- 
+	radio_sys_s = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		Else
+			radio_sys_s = radio_sys_s & sys(i) & ";"
+		End If
+	Next
+
+	radio_bs_s = " by strongest measured; by actual server"
+	radio_bs_i = 1
+	If NOT scan_best_is_strongest_flag Then
+		radio_bs_i = 2
+	End If
+	os_min_s = Str$(scan_overshoot_min_dist)
+
+	'this is the dialog to get the size of the scan file
+	'-------------------------------------------------------
+	Dialog Title "Choose " & tech & " Scan File" width 245 height 300	
+	Control StaticText
+	Title "How many " & tech & " measurements are there per row:" Position 15, 20
+	Control EditText
+	Value 10 Position 180, 20 Width 40
+	Into num_id
+
+	Control GroupBox
+	Title "System Selection"
+	Position 10, 40 Width 120 Height 100
+
+	Control StaticText
+	Title "Which System is this data for?" Position 15,52
+
+	Control RadioGroup
+	Title radio_sys_s
+	Position 20, 65 Width 80 
+	Value 1
+	Into radio_sys_i
+
+	Control GroupBox
+	Title "Best Server"
+	Position 10, 150 Width 160 Height 60
+	Control Checkbox
+	Position 15, 165
+	Into scan_create_best_server_table_flag
+	Value scan_create_best_server_table_flag
+	Disable
+	
+	Control StaticText
+	Title "Create Best Server Table?" Position 30, 165
+	Control RadioGroup
+	Title radio_bs_s
+	Position 15, 177 Width 100 
+	Value radio_bs_i
+	Into radio_bs_i
+
+	Control GroupBox
+	Title "OverShooter Analysis"
+	Position 10, 220 Width 220 Height 47
+	Control Checkbox 
+	Position 15, 235
+	Into scan_overshooter_anal_flag
+	Value scan_overshooter_anal_flag
+	Disable
+	Control StaticText
+	Title "Do Overshooter Analysis?" Position 30, 235
+	Disable
+	Control StaticText
+	Title "Min Dist(km) to be overshooter" Position 15, 250
+	Control EditText
+	Value os_min_s Position 115, 248 Width 20
+	Into os_min_s
+	Control StaticText
+	Title "Sys.Freq(MHz)" Position 145, 250
+	Control EditText
+	Value freq_s Position 195, 248 Width 30
+	Into freq_s
+
+	Control OKButton
+	Position 20, 275
+	Control CancelButton
+	Position 180, 275
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+	'---------------------------------------
+
+	'This converts the radio input to a table name
+	'---------------------------------
+	cell_table_for_scan = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		ElseIf radio_sys_i = i Then
+			cell_table_for_scan = cells_sys(i)
+			Exit For
+		End If
+	Next
+	If tech = "2G" Then
+		table_for_2G_scan = cell_table_for_scan
+		id1_s = "BCCH"
+		id2_s = "BSIC"
+		sig_s = "RxLEV"
+		c2i_s = ""
+		max_id1 = 10000
+		max_id2 = 77
+	ElseIf tech = "3G" Then
+		table_for_3G_scan = cell_table_for_scan
+		id1_s = "SC"
+		id2_s = ""
+		sig_s = "RSCP"
+		c2i_s = "EcIo"
+		max_id1 = 512
+		max_id2 = 0
+	ElseIf tech = "4G" Then
+		table_for_4G_scan = cell_table_for_scan
+		id1_s = "PCI"
+		id2_s = ""
+		sig_s = "RSRP"
+		c2i_s = "SINR"
+
+
+		max_id1 = 504
+		max_id2 = 0
+	End If
+
+	If radio_bs_i = 1 Then
+		scan_best_is_strongest_flag = True
+	Else
+		scan_best_is_strongest_flag = False
+	End If
+	scan_overshoot_min_dist = Abs(Val(os_min_s))
+
+	freq = Val(freq_s)
+	If freq <= 0 Then
+		Note "The frequency you entered for the overshooter analysis is impossible, try again..."
+		exit sub
+	End If
+	'---------------------------------------
+
+	input_filename = FileOpenDlg("","","csv","Please select your " & tech & " scan file...")
+	If input_filename = "" Then
+		Exit Sub
+	End If
+	user_path_scan = PathToDirectory$(input_filename)
+	If tech = "2G" Then
+		user_path_scan_2G = user_path_scan
+	ElseIf tech = "3G" Then
+		user_path_scan_3G = user_path_scan
+	ElseIf tech = "4G" Then
+		user_path_scan_4G = user_path_scan
+	End If
+
+	If proj = "" Then
+		Note "The project projection is not yet set, load a project file to set this first"
+		Exit Sub
+	End If
+	'---------------------------------------
+
+	Print Chr$(12)
+	Print "Please Wait, importing..."
+
+OnError Goto target_is_open1
+	Register Table input_filename  TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_scan & scan_table_name & ".tab"
+OnError Goto 0
+	Open Table user_path_scan & scan_table_name & ".tab"
+
+	Commit table scan_table_name As user_path_scan & "test.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Close Table scan_table_name
+	Open Table user_path_scan & "test.tab"
+	Commit table test As user_path_scan & scan_table_name & ".tab" TYPE NATIVE Charset "WindowsLatin1"
+	Close Table test
+	Open Table user_path_scan & scan_table_name & ".tab"
+
+	col_a(1) = "Best_" & sig_s & "_Rank"
+	col_a(2) = "Strongest_" & sig_s
+	Alter Table scan_table_name (Add Rank Integer, col_a(1) Integer, col_a(2) Float Modify LONGITUDE Decimal(20,10), LATITUDE Decimal(20,10))
+
+	For i = 1 to num_id
+		If tech = "2G" Then
+			col_a(1) = id1_s & "_" & i
+			col_a(2) = id2_s & "_" & i
+			col_a(3) = sig_s & "_" & i
+			Alter Table scan_table_name (Modify col_a(1) Integer, col_a(2) Integer, col_a(3) Float)
+		Else
+			col_a(1) = id1_s & "_" & i
+			col_a(2) = sig_s & "_" & i
+			col_a(3) = c2i_s & "_" & i
+			Alter Table scan_table_name (Modify col_a(1) Integer, col_a(2) Float, col_a(3) Float)
+		End If
+		Print Chr$(12)
+		Print "Step 1: Altering scan table part " & i & " of " & num_id
+	Next
+	Commit Table scan_table_name
+
+	'set 0 values to -99999 and set repeated SCs to -8888 - these are from interfreq measurements, the tool will then ignore them
+	'-----------------------------------------------------------------------------------------------------------------------------------
+	For i = num_id to 1 Step -1
+		Print Chr$(12)
+		Print "Step 2: Updating " & sig_s & " zero values part " & i & " of " & num_id
+		col_a(1) = id1_s & "_" & i
+		col_a(2) = sig_s & "_" & i
+		Select col_a(1) From scan_table_name Where col_a(2) = 0 Into query1
+		Update query1 Set col_a(1) = -99999
+		Close Table query1
+
+		If i > 1 Then
+			Print Chr$(12)
+			Print "Step 2: Removing Duplicate " & id1_s & " values - from other carriers, part " & i & " of " & num_id
+			col_a(1) = id1_s & "_" & i
+			For j = 1 to i - 1
+				col_a(2) = id1_s & "_" & j
+				Select col_a(1) From scan_table_name Where col_a(1) = col_a(2) AND col_a(1) <> -99999 Into query1
+				Update query1 Set col_a(1) = -88888
+			Next
+		End If
+	Next
+
+
+	If scan_create_best_server_table_flag OR scan_overshooter_anal_flag Then
+		temp_s = "-99999"
+		For i = num_id to 1 Step -1
+			'not sure what this is doing
+			'-------------------------------
+			temp_s2 = sig_s & "_" & i
+			temp_s = "Maximum(" & temp_s2 & "," & temp_s & ")"
+		Next
+
+		Print Chr$(12)
+		Print "Step 3: Finding strongest " & sig_s
+		Run Command "Update " & scan_table_name & " Set Strongest_" & sig_s & " = " & temp_s
+
+		col_a(1) = "Best_" & sig_s & "_Rank"
+		col_a(2) = "Strongest_" & sig_s
+		Update scan_table_name Set col_a(1) = 1
+		Print Chr$(12)
+		Print "Step 4: Updating Strongest " & sig_s & " Rank " & 1 & " of " & num_id
+		For i = num_id to 2 Step -1
+			col_a(3) = sig_s & "_" + i
+			temp_s2 = sig_s & "_" + i
+			Select col_a(1) From scan_table_name Where col_a(3) = col_a(2) Into query1
+			Update query1 Set col_a(1) = i
+			Close Table query1
+			Print Chr$(12)
+			Print "Step 4: Finding Strongest " & sig_s & " Rank " & i & " of " & num_id
+		Next
+		Commit Table scan_table_name
+	End If
+
+	Commit Table scan_table_name As user_path_scan & scan_table_name_raw & ".tab" TYPE NATIVE Charset "WindowsLatin1"
+	Open Table user_path_scan & scan_table_name_raw & ".tab"
+
+	Print Chr$(12)
+	Print "Reorganising scan file, please wait..."
+	Print "Can take a more than 10mins..."
+
+	'this pre-processes the scan data, puts all N meas group sections into 1 set of 2+3 columns
+	'----------------------------------------------------------------------------------------------
+	If tech = "2G" Then
+		col_a(1) = id1_s & "_1"
+		col_a(2) = id2_s & "_1"
+		col_a(3) = sig_s & "_1"
+		col_a(4) = "Best_" & sig_s & "_Rank"
+		Select Longitude, Latitude, col_a(1), col_a(2), col_a(3), Rank, col_a(4) From scan_table_name where rowid = 0 Into query1
+		Commit table query1 As user_path_scan & "test.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Open Table user_path_scan & "test.tab"
+
+		If num_id >= 1 Then
+			For i = 1 to num_id
+				Print Chr$(12)
+				Print "Reorganising scan file, please wait.  Can take a more than 10mins..."
+				Print "Doing col " & i & " of " & num_id
+				col_a(1) = id1_s & "_" & i
+				col_a(2) = id2_s & "_" & i
+				col_a(3) = sig_s & "_" & i
+				col_a(4) = "Best_" & sig_s & "_Rank"
+				Select Longitude, Latitude, col_a(1), col_a(2), col_a(3), Rank, col_a(4) 
+					from scan_table_name 
+					where 	len(col_a(1)) > 0 AND 
+							col_a(1) >= 0 AND 
+							col_a(1) <= max_id1 AND 
+							len(col_a(2)) > 0 AND 
+							col_a(2) >= 0 AND 
+							col_a(2) <= max_id2 AND 
+							col_a(3) < 0 AND 
+							col_a(3) > -200 
+					into query1
+				If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then
+					Update query1 Set Rank = i
+					Insert Into test Select * From query1
+					Close Table query1
+				Else
+					Close Table query1
+				End If
+			Next
+		End If
+
+	'3G-4G case
+	'This creates the single dimention scan file for per SC processing
+	'--------------------------------------------------------------------
+	Else
+		col_a(1) = id1_s & "_1"
+		col_a(2) = sig_s & "_1"
+		col_a(3) = c2i_s & "_1"
+		col_a(4) = "Best_" & sig_s & "_Rank"
+		Select Longitude, Latitude, col_a(1), col_a(2), col_a(3), Rank, col_a(4) 
+			From scan_table_name 
+			Where rowid = 0 
+			Into query1
+		Commit table query1 As user_path_scan & "test.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Open Table user_path_scan & "test.tab"
+
+		If num_id >= 1 Then
+			For i = 1 to num_id
+				Print Chr$(12)
+				Print "Reorganising scan file, please wait.  Can take a more than 10mins..."
+				Print "Doing col " & i & " of " & num_id
+				col_a(1) = id1_s & "_" & i
+				col_a(2) = sig_s & "_" & i
+				col_a(3) = c2i_s & "_" & i
+				col_a(4) = "Best_" & sig_s & "_Rank"
+				Select Longitude, Latitude, col_a(1), col_a(2), col_a(3), Rank, col_a(4) 
+					from scan_table_name 
+					where 	len(col_a(1)) > 0 AND
+							col_a(1) >= 0 AND
+							col_a(1) <= max_id1 AND
+							col_a(2) < 0 AND
+							col_a(2) > -200 
+					Into query1
+				If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then
+					Update query1 Set Rank = i
+					Insert Into test Select * From query1
+					Close Table query1
+				Else
+					Close Table query1
+				End If
+			Next
+		End If
+	End If
+
+	Commit Table test
+
+	Set ProgressBars On
+
+	Close Table scan_table_name
+	Commit Table test As user_path_scan & scan_table_name & ".TAB" TYPE NATIVE Charset "WindowsLatin1"
+	Drop Table test
+	Open Table user_path_scan & scan_table_name & ".TAB"   ' need to do this for some reason to make it mapable
+
+	Print Chr$(12)
+	Print "Creating points, please wait.  Can take a while..."
+
+	Set Style Symbol MakeFontSymbol(41,0,6,"MapInfo Cartographic",0,0)
+	Run Command "Create Map for " & scan_table_name & " " & proj
+	Update scan_table_name Set obj = CreatePoint (Longitude,Latitude)
+	Commit Table scan_table_name
+
+	Set Style Symbol MakeFontSymbol(41,0,12,"MapInfo Cartographic",0,0)
+	Run Command "Create Map for " & scan_table_name_raw & " " & proj
+	Update scan_table_name_raw Set obj = CreatePoint (Longitude,Latitude)
+	Commit Table scan_table_name_raw
+
+	col_a(1) = id1_s & "_1"
+	col_a(2) = sig_s & "_1"
+	Create Index On scan_table_name (col_a(1))
+	Create Index On scan_table_name (col_a(2))
+
+	If tech = "2G" Then
+		col_a(1) = id2_s & "_1"
+		Create Index On scan_table_name (col_a(1))
+	End If
+	If scan_create_best_server_table_flag OR scan_overshooter_anal_flag Then
+		col_a(1) = "Best_" & sig_s & "_Rank"
+		Create Index On scan_table_name (Rank)
+		Create Index On scan_table_name (col_a(1))
+	End If
+	
+
+	'---------------------------------------------------------------------------------------------------------------------
+	'---------------------------------------------------------------------------------------------------------------------
+	'---------------------------------------------------------------------------------------------------------------------
+	'---------------------------------------------------------------------------------------------------------------------
+	'If the user wants to do the overshooter analysis, we do it here, NOTE: overshooter anal is only applicable to 3G/4G
+	'---------------------------------------------------------------------------------------------------------------------
+	Set ProgressBars On
+	If scan_overshooter_anal_flag And tech <> "2G" Then	
+		Print Chr$(12)
+		Print "Starting calculations"
+
+		Select Cell,PCI_SC_BCCH_PN,LAT,LON,Az,MDT,EDT,Ht From cell_table_for_scan Where Minimum(Distance(TableInfo(scan_table_name,TAB_INFO_MINX),TableInfo(scan_table_name,TAB_INFO_MINY),LON,LAT,"km"),Minimum(Distance(TableInfo(scan_table_name,TAB_INFO_MAXX),TableInfo(scan_table_name,TAB_INFO_MAXY),LON,LAT,"km"),Minimum(Distance(TableInfo(scan_table_name,TAB_INFO_MINX),TableInfo(scan_table_name,TAB_INFO_MAXY),LON,LAT,"km"),Distance(TableInfo(scan_table_name,TAB_INFO_MAXX),TableInfo(scan_table_name,TAB_INFO_MINY),LON,LAT,"km")))) < ignore_distance Into query1
+		If Tableinfo(query1,TAB_INFO_NROWS) = 0 Then
+			Note "There are no cells within " & ignore_distance & "kms of the scan data, something is wrong.  Exiting..."
+			Goto cancel_os_analysis
+		End If
+
+		If FileExists(user_path_scan & + "os_analysis.csv") = True Then
+			Kill user_path_scan & + "os_analysis.csv"
+		End If
+		Open File user_path_scan & "os_analysis.csv" For Output As #1
+
+		'Writes the headers
+		'----------------------
+		data = """" & id1_s & "_1"",""" & sig_s & "_1"",""" & c2i_s & "_1"",""Rank"",""Dist"",""Angle_frm_Bore"",""Most_Likely_Cell"",""Score"""
+		print #1, data
+
+		col_a(1) = id1_s & "_1"
+		col_a(2) = "query2." & sig_s & "_1"
+		col_a(3) = "query2." & c2i_s & "_1"
+		For i = 0 to max_id1
+			no_cell_flag = False
+			Select * From scan_table_name Where col_a(1) = i Into query2
+			If Tableinfo(query2,TAB_INFO_NROWS) = 0 Then
+				Goto skip_id
+			End If
+			Select * From query1 Where PCI_SC_BCCH_PN = i Into query3
+			If Tableinfo(query3,TAB_INFO_NROWS) = 0 Then
+				no_cell_flag = True
+			End If
+
+			Fetch First From query2
+			Do While NOT EOT(query2)
+				x2 = query2.Longitude
+				y2 = query2.Latitude
+				sig_f = col_a(2)
+				c2i_f = col_a(3)
+				rank_i = query2.Rank
+				h2 = 1.5
+				min_cell = ""
+				min_pl = 10000
+				min_dist = 10000
+				min_ang_h = 0
+				min_ang_v = 0
+				If no_cell_flag Then
+
+					data = """" & i & """,""" & sig_f & """,""" & c2i_f & """,""" & rank_i & """,""0"",""0"",""No Cell Matches this PCI!?"","""""
+					print #1, data
+				Else
+					Fetch First From query3
+					Do While NOT EOT(query3)
+						x1 = query1.LON
+						y1 = query1.LAT
+						az1 = query1.Az
+						h1 = query1.Ht
+						edt1 = query1.EDT
+						mdt1 = query1.MDT
+						cell_s = query1.Cell
+						dist_f = Distance(x1,y1,x2,y2,"km")
+						ang_h_f = calc_angle_h(x1,y1,x2,y2,az1)
+						ang_v_f = calc_angle_v(dist_f*1000,h1,h2)
+						pl_f = calc_pl(dist_f,freq,edt1,mdt1,ang_h_f,ang_v_f,h1,h2)
+						If pl_f < min_pl Then
+							min_pl = pl_f
+							min_cell = cell_s
+							min_dist = dist_f
+							min_ang_h = ang_h_f
+						End If					
+						Fetch Next From query3
+					Loop
+					data = """" & i & """,""" & sig_f & """,""" & c2i_f & """,""" & rank_i & """,""" & min_dist & """,""" & min_ang_h & """,""" & min_cell & ""","""""
+					print #1, data
+				End If
+				Fetch Next From query2
+			Loop
+skip_id:
+			Close Table query2
+			Print Chr$(12)
+			Print "Finding most likely cell for " & id1_s & " " & i
+		Next
+cancel_os_analysis:
+		Close Table query1
+		Close File #1
+		
+		Print Chr$(12)
+		Print "Importing calculated data back into the tool"
+		Register Table user_path_scan & "os_analysis.csv" TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_scan & "os_analysisx.tab"
+		Open Table user_path_scan & "os_analysisx.tab"
+		Commit Table os_analysisx As user_path_scan & "os_analysis.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Open Table user_path_scan & "os_analysis.tab"
+		Drop Table os_analysisx
+		If FileExists(user_path_scan & "os_analysis.csv") = True Then
+			Kill user_path_scan & "os_analysis.csv"
+		End If
+
+		Print Chr$(12)
+		Print "Finalising overshooter analysis"
+		col_a(1) = id1_s & "_1"
+		col_a(2) = sig_s & "_1"
+		col_a(3) = c2i_s & "_1"
+		Select col_a(1), Most_Likely_Cell, Avg(col_a(2)), Avg(col_a(3)), Avg(Rank), Avg(Dist), Avg(Angle_frm_Bore), Score, Count(*) From os_analysis Into query1 Group By Most_Likely_Cell
+		Commit Table query1 As user_path_scan & "os_analysisx.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Open Table user_path_scan & "os_analysisx.tab"
+		Drop Table os_analysis
+		Run Command "Alter Table os_analysisx (Modify Score Float Rename _COL3 Ave_" & sig_s & ", _COL4 Ave_" & c2i_s & ", _COL5 Ave_Rank, _COL6 Ave_Dist_km, _COL7 Ave_Angle_frm_Bore)"
+		Commit Table os_analysisx
+		Update os_analysisx Set Score = _COL9 * Ave_Dist_km / Ave_Rank
+		Select * From os_analysisx Where Ave_Dist_km > scan_overshoot_min_dist Into query1 Order By Score Desc
+		Commit Table query1 As user_path_scan & "overshooter_results_" & tech & ".TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Drop Table os_analysisx
+		Open Table user_path_scan & "overshooter_results_" & tech & ".tab"
+	End If
+
+
+
+	'---------------------------------------------------------------------------
+	'---------------------------------------------------------------------------
+	'---------------------------------------------------------------------------
+	'---------------------------------------------------------------------------
+	'We check here if the user wants to create a best server only table for best server analysis, 
+	'then we do it and create the best_only table as well as create the points
+	'---------------------------------------------------------------------------
+	If scan_create_best_server_table_flag Then
+		Print Chr$(12)
+		Print "Processing Best Server Only Table, please wait..."
+	
+		col_a(1) = id1_s & "_1"
+		col_a(2) = id2_s & "_1"
+		col_a(3) = sig_s & "_1"
+		col_a(4) = c2i_s & "_1"
+		col_a(5) = "Best_" & sig_s & "_Rank"
+		If tech = "2G" Then
+			If scan_best_is_strongest_flag Then
+				Select LONGITUDE, LATITUDE, col_a(1), col_a(2), col_a(3), Rank 
+					From scan_table_name 
+					Where Rank = col_a(5) 
+					Into query1
+			Else
+				Select LONGITUDE, LATITUDE, col_a(1), col_a(2), col_a(3), Rank 
+					From scan_table_name 
+					Where Rank = 1 
+					Into query1
+			End If
+
+		Else		'for 3G/4G
+			If scan_best_is_strongest_flag Then
+				Select LONGITUDE, LATITUDE, col_a(1), col_a(3), col_a(4), Rank 
+					From scan_table_name 
+					Where Rank = col_a(5) 
+					Into query1
+			Else
+				Select LONGITUDE, LATITUDE, col_a(1), col_a(3), col_a(4), Rank 
+					From scan_table_name 
+					Where Rank = 1 
+					Into query1
+			End If
+		End If
+		Commit table query1 As user_path_scan & scan_table_name & "_best_only.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+
+		Open Table user_path_scan & scan_table_name & "_best_only.tab"
+		Run Command "Create Map for " & scan_table_name & "_best_only " & proj
+		Set Style Symbol MakeFontSymbol(41,0,12,"MapInfo Cartographic",0,0)
+		Update scan_table_name & "_best_only" Set obj = CreatePoint (Longitude,Latitude)
+		Commit Table scan_table_name & "_best_only"
+
+		Create Index On scan_table_name & "_best_only" (col_a(1))
+		If tech = "2G" Then
+			Create Index On scan_table_name & "_best_only" (col_a(2))
+		End If
+
+		k = FrontWindow()
+		j = WindowID(k)
+		run command "add map layer " & scan_table_name & "_best_only"
+
+		If tech = "2G" Then
+		'Note: I do not do the BCCH-BSIC thermatic as it is too complex a command.  It is easy to do in MI from this point anyway
+		'Does Rxlev thermatic
+		'---------------------
+		shade window j 1 with RxLev_1 ignore 0 ranges apply color use all Symbol (35,13684944,24)  
+			-110: -100 Brush (2,13684944,16777215) Pen (1,2,0) Symbol (35,13684944,24) ,
+			-100: -90 Brush (2,128,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+			-90: -80 Brush (2,255,16777215) Pen (1,2,0) Symbol (35,255,24) ,
+			-80: -70 Brush (2,65280,16777215) Pen (1,2,0) Symbol (35,65280,24) ,
+			-70: -60 Brush (2,16776960,16777215) Pen (1,2,0) Symbol (35,16776960,24) ,
+			-60: -50 Brush (2,16744448,16777215) Pen (1,2,0) Symbol (35,16744448,24) ,
+			-50: -40 Brush (2,16711680,16777215) Pen (1,2,0) Symbol (35,16711680,24) ,
+			-40: 0 Brush (2,8388608,16777215) Pen (1,2,0) Symbol (35,8388608,24) 
+			default Brush (2,16777215,16777215) Pen (1,2,0) 
+		set legend window j layer prev display on shades on symbols off lines off count on title auto Font ("Arial",0,9,0) subtitle auto Font ("Arial",0,8,0) ascending off ranges Font ("Arial",0,8,0) 
+			auto display off ,
+			auto display off ,
+			auto display off ,
+			auto display on ,
+			auto display on ,
+			auto display on ,
+			auto display on ,
+			auto display off ,
+			auto display off  
+
+		ElseIf tech = "3G" Then
+			'Note: I do not do the SC thermatic as it is too complex a command.  It is easy to do in MI from this point anyway
+			'Does RSCP thermatic
+			'---------------------
+			shade window j 1 with RSCP_1 ignore 0 ranges apply color use all Symbol (35,13684944,24)  
+'							-110: -100 Brush (2,13684944,16777215) Pen (1,2,0) Symbol (35,13684944,24) ,
+'							-100: -90 Brush (2,128,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+'							-90: -80 Brush (2,255,16777215) Pen (1,2,0) Symbol (35,255,24) ,
+'							-80: -70 Brush (2,65280,16777215) Pen (1,2,0) Symbol (35,65280,24) ,
+'							-70: -60 Brush (2,16776960,16777215) Pen (1,2,0) Symbol (35,16776960,24) ,
+'							-60: -50 Brush (2,16744448,16777215) Pen (1,2,0) Symbol (35,16744448,24) ,
+'							-50: -40 Brush (2,16711680,16777215) Pen (1,2,0) Symbol (35,16711680,24) ,
+'							-40: 0 Brush (2,8388608,16777215) Pen (1,2,0) Symbol (35,8388608,24) 
+
+							-130: -125 Brush (2,D_GREY,16777215) Pen (1,2,0) Symbol (35,D_GREY,24) ,
+							-125: -120 Brush (2,GREY,16777215) Pen (1,2,0) Symbol (35,GREY,24) ,
+							-120: -105 Brush (2,RED,16777215) Pen (1,2,0) Symbol (35,RED,24) ,
+							-105: -95 Brush (2,PINK,16777215) Pen (1,2,0) Symbol (35,PINK,24) ,
+							-95: -85 Brush (2,YELLOW,16777215) Pen (1,2,0) Symbol (35,YELLOW,24) ,
+							-85: -75 Brush (2,GREEN,16777215) Pen (1,2,0) Symbol (35,GREEN,24) ,
+							-75: -65 Brush (2,D_GREEN,16777215) Pen (1,2,0) Symbol (35,D_GREEN,24) ,
+							-65: 0 Brush (2,BLUE,16777215) Pen (1,2,0) Symbol (35,BLUE,24) 
+
+				default Brush (2,16777215,16777215) Pen (1,2,0) 
+			set legend window j layer prev display on shades on symbols off lines off count on title auto Font ("Arial",0,9,0) subtitle auto Font ("Arial",0,8,0) ascending off ranges Font ("Arial",0,8,0) 
+				auto display off ,
+				auto display off ,
+				auto display off ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display off ,
+				auto display off  
+
+			'Does EcIo thermatic
+			'---------------------
+			shade window j 1 with EcIo_1 ignore 0 ranges apply color use all Symbol (35,13684944,24)  
+'							0: -6 Brush (2,D_BLUE,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+'							-6: -9 Brush (2,BLUE,16777215) Pen (1,2,0) Symbol (35,255,24) ,
+'							-9: -12 Brush (2,GREEN,16777215) Pen (1,2,0) Symbol (35,65280,24) ,
+'							-12: -15 Brush (2,YELLOW,16777215) Pen (1,2,0) Symbol (35,16776960,24) ,
+'							-15: -18 Brush (2,ORANGE,16777215) Pen (1,2,0) Symbol (35,16744448,24) ,
+'							-18: -20 Brush (2,RED,16777215) Pen (1,2,0) Symbol (35,16711680,24) ,
+'							-20: -22 Brush (2,D_RED,16777215) Pen (1,2,0) Symbol (35,8388608,24) ,
+'							-22 :-100 Brush (2,D_RED,16777215) Pen (1,2,0) Symbol (35,13684944,24) 
+
+							0: -6 Brush (2,BLUE,16777215) Pen (1,2,0) Symbol (35,BLUE,24) ,
+							-6: -9 Brush (2,D_GREEN,16777215) Pen (1,2,0) Symbol (35,D_GREEN,24) ,
+							-9: -12 Brush (2,GREEN,16777215) Pen (1,2,0) Symbol (35,GREEN,24) ,
+							-12: -15 Brush (2,YELLOW,16777215) Pen (1,2,0) Symbol (35,YELLOW,24) ,
+							-15: -18 Brush (2,PINK,16777215) Pen (1,2,0) Symbol (35,PINK,24) ,
+							-18: -20 Brush (2,RED,16777215) Pen (1,2,0) Symbol (35,RED,24) ,
+							-20: -22 Brush (2,GREY,16777215) Pen (1,2,0) Symbol (35,GREY,24) ,
+							-22 :-100 Brush (2,D_GREY,16777215) Pen (1,2,0) Symbol (35,D_GREY,24) 
+
+				default Brush (2,16777215,16777215) Pen (1,2,0) 
+			set legend window j layer prev display on shades on symbols off lines off count on title auto Font ("Arial",0,9,0) subtitle auto Font ("Arial",0,8,0) ascending off ranges Font ("Arial",0,8,0) 
+				auto display off ,
+				auto display off ,
+				auto display off ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display off ,
+				auto display off  
+
+		ElseIf tech = "4G" Then
+			'Note: I do not do the pci thermatic as it is too complex a command.  It is easy to do in MI from this point anyway
+			'Does RSRP thermatic
+			'----------------------------------
+			shade window j 1 with col_a(3) ignore 0 ranges apply color use all Symbol (35,13684944,24)  
+				-1250: -115 Brush (2,13684944,16777215) Pen (1,2,0) Symbol (35,13684944,24) ,
+				-115: -105 Brush (2,128,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+				-105: -95 Brush (2,255,16777215) Pen (1,2,0) Symbol (35,255,24) ,
+				-95: -85 Brush (2,65280,16777215) Pen (1,2,0) Symbol (35,65280,24) ,
+				-85: -75 Brush (2,16776960,16777215) Pen (1,2,0) Symbol (35,16776960,24) ,
+				-75: -65 Brush (2,16744448,16777215) Pen (1,2,0) Symbol (35,16744448,24) ,
+				-65: -55 Brush (2,16711680,16777215) Pen (1,2,0) Symbol (35,16711680,24) ,
+				-55: 0 Brush (2,8388608,16777215) Pen (1,2,0) Symbol (35,8388608,24) 
+				default Brush (2,16777215,16777215) Pen (1,2,0) 
+			set legend window j layer prev display on shades on symbols off lines off count on title auto Font ("Arial",0,9,0) subtitle auto Font ("Arial",0,8,0) ascending off ranges Font ("Arial",0,8,0) 
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on  
+
+			'Does SINR thermatic
+			'---------------------------
+
+			shade window j 1 with SINR_1 ignore 0 ranges apply color use all Symbol (35,13684944,24)  
+				100: 25 Brush (2,128,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+				25: 20 Brush (2,128,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+				20: 15 Brush (2,128,16777215) Pen (1,2,0) Symbol (35,128,24) ,
+				15: 10 Brush (2,255,16777215) Pen (1,2,0) Symbol (35,255,24) ,
+				10: 5 Brush (2,65280,16777215) Pen (1,2,0) Symbol (35,65280,24) ,
+				5: 0 Brush (2,16776960,16777215) Pen (1,2,0) Symbol (35,16776960,24) ,
+				0: -5 Brush (2,16744448,16777215) Pen (1,2,0) Symbol (35,16744448,24) ,
+				-5 :-10 Brush (2,16711680,16777215) Pen (1,2,0) Symbol (35,16711680,24) 
+				default Brush (2,16777215,16777215) Pen (1,2,0) 
+			set legend window j layer prev display on shades on symbols off lines off count on title auto Font ("Arial",0,9,0) subtitle auto Font ("Arial",0,8,0) ascending off ranges Font ("Arial",0,8,0) 
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on ,
+				auto display on  
+		End If
+	End If
+
+	'after this we have scan table which is only 1 set of 3 columns for all the top N scans => N times as long as the origional file
+	'-----------------------------------------------------------------------------------------------------------------------------------
+	Print Chr$(12)
+	Print "Import Successful"
+
+	Run Command "Set " & proj          ' need to set the coord sys so that mapinfo uses the sys we select
+
+	Set ProgressBars On
+	If scan_overshooter_anal_flag Then	
+		Browse * From "overshooter_results_" & tech
+	End If
+general_return:
+
+Exit Sub
+'---------------------
+target_is_open1:
+Note "The target file is open in an application, please close it and try again..."
+Resume general_return
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'This is a function to calculate the horizontal angle (rounded) of depature from boresight from point 1 to point 2, 
+'inputs are the 2 points lat/lons, the az of point 1, the return is the clockwise horizontal angle in degrees from the boresight of point 1
+'for this code x1,y1,az are the cell coords and x2,y2 are the meas point coords
+'-------------------------------------------------------------------------------------------------------------
+Function calc_angle_h (ByVal x1 As Float, ByVal y1 As Float, ByVal x2 As Float, ByVal y2 As Float, ByVal az As Float) As Float
+Dim temp_f As float
+
+		'Calc angle
+		'---------------
+		If x2-x1 >= 0 AND y2-y1 >= 0 Then     	'quad 1
+			temp_f = RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1))) - az
+		ElseIf x2-x1 >= 0 AND y2-y1 < 0 Then     	'quad 2
+			temp_f = 180 - RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1))) - az
+		ElseIf x2-x1 < 0 AND y2-y1 < 0 Then     	'quad 3
+			temp_f = 180 + RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1))) - az
+		ElseIf x2-x1 < 0 AND y2-y1 >= 0 Then     	'quad 4
+			temp_f = 360 - RAD_2_DEG*ATN(ABS(x2-x1)/Maximum(1e-10,ABS(y2-y1))) - az
+		End If
+
+		'temp_f will be now between -360 and 360, need to cleanup angle so it is between 0 and 359 clockwise from the antenna boresight
+		'----------------------------------------------------------------------------------------------------------------------------------------
+		If temp_f < 0 Then
+			temp_f = temp_f + 360
+		End If
+
+		temp_f = Round(temp_f,1)
+
+		If temp_f = 360 Then
+			temp_f = 0
+		End If
+
+		'Temp to check for errors
+		'----------------------------
+		If temp_f < 0 OR temp_f > 359 Then
+			Note "there is an angle out of range, exiting => " & Str$(temp_f)
+		End If
+
+		calc_angle_h = temp_f
+
+End Function
+
+
+
+'This is a function to calculate the vertical angle of departure from point 1 to point 2, 
+'inputs are the 2 points lat/lons, the heights of the eNB and UE(obviously, I am assuming flat terrain here),
+'the return is the vertical angle in degrees from the horizon (0 = aiming to horizon, 3 = 3deg down from horizon)
+'for this code, x1,y1,h1 are the cell coords and x2,y2,h2 are the meas point coords
+'---------------------------------------------------------------------------------
+Function calc_angle_v (ByVal dist As Float, ByVal h1 As Float, ByVal h2 As Float) As Float
+Dim temp_f As float
+
+		'Calc angle
+		'-------------
+		If h2-h1 >= 0 Then     	'quad 1
+			temp_f = 270 + RAD_2_DEG*ATN(dist/Maximum(1e-10,ABS(h2 - h1)))
+		ElseIf h2-h1 < 0 Then     	'quad 2
+			temp_f = 90 - RAD_2_DEG*ATN(dist/Maximum(1e-10,ABS(h2 - h1)))
+		End If
+
+		'calc_angle_h will be now between 270 adn 360 and 0 and 90, need to cleanup angle so it is between 0 and 359 clockwise from the antenna boresight
+		'----------------------------------------------------------------------------------------------------------------------------------------
+		If temp_f < 0 Then
+			temp_f = temp_f + 360
+		End If
+
+		temp_f = Round(temp_f,1)
+		If temp_f = 360 Then
+			temp_f = 0
+		End If
+
+		'Temp to check for errors
+		'----------------------------
+		If temp_f < 0 OR temp_f > 359 OR (temp_f < 270 AND temp_f > 90) Then
+			Note "there is an angle out of range, exiting => " & Str$(temp_f)
+		End If
+
+		calc_angle_v = temp_f
+
+End Function
+
+
+
+
+
+
+'calcs the freespace pathloss with ant gain adjustment
+'-----------------------------------------------------------
+Function calc_pl (ByVal dist As Float, ByVal freq As Float, ByVal edt As Float, ByVal mdt As Float, ByVal ang_h As Float, ByVal ang_v As Float, ByVal h1 As Float, ByVal h2 As Float) As Float
+Dim temp_f As float
+Dim ang_v_new, ant_loss_v, ant_loss_h, ant_gain_max, adjust_f, ant_hbw As Float
+Dim intercept_level, intercept_dist_ref, slope, bs_ht_ref, freq_ref, erp_ref, ms_ht_ref As Float
+
+
+		'This sets the lee model params
+		'---------------------------------
+		intercept_level = -60		'dBm
+		intercept_dist_ref = 1.62	'km
+		slope = 35						'dB/decade
+		bs_ht_ref = 45.7				'm
+		ms_ht_ref = 1.8				'm
+		freq_ref = 850				'MHz
+		erp_ref = 100					'watts
+		
+		'This prepares the antenna gain calculation
+		'I basically get the max ant gain, apply the loss from the horizontal azimth and then calc a loss for the vert az (basically blend the front with the back depending on the horizontal az => az = 0 => v adjust is all front, if 90deg it is 50:50, if 180, it is all back)
+		'---------------------------------------------
+		ant_hbw = 65			'degrees
+		edt = Round(edt,1)
+		mdt = Round(mdt,1)
+		ang_v_new = ang_v - mdt
+		If ang_v_new < 0 Then
+			ang_v_new = 360 + ang_v_new
+		End If
+
+		adjust_f = 1
+		If ang_h <= 180 AND ang_h > ant_hbw/2 Then
+			adjust_f = 1 - (ang_h - ant_hbw/2)/(180 - ant_hbw/2)
+		ElseIf ang_h > 180 AND ang_h < 360 - ant_hbw/2 Then
+			adjust_f = 1 - (360 - (ang_h - ant_hbw/2))/(180 - ant_hbw/2)
+		End If 
+
+		ant_gain_max = panel_4G(edt+1).ant_gain
+		ant_loss_v = adjust_f * panel_4G(edt+1).ant_loss_v(ang_v_new + 1)		'basically I add in a vert angle gain adjust based on the vert ant pattern for any az within the HBW, but slowly blend that ajustment out as the AZ swings bak towards 180deg, where I am just using the horizontal gain ajust as near the back half, the antenna gain changes little with angle
+		ant_loss_h = panel_4G(edt+1).ant_loss_h(ang_h + 1)
+		
+	
+		'Calc pathloss
+		'---------------
+		'freespace calc => makes distant cells too likely to be chosen over closer ones
+		'--------------------------------------------
+'		calc_pl = 32.44 + 20*Log(freq)/Log(10) + 20*Log(dist)/Log(10) - (ant_gain_max - ant_loss_h - ant_loss_v)
+
+		'Lee calc, more slope, so works better => put in some factor to make sites within 1km or so have less backlobe loss
+		'--------------------------------------------
+		calc_pl = 10*Log(erp_ref*1000)/Log(10)-(intercept_level - slope*LOG(dist/intercept_dist_ref)/Log(10)+16.6*LOG(h1/bs_ht_ref)/Log(10)+10*LOG(h2/ms_ht_ref)/Log(10)-20*LOG(freq/freq_ref)/Log(10)) - (ant_gain_max - ant_loss_h - ant_loss_v)
+
+End Function
+
+
+
+
+
+

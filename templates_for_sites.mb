@@ -1,0 +1,1399 @@
+'All that is left is the add and define template subs, then you are free to build the add_site subs
+' need to reduce the template number to 10 instead of 11, remove sysind
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub edit_site_templates_sub
+Declare Sub define_template_sub
+Declare Sub edit_template_sub
+Declare Sub add_template_sub
+Declare Sub copy_template_sub
+Declare Sub remove_template_sub
+Declare Sub active_template_sub
+Declare Sub active_template_rightclick_sub
+Declare Sub reset_templates_sub
+Declare Sub load_project_file_templates_only_sub
+Declare Sub default_templates_sub
+Declare Sub set_qd_templates_sub
+Declare Sub active_template_rightclick_1_sub
+Declare Sub active_template_rightclick_2_sub
+Declare Sub active_template_rightclick_3_sub
+Declare Sub active_template_rightclick_4_sub
+Declare Sub active_template_rightclick_5_sub
+Declare Sub active_template_rightclick_6_sub
+Declare Sub active_template_rightclick_7_sub
+Declare Sub active_template_rightclick_8_sub
+Declare Sub active_template_rightclick_9_sub
+Declare Sub active_template_rightclick_10_sub
+Declare Sub active_template_rightclick_11_sub
+Declare Sub active_template_rightclick_12_sub
+Declare Sub active_template_rightclick_13_sub
+Declare Sub active_template_rightclick_14_sub
+Declare Sub active_template_rightclick_15_sub
+Declare Sub active_template_rightclick_16_sub
+Declare Sub active_template_rightclick_17_sub
+Declare Sub active_template_rightclick_18_sub
+Declare Sub active_template_rightclick_19_sub
+Declare Sub active_template_rightclick_20_sub
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for edit site templates mode
+'---------------------------------------------------
+Sub edit_site_templates_sub
+Dim i As Integer
+
+	'This creates the edit dialog for cells
+	'--------------------------------------------
+	Dialog Title "Site Template Management" width 300 height 305 Position 20,40
+
+	Control StaticText
+	Title "Currently Defined Site Templates" Position 10, 10
+
+	Control Listbox
+	ID 1000
+	Title From Variable t_names()
+	Value 1
+	Position 10, 25 Width 190 Height 200
+
+	Control Button	
+	Title "&Set Selected to Active"
+	Calling active_template_sub
+	Position 210, 30 Width 80
+	Control StaticText
+	Title "The Active Template is:" Position 210, 50
+	Control GroupBox
+	Position 205, 58 Width 90 Height 20
+	Control StaticText
+	ID 1002
+	Title active_template Position 210, 65 Width 80
+
+	Control Button	
+	Title "&Add Template"
+	Calling add_template_sub
+	Position 210, 90 Width 80
+	Control Button	
+	Title "&Edit Template"
+	Calling edit_template_sub
+	Position 210, 110 Width 80
+	Control Button	
+	Title "&Copy Template"
+	Calling copy_template_sub
+	Position 210, 130 Width 80
+	Control Button	
+	Title "&Remove Template"
+	Calling remove_template_sub
+	Position 210, 150 Width 80
+	Control Button	
+
+	Title "&Load Defaults"
+	Calling reset_templates_sub
+	Position 210, 180 Width 80
+	Control Button	
+	Title "&Load From Project File"
+	Calling load_project_file_templates_only_sub
+	Position 210, 200 Width 80
+
+	Control OKButton
+	Position 120, 265
+
+	If CommandInfo(CMD_INFO_DLG_OK) = True Then
+		'This updates the rightclick menu
+		'---------------------------------
+		Call set_qd_templates_sub
+
+		Exit Sub
+	Else		'if the esc key was pressed
+		'This updates the rightclick menu
+		'---------------------------------
+		Call set_qd_templates_sub
+
+		Exit Sub
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for adding a template
+'---------------------------------------------------
+Sub add_template_sub
+Dim i, j As Integer
+Dim template_chosen As Integer
+Dim template_new As String
+
+
+	t_names_temp = "new template"
+	For j = 1 to 66
+		t_values_temp(j) = ""
+	Next
+
+	Call define_template_sub
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+
+	'This adds the new template on to the end of the current list
+	'--------------------------------------------------------------
+	i = 1
+	Do While t_names(i) <> ""
+		i = i + 1
+	Loop
+	i = i  			' now i represents the position of the first blank space in the array
+	
+	t_names(i) = t_names_temp
+	For j = 1 to 66
+		t_values((i-1)*66 + j) = t_values_temp(j)
+	Next
+
+	Alter Control 1000
+	Title From Variable t_names()
+	Value template_chosen
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is the engine for duplicating a template
+'---------------------------------------------------
+Sub copy_template_sub
+Dim i, j As Integer
+Dim template_chosen As Integer
+Dim template_new As String
+
+
+	template_chosen = ReadControlValue(1000)
+	
+	If template_chosen = 0 or t_names(template_chosen) = "" Then
+		Exit Sub
+	End If
+
+	t_names_temp = "new template"
+	For j = 1 to 66
+		t_values_temp(j) = t_values((template_chosen-1)*66 + j)
+	Next
+
+	Call define_template_sub
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+
+	'This adds the new template on to the end of the current list
+	'-----------------------------------------------------------
+	i = 1
+	Do While t_names(i) <> ""
+		i = i + 1
+	Loop
+	i = i  			' now i represents the position of the first blank space in the array
+	
+	t_names(i) = t_names_temp
+	For j = 1 to 66
+		t_values((i-1)*66 + j) = t_values_temp(j)
+	Next
+
+	Alter Control 1000
+	Title From Variable t_names()
+	Value template_chosen
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the initial engine for editing a template
+'---------------------------------------------------
+Sub edit_template_sub
+Dim i, j As Integer
+Dim template_chosen As Integer
+
+
+
+	template_chosen = ReadControlValue(1000)
+	
+	If template_chosen = 0 or t_names(template_chosen) = "" Then
+		Exit Sub
+	End If
+
+	t_names_temp = t_names(template_chosen)
+	For j = 1 to 66
+		t_values_temp(j) = t_values((template_chosen-1)*66 + j)
+	Next
+
+	Call define_template_sub
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+	'This changes the values for the template that was edited
+	'-----------------------------------------------------------
+	t_names(template_chosen) = t_names_temp
+	For j = 1 to 66
+		t_values((template_chosen-1)*66 + j) = t_values_temp(j)
+	Next
+
+	Alter Control 1000
+	Title From Variable t_names()
+	Value template_chosen
+
+	'This changes the active template if the active was edited
+	'-------------------------------------------------------	
+	If template_chosen = active_template_pointer Then
+		'This determines the active template parameters
+		'--------------------------------------------------
+		active_template = t_names(template_chosen)
+		active_template_pointer = template_chosen
+		For i = 1 to 6
+			If t_values((active_template_pointer-1)*66 + i*11 - 7) = "" Then ' this just looks at the az field for each sector to determine the sector count
+				Exit For
+			End If
+		Next
+		active_template_sectors = i - 1
+
+		Alter Control 1002
+		Title active_template
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the main engine for editing a template
+'---------------------------------------------------
+Sub define_template_sub
+Dim i, j, k, l, m, statusi(6), systemi(6) As Integer
+Dim ask_string, system_string, status_string, sus_input As String
+Dim antypex(6), antypex2(6), systemx2(6), systemx(6), htx(6), mdtx(6), edtx(6), azx(6), statusx(6), commentx(6), hbwx(6), sizex(6), htx2(6), mdtx2(6), edtx2(6), azx2(6), statusx2(6), commentx2(6), hbwx2(6), sizex2(6), typex(6), typex2(6) As String
+Dim width_temp_1, width_temp_2, width_temp_3, width_temp_4, width_temp_5, width_temp_6, width_temp_7 As Float
+Dim fail_flag As Logical
+
+
+				sus_input = "null"
+				fail_flag = False
+
+Back_to_dialog_all:
+				systemi(1) = 0
+				For k = 1 to 6
+					statusi(k) = 0
+				Next
+
+				'This writes the values to the dialog vars
+				'--------------------------------------------
+				systemx(1) = t_values_temp(2)
+				If len(systemx(1)) >= 8 Then
+					systemx(1) = right$(systemx(1),len(systemx(1))-8)
+				End If
+
+				For k = 1 to 6
+					typex(k)		= t_values_temp((k-1)*11+1)
+					statusx(k) 	= t_values_temp((k-1)*11+3)
+					azx(k) 		= t_values_temp((k-1)*11+4)
+					antypex(k)		= t_values_temp((k-1)*11+5)
+					hbwx(k) 		= t_values_temp((k-1)*11+6)
+					edtx(k) 		= t_values_temp((k-1)*11+7)
+					mdtx(k) 		= t_values_temp((k-1)*11+8)
+					htx(k) 		= t_values_temp((k-1)*11+9)
+					sizex(k) 		= t_values_temp((k-1)*11+10)
+					commentx(k) 	= t_values_temp((k-1)*11+11)
+
+					'This takes out the prefix
+					'------------------------------
+					If len(typex(k)) >= 8 Then
+						typex(k) = right$(typex(k),len(typex(k))-8)
+					End If
+					If len(statusx(k)) >= 8 Then
+						statusx(k) = right$(statusx(k),len(statusx(k))-8)
+					End If
+					If len(azx(k)) >= 8 Then
+						azx(k) = right$(azx(k),len(azx(k))-8)
+					End If
+					If len(hbwx(k)) >= 8 Then
+						hbwx(k) = right$(hbwx(k),len(hbwx(k))-8)
+					End If
+					If len(edtx(k)) >= 8 Then
+						edtx(k) = right$(edtx(k),len(edtx(k))-8)
+					End If
+					If len(mdtx(k)) >= 8 Then
+						mdtx(k) = right$(mdtx(k),len(mdtx(k))-8)
+					End If
+					If len(htx(k)) >= 8 Then
+						htx(k) = right$(htx(k),len(htx(k))-8)
+					End If
+					If len(commentx(k)) >= 8 Then
+						commentx(k) = right$(commentx(k),len(commentx(k))-8)
+					End If
+					If len(sizex(k)) >= 8 Then
+						sizex(k) = right$(sizex(k),len(sizex(k))-8)
+					End If
+					If len(antypex(k)) >= 8 Then
+						antypex(k)	= right$(antypex(k),len(antypex(k))-8)
+					End If
+				Next
+
+
+				For k = 1 to 6
+					'This converts status values to numbers for the dialog
+					'---------------------------------------------------
+					j = 0
+					Do				'This would be the end of the list as we fill up the array from the start
+						j = j + 1
+						If statusx(k) = status_value(j) Then 
+							statusi(k) = j + 1
+						End If
+					Loop While status_value(j) <> ""
+					If statusi(k) = 0 Then					'This means nothing was matched, so statusi wasn't set
+						statusi(k) = 1
+					End If
+
+					j = j - 1					' j now represents the number of status values in the array
+					status_string = "-"
+					For m = 1 to j
+						status_string = status_string + ";" + status_value(m) 
+					Next
+				Next
+
+
+				'This converts system values to numbers for the dialog
+				'------------------------------------------------------
+				j = 0
+				Do				'This would be the end of the list as we fill up the array from the start
+					j = j + 1
+					If systemx(1) = sys(j) Then 
+						systemi(1) = j + 1
+					End If
+				Loop While sys(j) <> ""
+				If systemi(1) = 0 Then					'This means nothing was matched, so systemi wasn't set
+					systemi(1) = 1
+				End If
+
+				j = j - 1					' j now represents the number of system values in the array
+				system_string = "-"
+				For m = 1 to j
+					system_string = system_string + ";" + sys(m) 
+				Next
+
+				If sus_input <> "null" Then
+					Dialog Title "Add/Edit Template "+t_names_temp width 245 height 100	 Position 10,10
+					Control StaticText
+					Title "One of the values you entered seems strange or is out of range." Position 15, 20
+					Control StaticText
+					Title sus_input Position 15, 35
+					Control StaticText
+					Title "Please enter a valid value." Position 15, 50
+
+					Control OKButton
+					Position 20, 70
+					Control CancelButton
+					Position 180, 70
+
+					If CommandInfo(CMD_INFO_DLG_OK) = False Then
+						Exit Sub
+					End If
+
+					sus_input = "null"
+				End If
+
+
+
+				'This sets up some parameters for the dialog
+				'-------------------------------------------
+				width_temp_1 = 540
+				width_temp_2 = 75*2
+				width_temp_3 = 75*3
+				width_temp_4 = 75*4
+				width_temp_5 = 75*5
+				width_temp_6 = 75*6
+				width_temp_7 = 10000
+
+				'This creates the edit dialog for cells
+				'--------------------------------------------
+				Dialog Title "Add/Edit Templates" width width_temp_1 height 285	 Position 20,40
+				Control GroupBox
+				Title "" 
+				Position 10, 10 Width width_temp_1-20 Height 55
+				Control StaticText
+				Title "Template Name: " Position 15, 20
+				Control EditText
+				Value t_names_temp Position 75, 20 Width 150
+				Into t_names_temp
+
+				Control StaticText
+				Title "System Type:" Position 15, 70
+				Control StaticText
+				Title "Azimuth (deg):" Position 15, 85
+				Control StaticText
+				Title "Ant Type:" Position 15, 100
+				Control StaticText
+				Title "Ant HBW (deg):" Position 15, 115
+				Control StaticText
+				Title "Object Size (m):" Position 15, 130
+				Control StaticText
+				Title "Height (m/ft):" Position 15, 145
+				Control StaticText
+				Title "MDT (deg):" Position 15, 160
+				Control StaticText
+				Title "EDT (deg):" Position 15, 175
+				Control StaticText
+				Title "Status:" Position 15, 190
+				Control StaticText
+				Title "Comments:" Position 15, 205
+				Control StaticText
+				Title "Type:" Position 15, 220
+
+				Control StaticText
+				Title "Cell 1" Position 75*1+10, 50
+				Control StaticText
+				Title "Cell 2" Position width_temp_2+10, 50
+				Control StaticText
+				Title "Cell 3" Position width_temp_3+10, 50
+				Control StaticText
+				Title "Cell 4" Position width_temp_4+10, 50
+				Control StaticText
+				Title "Cell 5" Position width_temp_5+10, 50
+				Control StaticText
+				Title "Cell 6" Position width_temp_6+10, 50
+
+				Control PopupMenu
+				Title system_string Position 75, 70 ' Width 150
+				Value systemi(1)
+				Into systemx2(1)
+
+				Control EditText
+				Value azx(1) Position 75, 85 Width 40
+				Into azx2(1)
+				Control EditText
+				Value azx(2) Position width_temp_2, 85 Width 40
+				Into azx2(2)
+				Control EditText
+				Value azx(3) Position width_temp_3, 85 Width 40
+				Into azx2(3)
+				Control EditText
+				Value azx(4) Position width_temp_4, 85 Width 40
+				Into azx2(4)
+				Control EditText
+				Value azx(5) Position width_temp_5, 85 Width 40
+				Into azx2(5)
+				Control EditText
+				Value azx(6) Position width_temp_6, 85 Width 40
+				Into azx2(6)
+
+				Control EditText
+				Value antypex(1) Position 75, 100 Width 40
+				Into antypex2(1)
+				Control EditText
+				Value antypex(2) Position width_temp_2, 100 Width 40
+				Into antypex2(2)
+				Control EditText
+				Value antypex(3) Position width_temp_3, 100 Width 40
+				Into antypex2(3)
+				Control EditText
+				Value antypex(4) Position width_temp_4, 100 Width 40
+				Into antypex2(4)
+				Control EditText
+				Value antypex(5) Position width_temp_5, 100 Width 40
+				Into antypex2(5)
+				Control EditText
+				Value antypex(6) Position width_temp_6, 100 Width 40
+				Into antypex2(6)
+
+				Control EditText
+				Value hbwx(1) Position 75, 115 Width 40
+				Into hbwx2(1)
+				Control EditText
+				Value hbwx(2) Position width_temp_2, 115 Width 40
+				Into hbwx2(2)
+				Control EditText
+				Value hbwx(3) Position width_temp_3, 115 Width 40
+				Into hbwx2(3)
+				Control EditText
+				Value hbwx(4) Position width_temp_4, 115 Width 40
+				Into hbwx2(4)
+				Control EditText
+				Value hbwx(5) Position width_temp_5, 115 Width 40
+				Into hbwx2(5)
+				Control EditText
+				Value hbwx(6) Position width_temp_6, 115 Width 40
+				Into hbwx2(6)
+
+				Control EditText
+				Value sizex(1) Position 75, 130 Width 40
+				Into sizex2(1)
+				Control EditText
+				Value sizex(2) Position width_temp_2, 130 Width 40
+				Into sizex2(2)
+				Control EditText
+				Value sizex(3) Position width_temp_3, 130 Width 40
+				Into sizex2(3)
+				Control EditText
+				Value sizex(4) Position width_temp_4, 130 Width 40
+				Into sizex2(4)
+				Control EditText
+				Value sizex(5) Position width_temp_5, 130 Width 40
+				Into sizex2(5)
+				Control EditText
+				Value sizex(6) Position width_temp_6, 130 Width 40
+				Into sizex2(6)
+
+				Control EditText
+				Value htx(1) Position 75, 145 Width 40
+				Into htx2(1)
+				Control EditText
+				Value htx(2) Position width_temp_2, 145 Width 40
+				Into htx2(2)
+				Control EditText
+				Value htx(3) Position width_temp_3, 145 Width 40
+				Into htx2(3)
+				Control EditText
+				Value htx(4) Position width_temp_4, 145 Width 40
+				Into htx2(4)
+				Control EditText
+				Value htx(5) Position width_temp_5, 145 Width 40
+				Into htx2(5)
+				Control EditText
+				Value htx(6) Position width_temp_6, 145 Width 40
+				Into htx2(6)
+
+				Control EditText
+				Value mdtx(1) Position 75, 160 Width 40
+				Into mdtx2(1)
+				Control EditText
+				Value mdtx(2) Position width_temp_2, 160 Width 40
+				Into mdtx2(2)
+				Control EditText
+				Value mdtx(3) Position width_temp_3, 160 Width 40
+				Into mdtx2(3)
+				Control EditText
+				Value mdtx(4) Position width_temp_4, 160 Width 40
+				Into mdtx2(4)
+				Control EditText
+				Value mdtx(5) Position width_temp_5, 160 Width 40
+				Into mdtx2(5)
+				Control EditText
+				Value mdtx(6) Position width_temp_6, 160 Width 40
+				Into mdtx2(6)
+
+				Control EditText
+				Value edtx(1) Position 75, 175 Width 40
+				Into edtx2(1)
+				Control EditText
+				Value edtx(2) Position width_temp_2, 175 Width 40
+				Into edtx2(2)
+				Control EditText
+				Value edtx(3) Position width_temp_3, 175 Width 40
+				Into edtx2(3)
+				Control EditText
+				Value edtx(4) Position width_temp_4, 175 Width 40
+				Into edtx2(4)
+				Control EditText
+				Value edtx(5) Position width_temp_5, 175 Width 40
+				Into edtx2(5)
+				Control EditText
+				Value edtx(6) Position width_temp_6, 175 Width 40
+				Into edtx2(6)
+
+				Control PopupMenu
+				Title status_string Position 75, 190 ' Width 150
+				Value statusi(1)
+				Into statusx2(1)
+				Control PopupMenu
+				Title status_string Position width_temp_2, 190 ' Width 150
+				Value statusi(2)
+				Into statusx2(2)
+				Control PopupMenu
+				Title status_string Position width_temp_3, 190 ' Width 150
+				Value statusi(3)
+				Into statusx2(3)
+				Control PopupMenu
+				Title status_string Position width_temp_4, 190 ' Width 150
+				Value statusi(4)
+				Into statusx2(4)
+				Control PopupMenu
+				Title status_string Position width_temp_5, 190 ' Width 150
+				Value statusi(5)
+				Into statusx2(5)
+				Control PopupMenu
+				Title status_string Position width_temp_6, 190 ' Width 150
+				Value statusi(6)
+				Into statusx2(6)
+
+				Control EditText
+				Value commentx(1) Position 75, 205 Width 67
+				Into commentx2(1)
+				Control EditText
+				Value commentx(2) Position width_temp_2, 205 Width 67
+				Into commentx2(2)
+				Control EditText
+				Value commentx(3) Position width_temp_3, 205 Width 67
+				Into commentx2(3)
+				Control EditText
+				Value commentx(4) Position width_temp_4, 205 Width 67
+				Into commentx2(4)
+				Control EditText
+				Value commentx(5) Position width_temp_5, 205 Width 67
+				Into commentx2(5)
+				Control EditText
+				Value commentx(6) Position width_temp_6, 205 Width 67
+				Into commentx2(6)
+
+				Control EditText
+				Value typex(1) Position 75, 220 Width 67
+				Into typex2(1)
+				Control EditText
+				Value typex(2) Position width_temp_2, 220 Width 67
+				Into typex2(2)
+				Control EditText
+				Value typex(3) Position width_temp_3, 220 Width 67
+				Into typex2(3)
+				Control EditText
+				Value typex(4) Position width_temp_4, 220 Width 67
+				Into typex2(4)
+				Control EditText
+				Value typex(5) Position width_temp_5, 220 Width 67
+				Into typex2(5)
+				Control EditText
+				Value typex(6) Position width_temp_6, 220 Width 67
+				Into typex2(6)
+
+				Control StaticText
+				Title "Leaving the Azimuth blank will delete that and all following cells" Position 10, 255
+				Control StaticText
+				Title "The system type must be set for the template to be usable" Position 10, 270
+
+				Control OKButton
+				Position 220, 240
+				Control CancelButton
+				Position width_temp_1-245, 240
+
+				If CommandInfo(CMD_INFO_DLG_OK) = False Then
+					Exit Sub
+				End If
+
+
+
+				'This is the sanity check on the values and updates cells_sys(x) based on any changes I made, except lat/lon and status
+				'-----------------------------------------------------
+				For k = 1 to 6
+					If k = 1 AND azx2(k) = "" Then
+						sus_input = "The first cell Azimuth can't be blank"
+						fail_flag = True
+						Exit For
+
+					ElseIf azx2(k) = "" OR fail_flag = True Then
+						t_values_temp((k-1)*11+1) = ""
+						t_values_temp((k-1)*11+2) = ""
+						t_values_temp((k-1)*11+3) = ""
+						t_values_temp((k-1)*11+4) = ""
+						t_values_temp((k-1)*11+5) = ""
+						t_values_temp((k-1)*11+6) = ""
+						t_values_temp((k-1)*11+7) = ""
+						t_values_temp((k-1)*11+8) = ""
+						t_values_temp((k-1)*11+9) = ""
+						t_values_temp((k-1)*11+10) = ""
+						t_values_temp((k-1)*11+11) = ""
+						If k = 6 Then
+							fail_flag = False
+						Else
+							fail_flag = True
+						End If
+
+					Else
+						If systemx2(1) = "1" Then
+							t_values_temp((k-1)*11+2) = "system..TBD"
+						Else
+							t_values_temp((k-1)*11+2) = "system.." & sys(val(systemx2(1))-1)
+						End If
+						t_values_temp((k-1)*11+1) = "type...." & typex2(k)
+						t_values_temp((k-1)*11+4) = "azimut.." & val(azx2(k))
+						t_values_temp((k-1)*11+5) = "antype.." & antypex2(k)
+						t_values_temp((k-1)*11+6) = "hbw....." & val(hbwx2(k))
+						t_values_temp((k-1)*11+8) = "mdt....." & val(mdtx2(k))
+						t_values_temp((k-1)*11+7) = "edt....." & val(edtx2(k))
+						t_values_temp((k-1)*11+9) = "ht......" & val(htx2(k))
+						t_values_temp((k-1)*11+10) = "size...." & val(sizex2(k))
+						t_values_temp((k-1)*11+11) = "commnt.." & commentx2(k)
+
+						If statusx2(k) = "1" Then
+							statusx2(k) = ""
+						Else
+							statusx2(k) = status_value(val(statusx2(k))-1)
+						End If
+						t_values_temp((k-1)*11+3) = "status.." & statusx2(k)					
+					
+
+						If (val(azx2(k)) = 0 AND azx2(k) <> "0") OR val(azx2(k)) < 0 OR val(azx2(k)) > 360 Then        ' then it has a character in it or is out of range
+							sus_input = "cell "+k+".... Azimuth = " + azx2(k)
+							fail_flag = True
+							Exit For
+						End If
+
+						If (val(hbwx2(k)) = 0 and hbwx2(k) <> "0") or val(hbwx2(k)) < 0 or val(hbwx2(k)) > 360 Then         ' then it has a character in it or is out of range
+							sus_input = "cell "+k+".... HBW = " + hbwx2(k)
+							fail_flag = True
+							Exit For
+						End If
+
+						If (val(mdtx2(k)) = 0 and mdtx2(k) <> "0") or val(mdtx2(k)) < -90 or val(mdtx2(k)) > 90 Then        ' then it has a character in it or is out of range
+							sus_input = "cell "+k+".... MDT = " + mdtx2(k)
+							fail_flag = True
+							Exit For
+						End If
+
+						If (val(edtx2(k)) = 0 and edtx2(k) <> "0") or val(edtx2(k)) < -90 or val(edtx2(k)) > 90 Then         ' then it has a character in it or is out of range
+							sus_input = "cell "+k+".... EDT = " + edtx2(k)
+							fail_flag = True
+							Exit For
+						End If
+
+						If (val(htx2(k)) = 0 and htx2(k) <> "0") or val(htx2(k)) < 0 Then        ' then it has a character in it or is out of range
+							sus_input = "cell "+k+".... Ht = " + htx2(k)
+							fail_flag = True
+							Exit For
+						End If
+
+						If (val(sizex2(k)) = 0 and sizex2(k) <> "0") or val(sizex2(k)) < 0 or val(sizex2(k)) > 100000000 Then         ' then it has a character in it or is out of range
+							sus_input = "cell "+k+".... Object Size (m) = " + sizex2(k)
+							fail_flag = True
+							Exit For
+						End If
+
+						If typex2(k) <> "Macro" And typex2(k) <> "Non-Macro" Then
+							sus_input = "cell " & k & ".... Type = " & typex2(k) & " (Macro/Non-Macro)"
+							fail_flag = True
+							Exit For
+						End If
+
+					End If
+				Next
+
+
+				'Remember that the save project file uses the sysind value of every cell in each template to determine if it exists, so if it "" then there is no cell
+				'This warns the users that they have not set the sys
+				'-------------------------------------------------------
+				If systemx2(1) = "1" Then		
+					Note "You have not set any system type for this template!"
+					fail_flag = False
+					Goto back_to_dialog_all
+				End If
+
+				If fail_flag = True Then
+					fail_flag = False
+					Goto back_to_dialog_all
+				End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for remove template
+'---------------------------------------------------
+Sub remove_template_sub
+Dim i, j, template_chosen As Integer
+Dim ask_string As String
+
+
+
+	template_chosen = ReadControlValue(1000)
+	
+	If template_chosen = 0 or t_names(template_chosen) = "" Then
+		Exit Sub
+	End If
+
+	ask_string = "Are you sure you want to remove the template:   "+t_names(template_chosen)+" ?"
+	If 	Ask(ask_string,"Yes","Cancel") = False Then
+		Exit Sub
+	End If
+
+	'This shifts all templates up one in the list if they were behind the removed one
+	'--------------------------------------------------------------------
+	i = 1
+	Do While t_names(i) <> ""
+		If i >= template_chosen Then
+			t_names(i) = t_names(i+1)
+			For j = 1 to 66
+				If i = 20 Then
+					t_values((i-1)*66 + j) = ""
+				Else
+					t_values((i-1)*66 + j) = t_values((i)*66 + j)
+				End If
+			Next
+		End If
+		i = i + 1
+	Loop
+
+	Alter Control 1000
+	Title From Variable t_names()
+	Value template_chosen
+
+	
+	'This resets the active template if the active was removed
+	'----------------------------------------------	
+	If template_chosen = active_template_pointer Then
+
+		'This determines the active template parameters
+		'--------------------------------------------------
+		active_template = ""
+		active_template_pointer = 0
+		Alter Control 1002
+		Title active_template
+	End If 
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this sets the active template and the pointer and the # sectors
+'---------------------------------------------------
+Sub active_template_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = ReadControlValue(1000)
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	ElseIf t_values((template_chosen_pointer-1)*66 + 2) = "system..TBD" OR t_values((template_chosen_pointer-1)*66 + 2) = "" Then
+		Note "You can't add " & t_names(template_chosen_pointer) & " as the active template as it doesn't have a system defined."
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+	
+	'This determines the cell count in the active template by counting the # Az fields
+	'--------------------------------------------------------------------------------------
+	For i = 1 to 6			'because we only support up to 6 sectors at 11 pieces of info each sector
+		If t_values((active_template_pointer-1)*66 + i*11 - 7) = "" Then
+			Exit For
+		End If
+	Next
+	active_template_sectors = i - 1
+
+
+	'This updates the dialog
+	'--------------------------
+	Alter Control 1002
+	Title active_template
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this sets the active template and the pointer and the # sectors
+'---------------------------------------------------
+Sub active_template_rightclick_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	'This determines the cell count in the active template by counting the # Az fields
+	'--------------------------------------------------------------------------------------
+	For i = 1 to 6			'because we only support up to 6 sectors at 11 pieces of info each sector
+		If t_values((active_template_pointer-1)*66 + i*11 - 7) = "" Then
+			Exit For
+		End If
+	Next
+	active_template_sectors = i - 1
+
+	'This updates the rightclick menu
+	'---------------------------------
+	Call set_qd_templates_sub
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is the engine for reset to default
+'---------------------------------------------------
+Sub reset_templates_sub
+Dim template_chosen As Integer
+
+	Call default_templates_sub
+
+	template_chosen = ReadControlValue(1000)
+	Alter Control 1000
+	Title From Variable t_names()
+	Value template_chosen
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine resetting to default
+'---------------------------------------------------
+Sub default_templates_sub
+Dim i As Integer
+
+
+	'This resets the template arrays
+	'--------------------------------------
+	For i = 1 to 20
+		t_names(i) = ""
+	Next
+
+	For i = 1 to 1320
+		t_values(i) = ""
+	Next
+
+	t_names(1) = "default_3_sector"
+	'-------------------------------------------
+	t_values(1) = "type....Macro"
+	t_values(2) = "system..TBD"
+	t_values(3) = "status..On-Air"
+	t_values(4) = "azimut..0"
+	t_values(5) = "antpat..Sector Antenna"
+	t_values(6) = "hbw.....65"
+	t_values(7) = "edt.....0"
+	t_values(8) = "mdt.....0"
+	t_values(9) = "ht......30"
+	t_values(10) = "size....100"
+	t_values(11) = "commnt.."
+	t_values(12) = "sysind..0"
+	t_values(13) = "system..TBD"
+	t_values(14) = "status..On-Air"
+	t_values(15) = "azimut..120"
+	t_values(16) = "antpat..Sector Antenna"
+	t_values(17) = "hbw.....65"
+	t_values(18) = "edt.....0"
+	t_values(19) = "mdt.....0"
+	t_values(20) = "ht......30"
+	t_values(21) = "size....100"
+	t_values(22) = "commnt.."
+	t_values(23) = "sysind..0"
+	t_values(24) = "system..TBD"
+	t_values(25) = "status..On-Air"
+	t_values(26) = "azimut..240"
+	t_values(27) = "antpat..Sector Antenna"
+	t_values(28) = "hbw.....65"
+	t_values(29) = "edt.....0"
+	t_values(30) = "mdt.....0"
+	t_values(31) = "ht......30"
+	t_values(32) = "size....100"
+	t_values(33) = "commnt.."
+
+	t_names(2) = "default_omni"
+	'---------------------------------------
+	t_values(67) = "type....Macro"
+	t_values(68) = "system..TBD"
+	t_values(69) = "status..On-Air"
+	t_values(70) = "azimut..0"
+	t_values(71) = "antpat..Omni Antenna"
+	t_values(72) = "hbw.....360"
+	t_values(73) = "edt.....0"
+	t_values(74) = "mdt.....0"
+	t_values(75) = "ht......30"
+	t_values(76) = "size....100"
+	t_values(77) = "commnt.."
+
+
+	If load_t_values_only_flag = False Then
+		'This determines the active template parameters
+		'--------------------------------------------------
+		active_template = t_names(1)
+		active_template_pointer = 1
+		For i = 1 to 6
+			If t_values((active_template_pointer-1)*66 + i*11 - 7) = "" Then ' this just looks at the az field for each sector to determine the sector count
+				Exit For
+			End If
+		Next
+		active_template_sectors = i - 1
+
+		Alter Control 1002
+		Title active_template
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+Sub active_template_rightclick_1_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 1
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_2_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 2
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_3_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 3
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_4_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 4
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_5_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 5
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_6_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 6
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_7_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 7
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_8_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 8
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_9_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 9
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_10_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 10
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_11_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 11
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_12_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 12
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_13_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 13
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_14_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 14
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_15_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 15
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_16_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 16
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_17_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 17
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_18_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 18
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_19_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 19
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+
+Sub active_template_rightclick_20_sub
+Dim template_chosen_pointer, i, j As Integer
+
+	template_chosen_pointer = 20
+
+	If template_chosen_pointer = 0 OR t_names(template_chosen_pointer) = "" Then
+		Exit Sub
+	End If
+
+	active_template_pointer = template_chosen_pointer
+	active_template = t_names(active_template_pointer)
+
+	Call active_template_rightclick_sub
+
+End Sub
+'---------------------------------------------------
+

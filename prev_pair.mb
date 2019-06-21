@@ -1,0 +1,254 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub prev_pair_sub
+Declare Sub check_pairs2check_sub
+Declare Sub import_pairs2check_sub
+Declare Sub check_tables_sub
+Declare Sub date_check_sub
+Declare Sub test_nbrq1_sub
+Declare Sub toolbar_sub
+
+
+'---------------------------------------------------
+' this shows the nbr pairs from the imported list pairs2check
+'---------------------------------------------------
+Sub prev_pair_sub
+Dim current_win, i_row_id, i, j, k, l, m ,n ,o, nbr_cnt, hostsysind, nbrsysind_1, nbrsysind_2 As Integer
+Dim s_header_val(10), hostcell, nbrcell_1, nbrcell_2, hostsys, nbrsys_1, nbrsys_2 As String
+Dim sel0, sel1 As Object
+Dim distmin, x, y, x2, y2, x3, y3, zm, dist1, dist2 As Float
+Dim f_font As Font
+Dim cell_data_alias As Alias
+
+
+	Set ProgressBars Off
+'	Set Map Redraw Off
+	Set Event Processing Off
+
+	Run Command "Set " & proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+	Call test_nbrq1_sub
+	If q1_exists = "On" Then 
+		Close Table Query1 
+	End If
+	If nbrs_exists = "On" Then 
+		Close Table nbrs_RFDT 
+	End If
+
+	nbr_cnt = 1
+
+	'Check that the pairs2check table is open, if not call the import pairs2check sub
+	'--------------------------------------------
+	Call check_pairs2check_sub
+	If Not pairs2check_statusflag Then
+		Call import_pairs2check_sub
+		Call check_pairs2check_sub
+		If Not pairs2check_statusflag Then
+			enable_pairs2check_arrows = False
+			Call toolbar_sub
+			Exit Sub
+		End If
+	End If
+
+	'retreats the file pointer
+	'----------------------------
+	If pairs2check_pointer <= 1 Then
+'		Set Map Redraw On
+		Note "You have reached the start of the list, going to the back..."
+		pairs2check_pointer = TableInfo(pairs2check, TAB_INFO_NROWS)
+	Else
+		pairs2check_pointer = pairs2check_pointer - 1
+	End If
+	Fetch Rec pairs2check_pointer from pairs2check
+		hostcell = pairs2check.Host_Cell
+		hostsys = pairs2check.Host_Sys
+		nbrcell_1 = pairs2check.Nbr_Cell_1
+		nbrsys_1 = pairs2check.Nbr_Sys_1
+		nbrcell_2 = pairs2check.Nbr_Cell_2
+		nbrsys_2 = pairs2check.Nbr_Sys_2
+		For i = 1 to header_cnt
+			cell_data_alias = "pairs2check." & pairs2check_fields(i)
+			s_header_val(i) = cell_data_alias
+		Next
+	
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		If sys(i) = hostsys Then
+			hostsysind = i
+		End If
+		If sys(i) = nbrsys_1 Then
+			nbrsysind_1 = i
+		End If
+		If sys(i) = nbrsys_2 Then
+			nbrsysind_2 = i
+		End If
+	Next
+		
+	Print Chr$(12)
+	Print "Pair Review Tool"
+	Print "Host : " & hostcell	
+	Print "Nbr1 : " & nbrcell_1
+	If nbrcell_2 <> "" AND nbrcell_2 <> "0" Then
+		Print "Nbr2 : " & nbrcell_2
+	End If
+	For i = 1 to header_cnt
+		Print pairs2check_fields(i) & " : " & s_header_val(i)
+	Next
+	Print "Pair " & pairs2check_pointer & " of " & TableInfo(pairs2check, TAB_INFO_NROWS)
+
+	Select * From cells_sys(hostsysind) Where cell = hostcell Into query1
+	If TableInfo(query1, TAB_INFO_NROWS) = 0 Then
+'		Set Map Redraw On
+		Note "The hostcell: " & hostcell & ", doesn't exist in the database..."
+		Close Table Query1
+		Goto early_exit
+	End If 
+	Commit Table query1 As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+	Close Table query1
+	Open Table pf_user_path & "nbrs_RFDT.TAB"
+	Add Map Layer nbrs_RFDT
+
+	Select * From cells_sys(nbrsysind_1) Where cell = nbrcell_1 Into query1
+	If TableInfo(query1, TAB_INFO_NROWS) = 0 Then
+'		Set Map Redraw On
+		Note "The nbrcell: " & nbrcell_1 & ", doesn't exist in the database..."
+		Close Table query1
+		Close Table nbrs_RFDT
+		Goto early_exit
+	End If 
+	Insert Into nbrs_RFDT
+		Select * From query1		
+	Close Table query1
+
+	If nbrcell_2 <> "" AND nbrcell_2 <> "0" Then
+		nbr_cnt = 2
+		Select * From cells_sys(nbrsysind_2) Where cell = nbrcell_2 Into query1
+		If TableInfo(query1, TAB_INFO_NROWS) = 0 Then
+'			Set Map Redraw On
+			Note "The nbrcell: " & nbrcell_2 & ", doesn't exist in the database..."
+			Close Table query1
+			Close Table nbrs_RFDT
+			Goto early_exit
+		End If 
+		Insert Into nbrs_RFDT
+			Select * From query1		
+		Close Table query1
+	End If
+
+	'Changes the colour of the Host and Nbrs
+	'--------------------------------------
+	Fetch First From nbrs_RFDT
+		x = centroidx(nbrs_RFDT.obj)
+		y = centroidy(nbrs_RFDT.obj)
+		sel0 = nbrs_RFDT.obj
+		i_row_id = nbrs_RFDT.rowid
+	Alter Object sel0 
+		Info OBJ_INFO_BRUSH, brush_host(hostsysind)
+		Info OBJ_INFO_PEN, pen_host(hostsysind)
+	Update nbrs_RFDT
+		set obj = sel0 where rowid = i_row_id
+
+	zm = 0
+	For i = 1 to nbr_cnt
+		Fetch Next From nbrs_RFDT
+			x2 = centroidx(nbrs_RFDT.obj)
+			y2 = centroidy(nbrs_RFDT.obj)
+			sel0 = nbrs_RFDT.obj
+			i_row_id = nbrs_RFDT.rowid
+
+		Alter Object sel0 
+			Info OBJ_INFO_BRUSH, brush_nbr(nbrsysind_1)
+			Info OBJ_INFO_PEN, pen_nbr(nbrsysind_1)
+		Update nbrs_RFDT
+			set obj = sel0 where rowid = i_row_id
+
+		'draws the line between the pair
+		'------------------------------
+		sel1 = CreateLine(x, y, x2, y2)
+		x3 = centroidx(sel1)
+		y3 = centroidy(sel1)
+			
+		If Maximum(Abs(x2-x),1.5*Abs(y2-y)) > zm Then
+			zm = Maximum(Abs(x2-x),1.5*Abs(y2-y))
+		End If
+
+		Alter Object sel1
+			Info OBJ_INFO_PEN, pen_connector(hostsysind)
+		Insert Into nbrs_RFDT (obj)
+			Values (sel1)
+
+'		'adds a circle around the Host Cell
+'		'----------------------------------
+'		sel2 = CreateCircle(x,y,1.4*(size0/1000))
+'		Alter Object sel2 
+'			Info OBJ_INFO_BRUSH, circle_brush
+'			Info OBJ_INFO_PEN, pen_connector(hostsysind) 
+'		Insert Into nbrs_RFDT (obj)
+'			Values (sel2)
+
+		'writes the distance
+		'-----------------------------
+		current_win = FrontWindow()
+		If WindowInfo(current_win, WIN_INFO_TYPE) <> WIN_MAPPER Then
+'			Set Map Redraw On
+			Note "This tool only works on Map windows."
+			Exit Sub
+		End If
+		distmin = Round(distance(x,y,x2,y2,"km"),0.1)
+		f_font = CurrentFont()
+		Set Style Font font_for_search
+		sel1 = CreateText(current_win,x3,y3,Str$(distmin)+"km",0,5,10)
+		Insert Into nbrs_RFDT (obj)
+			Values (sel1)			
+		Set Style Font f_font
+		'---------------------------------------------------------------------------------
+
+		If i = 1 Then
+			dist1 = distmin
+		Else
+			dist2 = distmin
+		End If
+	Next
+
+	If zm = 0 Then
+		Set Map Center (x,y)
+	Else
+		Set Map Center (x,y) Zoom 300*zm Units "km"
+	End If
+
+	Print Chr$(12)
+	Print "Pair Review Tool"
+	Print "Host : " & hostcell	
+	Print "Nbr1 : " & nbrcell_1 & " (" & Str$(dist1) & "km)"
+	If nbrcell_2 <> "" AND nbrcell_2 <> "0" Then
+		Print "Nbr2 : " & nbrcell_2 & " (" & Str$(dist2) & "km)"
+	End If
+	For i = 1 to header_cnt
+		Print pairs2check_fields(i) + " : " + s_header_val(i)
+	Next
+	Print "Pair " + pairs2check_pointer + " of " + TableInfo(pairs2check, TAB_INFO_NROWS)
+
+early_exit:
+	Set ProgressBars On
+'	Set Map Redraw On
+	Set Event Processing On
+
+Exit Sub
+'----------------------------------
+'Error Handlers
+'----------------------------
+
+
+End Sub
+'---------------------------------------------------
+
+
+

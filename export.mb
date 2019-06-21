@@ -1,0 +1,190 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub export_sub
+Declare Sub pre_export_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+Declare Sub pre_google_export_sub
+Declare Sub pre_google_export_region_sub
+Declare Sub pre_google_export_drive_sub
+Declare Sub date_check_sub
+Declare Sub test_nbrq1_sub
+
+
+
+
+'---------------------------------------------------
+Sub pre_export_sub
+Dim i_win_id As String	
+Dim choice As Integer
+Dim radio1 As String
+
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+
+	' We need to check all tables before the export
+	'------------------------------------------------------------
+	Call check_tables_sub         'This checks the status of the different tables (if they are open and if they are visible)
+
+	Call save_tables_sub
+
+	choice = 1
+
+	radio1 = " Full Export to .csv (importable); Export Sites-Cells to Google .kml; Export Selected Polygon to Google .kml ; Export Drive Data Log File to Google .kml"
+
+	Dialog Title "Export Specification" width 170 height 115 Position 450,100
+
+	Control StaticText
+	Title "Please choose your export type..." 
+	Position 10, 10
+	Control RadioGroup
+	Title radio1 
+	Position 10, 30 Width 150 
+	Value choice
+	Into choice
+
+	Control OKButton
+	Position 20, 92
+	Control CancelButton
+	Position 100, 92
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+	If choice = 1 Then 
+		Call export_sub 
+	Elseif choice = 2 Then
+		Call pre_google_export_sub 
+	Elseif choice = 3 Then
+		Call pre_google_export_region_sub 
+	Elseif choice = 4 Then
+		Call pre_google_export_drive_sub 
+	End If
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this exports the modified database to a new database file => output.csv and a NL change summary file => NL_delta.csv
+' note: it cleans up any deleted rows in the cells tables, but doesn't actually pack the tables
+'---------------------------------------------------
+Sub export_sub
+Dim cell_data_alias As Alias
+Dim output_filename_cell, output_filename_nbrs, output_path As String
+Dim k, k_old, i As Integer
+Dim first_table_flag As Logical
+
+
+
+OnError Goto general_error
+
+	first_table_flag = True
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+	Call date_check_sub
+
+	output_filename_cell = FileSaveAsDlg(pf_user_path, "", "csv", "Choose Database Export Location and Filename")
+	If output_filename_cell = "" Then
+		Exit Sub
+	End If
+
+	output_path = PathToDirectory$(output_filename_cell)
+	output_filename_nbrs = Left$(output_filename_cell,Len(output_filename_cell) - 4) & "_rfdt-nbrs.csv"
+	output_filename_cell = Left$(output_filename_cell,Len(output_filename_cell) - 4) & "_rfdt-cell.csv"
+	
+	Print Chr$(12)
+	Print "Please wait.  Exporting....."
+	Print "May take a few mintues."
+
+	If sys(1) <> "" AND is_open_cells_sys(1) = "On" Then
+		Select * From cells_sys(1) Into query1
+		Commit Table query1 As output_path + "query1.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Open Table output_path + "query1.tab"
+	End If
+	For i = 2 to 10
+		If sys(i) <> "" AND is_open_cells_sys(i) = "On" Then
+				Insert Into query1
+					Select * From cells_sys(i)
+		End If
+	Next
+	Commit Table query1
+	Close Table selection
+	
+	Commit Table nbrs_DB
+
+OnError Goto file_open_error
+	Export "query1" Into output_filename_cell Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+	Export "nbrs_DB" Into output_filename_nbrs Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+	If Ask("Export Change Requests?","Yes","No") = True Then
+		Export "change_request" Into output_path + "change_request.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+	End If	
+OnError Goto general_error
+
+	Close Table query1
+	If FileExists(output_path + "query1.tab") = True Then
+		Kill output_path + "query1.tab"	 
+	End If 
+	If FileExists(output_path + "query1.dat") = True Then
+		Kill output_path + "query1.dat"	 
+	End If
+	If FileExists(output_path + "query1.id") = True Then
+		Kill output_path + "query1.id"	 
+	End If 
+	If FileExists(output_path + "query1.map") = True Then
+		Kill output_path + "query1.map"	 
+	End If
+	If FileExists(output_path + "query1.ind") = True Then
+		Kill output_path + "query1.ind"	 
+	End If
+
+	Print Chr$(12)
+	Print "Finished Exporting"
+
+returnpoint1:
+	Call test_nbrq1_sub
+	If q1_exists = "On" Then
+		Close Table query1
+	End If
+
+Exit Sub
+
+'Error Handlers
+'------------------------
+general_error:
+Note "Got an error, exiting now.  Details are: "+error$()
+Resume returnpoint1
+
+file_open_error:
+Note "Your ouput file is currently open in another program (like XL).  Close it and try again."
+Resume returnpoint1
+
+
+End Sub
+'---------------------------------------------------
+
+

@@ -1,0 +1,213 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub add_site_sub
+Declare Sub pre_add_site_sub
+Declare Sub test_active_template_sub(ByVal tat_in As Logical, tat_out As Logical)
+Declare Sub snap2grid_alg_sub(ByVal at_site As String, at_sys_ind As Integer, at_az, at_obj_size, xsel, ysel As Float, xnew, ynew As Float)
+Declare Sub prepare_nbr_sub
+Declare Sub edit_site_templates_sub
+Declare Sub draw_cells_sub
+Declare Sub save_project_file_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_add_site_sub
+Dim i_win_id As String	
+Dim tat_result As Logical
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+
+
+	Set Map Redraw Off
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call check_tables_sub
+
+	Call add_site_sub
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Event Processing On
+	Set Map Redraw On
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'-----------------------------------------------------------------------
+' Tests to make sue an active template has been set and repeats until 
+' the user either cancels the dialog or chooses and active template
+'-----------------------------------------------------------------------
+Sub test_active_template_sub(ByVal tat_in As Logical, tat_out As Logical)
+Dim choose_a_template_flag As Logical
+
+
+	' Check the status of the active template
+	'---------------------------------------------------
+test_again:
+	choose_a_template_flag = False
+	If len(active_template) = 0 Then
+		choose_a_template_flag = True 
+	End If
+
+	If choose_a_template_flag = True Then
+		Note "An acceptable Site Template has not been set to active."+chr$(13)+"Please edit/create a template and assign a system to it."
+		Call edit_site_templates_sub
+		If CommandInfo(CMD_INFO_DLG_OK) = False Then
+			tat_out = False
+			Exit Sub
+		Else
+			pf_bypass = True  				'we have the project filename, so we do not need to get it again
+			Call save_project_file_sub 		'This saves any changes we just made to the project file...
+			Goto test_again
+		End If
+	End If
+
+	tat_out = True
+
+Exit Sub
+'----------------
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for cell-site addition
+'---------------------------------------------------
+Sub add_site_sub
+Dim x, y, x2, y2, azx, sizex As Float
+Dim z, i, j, k, l, m, i_win_id, active_index, sysx As Integer
+Dim tat_result As Logical
+Dim new_site_name As String
+
+
+
+	new_site_name = ""
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the point where the user clicked.
+	'---------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+
+
+	' Check the status of the active template
+	'---------------------------------------------------
+	Call test_active_template_sub(false, tat_result)
+	If NOT tat_result Then
+		Exit sub
+	End If
+
+
+	active_index = (active_template_pointer-1)*66
+
+	sysx = 0
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		ElseIf sys(i) = Right$(t_values(active_index+2),Len(t_values(active_index+2))-8) Then
+			sysx = i
+			Exit For
+		End If
+	Next
+
+	' This finds the next empty name
+	'----------------------------------
+	For i = new_site_pointer to 100000
+		Select * From cells_sys(sysx) Where Site = "New_Site_" & i Into query1			'cells & "_" & Right$(t_values(active_index+2),Len(t_values(active_index+2))-8)
+		If SelectionInfo(SEL_INFO_NROWS) = 0 Then
+			new_site_name = "New_Site_" & i
+			new_site_pointer = i + 1
+			Close Table query1
+			Exit For
+		End If
+		Close Table query1
+	Next
+
+	'Here we need to determine the new x and y if the snap2grid flag is on
+	'-----------------------------------------------------------------------
+	If snap2grid Then
+		azx = Val(Right$(t_values(active_index+4),Len(t_values(active_index+4))-8))			'az
+		sizex = Val(Right$(t_values(active_index+10),Len(t_values(active_index+10))-8))		'obj size
+		Call snap2grid_alg_sub(new_site_name,sysx,azx,sizex,x,y,x2,y2)
+		x = x2
+		y = y2
+		If x = -9999 AND y = -9999 Then	'the only match was invalid, so cancel adding the site here and roll back the new site name pointer
+			new_site_pointer = new_site_pointer - 1
+			Exit Sub
+		End If
+	End If	
+
+	'This writes the values
+	'------------------------
+	'This writes the values
+	'------------------------
+	For i = 1 to active_template_sectors
+		Insert Into cells_sys(sysx) (Site, Sitename, Cell, System, Status, Type, PCI_SC_BCCH_PN, ZCRS_BSIC, ZCRS_Cnt, LON, LAT, Az, Ant_type, Ant_HBW, EDT, MDT, Ht, Obj_Size, Comment)
+			Values (new_site_name, "", new_site_name & "_" & i, Right$(t_values(active_index+(i-1)*11+2),Len(t_values(active_index+(i-1)*11+2))-8), Right$(t_values(active_index+(i-1)*11+3),Len(t_values(active_index+(i-1)*11+3))-8), Right$(t_values(active_index+(i-1)*11+1), Len(t_values(active_index+(i-1)*11+1))-8), "0", "0", "0", x, y, Right$(t_values(active_index+(i-1)*11+4),Len(t_values(active_index+(i-1)*11+4))-8), Right$(t_values(active_index+(i-1)*11+5),Len(t_values(active_index+(i-1)*11+5))-8), Right$(t_values(active_index+(i-1)*11+6),Len(t_values(active_index+(i-1)*11+6))-8), Right$(t_values(active_index+(i-1)*11+7),Len(t_values(active_index+(i-1)*11+7))-8), Right$(t_values(active_index+(i-1)*11+8),Len(t_values(active_index+(i-1)*11+8))-8), Right$(t_values(active_index+(i-1)*11+9),Len(t_values(active_index+(i-1)*11+9))-8), Right$(t_values(active_index+(i-1)*11+10),Len(t_values(active_index+(i-1)*11+10))-8), Right$(t_values(active_index+(i-1)*11+11),Len(t_values(active_index+(i-1)*11+11))-8))
+	Next
+	i = 1
+	Insert Into sites_sys(sysx) (Site, Sitename, System, Status, Type, LON, LAT, Ht)
+		Values (new_site_name, "", Right$(t_values(active_index+(i-1)*11+2),Len(t_values(active_index+(i-1)*11+2))-8), Right$(t_values(active_index+(i-1)*11+3),Len(t_values(active_index+(i-1)*11+3))-8),  Right$(t_values(active_index+(i-1)*11+1),Len(t_values(active_index+(i-1)*11+1))-8), x, y, Right$(t_values(active_index+(i-1)*11+9),Len(t_values(active_index+(i-1)*11+9))-8))
+
+	'This draws the objects
+	'------------------------
+	draw_subset_flag = True
+	Call draw_cells_sub
+	draw_subset_flag = False
+
+End Sub
+'---------------------------------------------------
+
+
+
+

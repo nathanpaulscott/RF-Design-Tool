@@ -1,0 +1,86 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+
+
+Declare Sub change_cell_label_sub
+Declare Sub check_tables_sub
+Declare Sub check_layers_sub
+
+
+
+
+'---------------------------------------------------
+' this changes the cell labels to show complete cell info on hover
+'---------------------------------------------------
+Sub change_cell_label_sub	
+Dim temp_s, temp_s2 As String	
+Dim i,i_win_id As Integer
+Dim no_mapper_flag as Logical
+
+
+	Set ProgressBars On
+	Set Event Processing On
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call check_tables_sub 
+	Call check_layers_sub 
+
+	'this maps the tables
+	'--------------------------------------------------------------------------
+	no_mapper_flag = False
+
+	i_win_id = FrontWindow()
+	If i_win_id = 0 Then               'this means nothing was open in MI, all tables are closed
+		no_mapper_flag = True
+		Set ProgressBars Off
+		Set Event Processing Off
+	ElseIf WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this in case there are no mappers open or in front
+		no_mapper_flag = True
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+'		Set Map Redraw Off
+		Set Event Processing Off
+	End If
+	
+	If no_mapper_flag Then
+		Exit Sub
+	End If
+
+	if label_toggle + 1 > 4 Then
+		label_toggle = 1
+	Else
+		label_toggle = label_toggle + 1
+	End If
+
+	If label_toggle = 1 Then
+	   temp_s = "PCI_SC_BCCH_PN"
+	Elseif label_toggle = 2 Then
+	   temp_s = "Comment"
+	Elseif label_toggle = 3 Then
+	   temp_s = "Cell"
+	Elseif label_toggle = 4 Then
+	   temp_s = """Site."" & Site & Chr$(10) & ""Name."" & Sitename & Chr$(10) & ""Cell."" & Cell & Chr$(10) & ""Sys."" & System & Chr$(10) & ""PSC/SC/BCCH."" & PCI_SC_BCCH_PN & Chr$(10) & ""Az."" & Az & Chr$(10) & ""MDT."" & MDT & Chr$(10) & ""EDT."" & EDT & Chr$(10) & ""Ht."" & Ht"
+	End If
+
+   For i = 2 to 1 Step -1 								
+	   If is_in_mapper_cells_sys(i) Then
+		   Run Command "Set Map Layer " & cells_sys(i) & " Label Position Center With " & temp_s
+   	   End If
+   Next
+
+   Set ProgressBars On
+'   Set Map Redraw On
+   Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+

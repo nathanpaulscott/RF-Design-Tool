@@ -1,0 +1,197 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_display_sub
+Declare Sub load_project_file_display_only_sub
+Declare Sub apply_display_sub
+Declare Sub prepare_nbr_sub
+Declare Sub check_tables_sub
+Declare Sub date_check_sub
+Declare Sub save_tables_sub
+Declare Sub global_redraw_sub
+
+
+
+'---------------------------------------------------
+' this applies the display properties to the objects
+'---------------------------------------------------
+'-------------------------------------------------------
+Sub apply_display_sub
+Dim x, y, x2, y2, x0, Y0, oldx, oldy, multlen_3G, multlen_2G, newhbw_3G, newhbw_2G, aznew_3G, aznew_2G, sizenew_3G, sizenew_2G, azorig As Float
+Dim radio_3G, radio_2G, i, j, k, i_found, i_row_id, num_win, num_layer, i_win_id As Integer
+Dim sitex, namex, cellx, pnx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex As String
+Dim sel, sector As Object
+Dim change_flag1_3G, change_flag1_2G, change_flag2_3G, change_flag2_2G As Logical
+Dim nbrs, cell_data_alias as Alias
+
+
+	
+Call date_check_sub
+
+Call check_tables_sub
+
+'Call prepare_nbr_sub
+
+Print Chr$(12)
+Print "Please wait.  Altering objects......"
+
+'Set ProgressBars On
+Set Map Redraw Off
+Set Event Processing Off
+
+
+
+If redraw_font <> "Off" Then
+	'This finds the window id of the mapper window and assigns it to i_win_id
+	'------------------------------------------------
+	num_win = NumWindows()             'this is the number of open document windows
+
+	For i = 1 to num_win
+		i_win_id = WindowId(i)
+
+		'check that it is a mapper, if so, exit for
+		'----------------------------------------------
+Onerror goto no_mapper
+		If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+returnpoint1:
+Onerror goto general_error
+
+			If i = num_win Then
+				Exit Sub
+			End If
+		Else
+			Exit For
+		End If
+	Next
+	'now i_win_id contains the id of the mapper window (even though that window is not on top)
+
+
+	num_layer = MapperInfo(i_win_id,Mapper_Info_Layers)
+
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		If is_open_cells_sys(i) = "On" Then
+			'check that this table has visible labels, then run command if so
+			'-----------------------------------------------------------------
+			For j = 1 to num_layer
+				If LayerInfo(i_win_id, j, layer_info_name) = cells_sys(i) Then
+Onerror goto no_label_cell
+					If LayerInfo(i_win_id, j, Layer_Info_Lbl_AutoDisplay) Then
+							Run Command "Set Map Layer " & cells_sys(i) & " Label Position Center " & font_for_cells(i) & " With PCI_SC_BCCH_PN Auto On Overlap On Duplicates On Offset 0 Parallel Off"
+					Else
+							Run Command "Set Map Layer " & cells_sys(i) & " Label Position Center " & font_for_cells(i) & " With PCI_SC_BCCH_PN Auto Off Overlap On Duplicates On Offset 0 Parallel Off"
+					End If
+returnpoint2:
+Onerror goto general_error
+					Exit For
+				End If
+			Next
+		End If
+		If is_open_sites_sys(1) = "On" Then
+			'check that this table has visible labels, then run command if so
+			For j = 1 to num_layer
+				If LayerInfo(i_win_id, j, Layer_Info_Name) = sites_sys(i) Then
+Onerror goto no_label_site
+					If LayerInfo(i_win_id, j, Layer_Info_Lbl_AutoDisplay) Then
+						Run Command "Set Map Layer " & sites_sys(i) & " Label Position Right " & font_for_sites(i) & " With Site Auto On Overlap On Duplicates Off Offset 8 Parallel Off"
+					Else
+						Run Command "Set Map Layer " & sites_sys(i) & " Label Position Right " & font_for_sites(i) & " With Site Auto Off Overlap On Duplicates Off Offset 8 Parallel Off"
+					End If
+returnpoint3:
+Onerror goto general_error
+					Exit For
+				End If
+			Next
+		End If
+	Next
+redraw_font = "Off"
+End If
+
+If redraw_sym Then     ' then the symbols need to be redrawn
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		If is_open_sites_sys(i) = "On" Then
+			Fetch First from sites_sys(i) 
+			j = 1
+			Do While Not EOT(sites_sys(i))
+				' this does the changing
+				'-----------------------------------
+				cell_data_alias = sites_sys(i) & ".obj"
+				sector = cell_data_alias
+				cell_data_alias = sites_sys(i) & ".STATUS"
+				statusx = cell_data_alias
+				cell_data_alias = sites_sys(i) & ".rowid"
+				i_row_id = cell_data_alias
+
+				' this applies the latest symbols
+				'-----------------------------------------------
+				If statusx = "On-Air" Then
+					Alter Object sector 
+					Info OBJ_INFO_SYMBOL, sym_on_air(i)
+				Else
+					Alter Object sector 
+					Info OBJ_INFO_SYMBOL, sym_not_on_air(i)
+				End If
+
+				Update sites_sys(i)
+					Set obj = sector where rowid = i_row_id
+
+				Fetch Next from sites_sys(i)
+				j = j + 1
+				If j / 100 - fix(j / 100) = 0 Then
+					Print Chr$(12)
+					Print "Please wait......."
+					Print "Working on " & sites_sys(i) & " rowid " & i_row_id
+				End If
+			Loop	
+		End If
+	Next
+	redraw_sym = False
+End If
+
+If redraw_cell Then        'then we have to redraw the cells as we are swaping from one drawing system to another
+	Call global_redraw_sub
+	redraw_cell = False
+End If
+
+
+Print Chr$(12)
+Print "Finished."
+
+returnpoint4:
+
+Set ProgressBars On
+Set Map Redraw On
+Set Event Processing On
+
+Call save_tables_sub
+
+Exit Sub
+'------------------
+no_mapper:
+Resume returnpoint1
+
+no_label_cell:
+Resume returnpoint2
+
+no_label_site:
+Resume returnpoint3
+
+general_error:
+note "error details are: " & error$()
+Resume returnpoint4
+
+End Sub	
+'---------------------------------------------------
+
+
+
+
+
+

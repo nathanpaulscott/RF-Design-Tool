@@ -1,0 +1,500 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub scan_manage_scan_tables_sub
+
+'---------------------------------------------------
+' manages the scan maps
+'---------------------------------------------------
+Sub scan_manage_scan_tables_sub
+Dim i, j, k, l, m, x, i_win_id, num_layer, layer_type, num_tables As Integer
+Dim layer_name, table_name, table_name_full As String
+
+
+
+	Dialog Title "Scan Table Management" width 180 height 180 Position 450,100
+
+	Control StaticText
+	Title "What would you like to do with the"
+	Position 10, 10
+	Control StaticText
+	Title "4G-3G-2G Scan Tables?" 
+	Position 10, 20
+	Control RadioGroup
+	Title " ; ; ; ; " 
+	Position 10, 35 Width 15 
+	Value 4
+	Into x
+	Control StaticText
+	Title "Make All Scan Tabs Invisible in Mapper" 
+	Position 25, 35
+	Control StaticText
+	Title "Remove All Scan Tabs From Mapper" 
+	Position 25, 49
+	Control StaticText
+	Title "Close All Scan Tabs" 
+	Position 25, 63
+	Control StaticText
+	Title "Close and Delete Scan Tabs" 
+	Position 25, 77
+	Control StaticText
+	Title "Close Scan Tabs and Cleanup Scan Folder"
+	Position 25, 91
+	Control StaticText
+	Title "=> deltes all scan tabs and files in scan folder"
+	Position 15, 102
+
+	Control Checkbox
+	Position 10,126
+	ID 1
+	Title "  Don't Save Scan Tabs"
+	Value True
+	Into scan_tab_delete_flag
+
+	Control Checkbox
+	Position 10,139
+	ID 2
+	Title "  Save RSRP/RSCP/Rxlev as cw file?"
+	Value False
+	Into scan_save_cw_flag
+
+	Control OKButton
+	Position 20, 160
+	Control CancelButton
+	Position 125, 160
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+
+	'This processes the choice
+	'--------------------------------
+	Set ProgressBars Off
+	Set Event Processing Off
+	If x = 1 or x = 2 Then 
+		'This cancels the sub if there is no mapper as the top window
+		'------------------------------------
+Onerror goto no_mapper
+		i_win_id = FrontWindow()
+		If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+no_mapper_return:
+			Set ProgressBars On
+			Set Event Processing On
+			Exit Sub
+		Else
+			Set Map Redraw Off
+		End If
+
+Onerror goto general_error
+		k = FrontWindow()
+		j = WindowID(k)
+
+		If x = 1 then
+			num_layer = MapperInfo(j, Mapper_Info_Layers)          	'j will always be the active mapper window id
+			For i = 1 to num_layer
+				layer_name = LayerInfo(j,i,Layer_Info_Name)
+				layer_type = LayerInfo(j,i,Layer_Info_Type)
+
+				'This makes invisible, the 4G scan thermatics
+				'-------------------------------------
+				If (layer_type = 0 or layer_type = 3) AND Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_PCI") > 0 AND (Instr(1,layer_name,"_SINR") > 0 OR Instr(1,layer_name,"_RSRP") > 0) Then   'we have a base or thermatic PCI layer
+					Set Map Layer layer_name Display Off
+				End If
+
+				'This makes invisible, the 3G scan thermatics
+				'-------------------------------------
+				If (layer_type = 0 or layer_type = 3) AND Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_SC") > 0 AND (Instr(1,layer_name,"_EcIo") > 0 OR Instr(1,layer_name,"_RSCP") > 0) Then   'we have a base or thermatic SC layer
+					Set Map Layer layer_name Display Off
+				End If
+
+				'This makes invisible, the 2G scan thermatics
+				'-------------------------------------
+				If (layer_type = 0 or layer_type = 3) AND Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_BCCH") > 0 AND Instr(1,layer_name,"_BSIC") > 0 Then   'we have a base or thermatic BCCH layer
+					Set Map Layer layer_name Display Off
+				End If
+			Next
+
+		ElseIf x = 2 Then
+
+start_again1:
+
+			num_layer = MapperInfo(j, Mapper_Info_Layers)          	'j will always be the active mapper window id
+			For i = 1 to num_layer
+				layer_name = LayerInfo(j,i,Layer_Info_Name)
+				layer_type = LayerInfo(j,i,Layer_Info_Type)
+
+				'This removes from the mapper, the 4G scan thermatics, the thermatic layer will follow the base layer
+				'-------------------------------------
+				If layer_type = 0 AND Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_PCI") > 0 AND (Instr(1,layer_name,"_SINR") > 0 OR Instr(1,layer_name,"_RSRP") > 0) Then   'we have a base PCI layer
+					Remove Map Layer layer_name
+					Goto start_again1											'need to start again as the all layer counts and assignments have changed
+				End If
+	
+				'This removes from the mapper, the 3G scan thermatics, the thermatic layer will follow the base layer
+				'-------------------------------------
+				If layer_type = 0 AND Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_SC") > 0 AND (Instr(1,layer_name,"_EcIo") > 0 OR Instr(1,layer_name,"_RSCP") > 0) Then   'we have a base SC layer
+					Remove Map Layer layer_name
+					Goto start_again1											'need to start again as the all layer counts and assignments have changed
+				End If
+	
+				'This removes from the mapper, the 2G scan thermatics, the thermatic layer will follow the base layer
+				'-------------------------------------
+				If layer_type = 0 AND Instr(1,layer_name,"CELL_") > 0 AND Instr(1,layer_name,"_BCCH") > 0 AND Instr(1,layer_name,"_BSIC") > 0 Then   'we have a base BCCH layer
+					Remove Map Layer layer_name
+					Goto start_again1											'need to start again as the all layer counts and assignments have changed
+				End If
+			Next
+
+		End If
+
+	ElseIf x = 3 Then
+
+start_again2:
+			num_tables = NumTables()
+note num_tables
+			For i = 1 to num_tables
+				table_name = TableInfo(i,Tab_Info_Name)
+
+				'This closes 4G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_PCI") > 0 AND (Instr(1,table_name,"_SINR") > 0 OR Instr(1,table_name,"_RSRP") > 0) Then   'we have a base PCI layer
+					Close Table table_name
+					Goto start_again2										'need to start again as the all layer counts and assignments have changed
+				End If
+	
+				'This closes 3G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_SC") > 0 AND (Instr(1,table_name,"_EcIo") > 0 OR Instr(1,table_name,"_RSCP") > 0) Then   'we have a base SC layer
+					Close Table table_name
+					Goto start_again2										'need to start again as the all layer counts and assignments have changed
+				End If
+	
+				'This closes 2G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_BCCH") > 0 AND Instr(1,table_name,"_BSIC") > 0 Then   'we have a base BCCH layer
+					Close Table table_name
+					Goto start_again2											'need to start again as the all layer counts and assignments have changed
+				End If
+			Next
+
+	ElseIf x = 4 Then
+
+			'This deletes any open scan tables
+			'--------------------------------------
+start_again3:
+			num_tables = NumTables()
+
+			For i = 1 to num_tables
+				table_name = TableInfo(i,Tab_Info_Name)
+
+				'This kills 4G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_PCI") > 0 AND (Instr(1,table_name,"_SINR") > 0 OR Instr(1,table_name,"_RSRP") > 0) Then   'we have a base PCI layer
+					table_name_full = TableInfo(i,Tab_Info_TabFile)
+					table_name_full = Left$(table_name_full,Len(table_name_full)-4)
+
+					Close Table table_name
+					If FileExists(table_name_full+".tab") Then
+						Kill table_name_full+".tab"	 
+					End If 
+					If FileExists(table_name_full+".dat") Then
+						Kill table_name_full+".dat"	 
+					End If 
+					If FileExists(table_name_full+".id") Then
+						Kill table_name_full+".id"	 
+					End If 
+					If FileExists(table_name_full+".map") Then
+						Kill table_name_full+".map"	 
+					End If 
+					If FileExists(table_name_full+".ind") Then
+						Kill table_name_full+".ind"	 
+					End If 
+					Goto start_again3										'need to start again as the all layer counts and assignments have changed
+				End If
+
+				'This kills 3G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_SC") > 0 AND (Instr(1,table_name,"_EcIo") > 0 OR Instr(1,table_name,"_RSCP") > 0) Then   'we have a base SC layer
+					table_name_full = TableInfo(i,Tab_Info_TabFile)
+					table_name_full = Left$(table_name_full,Len(table_name_full)-4)
+
+					Close Table table_name
+					If FileExists(table_name_full+".tab") Then
+						Kill table_name_full+".tab"	 
+					End If 
+					If FileExists(table_name_full+".dat") Then
+						Kill table_name_full+".dat"	 
+					End If 
+					If FileExists(table_name_full+".id") Then
+						Kill table_name_full+".id"	 
+					End If 
+					If FileExists(table_name_full+".map") Then
+						Kill table_name_full+".map"	 
+					End If 
+					If FileExists(table_name_full+".ind") Then
+						Kill table_name_full+".ind"	 
+					End If 
+					Goto start_again3										'need to start again as the all layer counts and assignments have changed
+				End If
+	
+				'This kills 2G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_BCCH") > 0 AND Instr(1,table_name,"_BSIC") > 0 Then   'we have a base BCCH layer
+					table_name_full = TableInfo(i,Tab_Info_TabFile)
+					table_name_full = Left$(table_name_full,Len(table_name_full)-4)
+
+					Close Table table_name
+					If FileExists(table_name_full+".tab") Then
+						Kill table_name_full+".tab"	 
+					End If 
+					If FileExists(table_name_full+".dat") Then
+						Kill table_name_full+".dat"	 
+					End If 
+					If FileExists(table_name_full+".id") Then
+						Kill table_name_full+".id"	 
+					End If 
+					If FileExists(table_name_full+".map") Then
+						Kill table_name_full+".map"	 
+					End If 
+					If FileExists(table_name_full+".ind") Then
+						Kill table_name_full+".ind"	 
+					End If 
+					Goto start_again3											'need to start again as the all layer counts and assignments have changed
+				End If
+			Next
+
+	ElseIf x = 5 Then
+			'This deletes any open scan tables
+			'--------------------------------------
+start_again4:
+			num_tables = NumTables()
+
+			For i = 1 to num_tables
+				table_name = TableInfo(i,Tab_Info_Name)
+
+				'This kills 4G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_PCI") > 0 AND (Instr(1,table_name,"_SINR") > 0 OR Instr(1,table_name,"_RSRP") > 0) Then   'we have a base PCI layer
+					table_name_full = TableInfo(i,Tab_Info_TabFile)
+					table_name_full = Left$(table_name_full,Len(table_name_full)-4)
+
+					Close Table table_name
+					If FileExists(table_name_full+".tab") Then
+						Kill table_name_full+".tab"	 
+					End If 
+					If FileExists(table_name_full+".dat") Then
+						Kill table_name_full+".dat"	 
+					End If 
+					If FileExists(table_name_full+".id") Then
+						Kill table_name_full+".id"	 
+					End If 
+					If FileExists(table_name_full+".map") Then
+						Kill table_name_full+".map"	 
+					End If 
+					If FileExists(table_name_full+".ind") Then
+						Kill table_name_full+".ind"	 
+					End If 
+					Goto start_again4									'need to start again as the all layer counts and assignments have changed
+				End If
+
+				'This kills 3G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_SC") > 0 AND (Instr(1,table_name,"_EcIo") > 0 OR Instr(1,table_name,"_RSCP") > 0) Then   'we have a base SC layer
+					table_name_full = TableInfo(i,Tab_Info_TabFile)
+					table_name_full = Left$(table_name_full,Len(table_name_full)-4)
+
+					Close Table table_name
+					If FileExists(table_name_full+".tab") Then
+						Kill table_name_full+".tab"	 
+					End If 
+					If FileExists(table_name_full+".dat") Then
+						Kill table_name_full+".dat"	 
+					End If 
+					If FileExists(table_name_full+".id") Then
+						Kill table_name_full+".id"	 
+					End If 
+					If FileExists(table_name_full+".map") Then
+						Kill table_name_full+".map"	 
+					End If 
+					If FileExists(table_name_full+".ind") Then
+						Kill table_name_full+".ind"	 
+					End If 
+					Goto start_again4									'need to start again as the all layer counts and assignments have changed
+				End If
+	
+				'This kills 2G scan base table, the thermatic will follow if it is on the mapper
+				'-------------------------------------
+				If Instr(1,table_name,"CELL_") > 0 AND Instr(1,table_name,"_BCCH") > 0 AND Instr(1,table_name,"_BSIC") > 0 Then   'we have a base BCCH layer
+					table_name_full = TableInfo(i,Tab_Info_TabFile)
+					table_name_full = Left$(table_name_full,Len(table_name_full)-4)
+
+					Close Table table_name
+					If FileExists(table_name_full+".tab") Then
+						Kill table_name_full+".tab"	 
+					End If 
+					If FileExists(table_name_full+".dat") Then
+						Kill table_name_full+".dat"	 
+					End If 
+					If FileExists(table_name_full+".id") Then
+						Kill table_name_full+".id"	 
+					End If 
+					If FileExists(table_name_full+".map") Then
+						Kill table_name_full+".map"	 
+					End If 
+					If FileExists(table_name_full+".ind") Then
+						Kill table_name_full+".ind"	 
+					End If 
+					Goto start_again4										'need to start again as the all layer counts and assignments have changed
+				End If
+			Next
+
+			'This deletes any unopened scan tables
+			'--------------------------------------
+'###############################################################
+'THIS DOES NOT WORK AS i DO NOT KNOW THE NAMES OF THE UNOPENED SCAN TABLES => WOULD HAVE TO THINK ABOUT HTIS TO MAKE IT WORK
+'###############################################################
+
+			If user_path_scan_4G = "not set" Then
+				table_name_full = ""
+				table_name_full = FileOpenDlg("pf_user_path","","*.*","Please Indicate the location of the 4G scan folder by selecting any file in it")
+				If table_name_full = "" Then
+					Goto get_outa_here
+				End If
+				user_path_scan_4G = PathToDirectory$(table_name_full)
+			End If
+			
+			If user_path_scan_3G = "not set" Then
+				table_name_full = ""
+				table_name_full = FileOpenDlg("pf_user_path","","*.*","Please Indicate the location of the 3G scan folder by selecting any file in it")
+				If table_name_full = "" Then
+					Goto get_outa_here
+				End If
+				user_path_scan_3G = PathToDirectory$(table_name_full)
+			End If
+			
+			If user_path_scan_2G = "not set" Then
+				table_name_full = ""
+				table_name_full = FileOpenDlg("pf_user_path","","*.*","Please Indicate the location of the 2G scan folder by selecting any file in it")
+				If table_name_full = "" Then
+					Goto get_outa_here
+				End If
+				user_path_scan_2G = PathToDirectory$(table_name_full)
+			End If
+
+			For i = 0 to 504
+				For j = 1 to 2
+					If j = 1 then
+						table_name_full = user_path_scan_4G +"PCI"+i+"_RSRP"
+					Else
+						table_name_full = user_path_scan_4G +"PCI"+i+"_SINR"
+					End If
+					If FileExists(table_name_full+".TAB") Then
+						Kill table_name_full+".tab"	 
+						If FileExists(table_name_full+".dat") Then
+							Kill table_name_full+".dat"	 
+						End If 
+						If FileExists(table_name_full+".id") Then
+							Kill table_name_full+".id"	 
+						End If 
+						If FileExists(table_name_full+".map") Then
+							Kill table_name_full+".map"	 
+						End If 
+						If FileExists(table_name_full+".ind") Then
+							Kill table_name_full+".ind"	 
+						End If 
+					End If
+					If FileExists(table_name_full+".csv") Then
+						Kill table_name_full+".csv"	 
+					End If 
+				Next
+			Next
+
+			For i = 0 to 512
+				For j = 1 to 2
+					If j = 1 then
+						table_name_full = user_path_scan_3G +"SC"+i+"_RSCP"
+					Else
+						table_name_full = user_path_scan_3G +"SC"+i+"_EcIo"
+					End If
+					If FileExists(table_name_full+".TAB") Then
+						Kill table_name_full+".tab"	 
+						If FileExists(table_name_full+".dat") Then
+							Kill table_name_full+".dat"	 
+						End If 
+						If FileExists(table_name_full+".id") Then
+							Kill table_name_full+".id"	 
+						End If 
+						If FileExists(table_name_full+".map") Then
+							Kill table_name_full+".map"	 
+						End If 
+						If FileExists(table_name_full+".ind") Then
+							Kill table_name_full+".ind"	 
+						End If 
+					End If
+					If FileExists(table_name_full+".csv") Then
+						Kill table_name_full+".csv"	 
+					End If 
+				Next
+			Next
+
+			For i = 0 to 1024
+				Print Chr$(12)
+				Print "Searching for Scan Tabs. Please wait."
+				Print int(i/10.24)+"% "+String$(int(i/10.24),"|")
+				For j = 0 to 7
+					For k = 0 to 7
+						table_name_full = user_path_scan_2G + "BCCH"+i+"_BSIC"+int(val(str$(j) + str$(k)))
+						If FileExists(table_name_full+".TAB") Then
+							Kill table_name_full+".tab"	 
+							If FileExists(table_name_full+".dat") Then
+								Kill table_name_full+".dat"	 
+							End If 
+							If FileExists(table_name_full+".id") Then
+								Kill table_name_full+".id"	 
+							End If 
+							If FileExists(table_name_full+".map") Then
+								Kill table_name_full+".map"	 
+							End If 
+							If FileExists(table_name_full+".ind") Then
+								Kill table_name_full+".ind"	 
+							End If
+						End If
+						If FileExists(table_name_full+".csv") Then
+							Kill table_name_full+".csv"	 
+						End If 
+					Next
+				Next	
+			Next
+			Print Chr$(12)
+			Print "Done."
+
+	End If
+
+get_outa_here:
+	Set ProgressBars On
+	Set Event Processing On
+	If x = 1 or x = 2 Then
+		Set Map Redraw On
+	End If
+
+
+Exit Sub
+'-------------------
+no_mapper:
+Resume no_mapper_return
+
+general_error:
+note "There was an error, details are: "+error$()
+Resume get_outa_here
+
+End Sub
+'---------------------------------------------------
+
+
+
+

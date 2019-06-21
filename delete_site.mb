@@ -1,0 +1,359 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub delete_site_sub
+Declare Sub pre_delete_site_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_delete_site_sub
+
+	Set ProgressBars Off
+	Set Event Processing Off
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call check_tables_sub
+
+	Call delete_site_sub
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for cell edit mode
+'---------------------------------------------------
+Sub delete_site_sub
+Dim x, y As Float
+Dim h, i, j, k, l, m, i_found, i_row_id, i_win_id, count As Integer
+Dim table_selected_alias As Alias
+Dim sitex, table_selected As String
+Dim s_click, select_ok, sites_ok As Logical
+Dim cell_data_alias As Alias
+
+
+
+	Onerror Goto general_error
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	Call date_check_sub
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the starting point where the user clicked.
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	s_click = CommandInfo(CMD_INFO_SHIFT)
+	
+
+	' the user is using the point-mode tool, determine how many objects are at the chosen point.
+	'----------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+
+	If i_found = 0 Then
+		' No objects found where the user clicked.
+	Else
+
+		' Process the search results.
+		'----------------------------------
+		For i = 1 to i_found
+			' Get the name of the table containing a "hit".
+			'----------------------------------
+			table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+			table_selected = table_selected_alias
+	
+			' Get the row ID number of the object that was a hit.
+			'----------------------------------
+			i_row_id = SearchInfo(i, SEARCH_INFO_ROW)
+
+
+			sites_ok = False
+			select_ok = False
+			For j = 1 to 10
+				If sys(j) = "" Then
+					Exit For
+				ElseIf table_selected = cells_sys(j) Then
+					select_ok = True
+					If is_open_sites_sys(j) = "On" Then
+						sites_ok = True
+					Else
+						Note "The " & sites_sys(j) & " table must be open to delete."
+						Exit Sub
+					End If
+					Exit For	'Now we have the name of the table we process it
+				End If
+			Next
+
+
+			If select_ok = True Then
+				Call prepare_nbr_sub
+				Set Map Redraw On
+				Set Map Redraw Off
+
+				undo_cell_table = cells_sys(j)
+				undo_site_table = sites_sys(j)
+
+				For h = 1 to 10
+					undo_cell_data((h-1)*20+1) = "null"
+				Next
+
+				'----------------------------------------------------------------------------
+				'----------------------------------------------------------------------------
+				'----------------------------------------------------------------------------
+				If NOT s_click Then      'then we are deleting the site and all cells
+					'this writes to the undo store
+					'--------------------------------
+					undo_type = "delete_site"
+
+					'This gets the selected site id
+					'-------------------------------------
+					Select * From cells_sys(j) Where rowid = i_row_id Into Query1
+					sitex =  Query1.site
+					Close Table Query1
+	
+					'This gets the selected cells
+					'-------------------------------------
+					Select * From cells_sys(j) Where site = sitex Into Query1
+
+					'here we read all the undo data for cells into memory
+					'--------------------------------------------
+					Fetch First From query1
+					h = 1
+					Do While Not EOT(query1)
+						cell_data_alias = cells_sys(j) + ".Cell"	
+						undo_cell_data((h-1)*20+1) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Type"
+						undo_cell_data((h-1)*20+2) = cell_data_alias	
+						cell_data_alias = cells_sys(j) + ".System"	
+						undo_cell_data((h-1)*20+3) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Status"	
+						undo_cell_data((h-1)*20+4) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".PCI_SC_BCCH_PN"	
+						undo_cell_data((h-1)*20+5) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".ZCRS_BSIC"	
+						undo_cell_data((h-1)*20+6) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".ZCRS_Cnt"	
+						undo_cell_data((h-1)*20+7) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".LON"	
+						undo_cell_data_lon(h) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".LAT"	
+						undo_cell_data_lat(h) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Az"	
+						undo_cell_data((h-1)*20+9) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Ant_HBW"	
+						undo_cell_data((h-1)*20+10) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Ant_type"	
+						undo_cell_data((h-1)*20+11) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".MDT"	
+						undo_cell_data((h-1)*20+12) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".EDT"	
+						undo_cell_data((h-1)*20+13) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Ht"	
+						undo_cell_data((h-1)*20+14) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Obj_Size"	
+						undo_cell_data((h-1)*20+15) = cell_data_alias
+						cell_data_alias = cells_sys(j) + ".Comment"	
+						undo_cell_data((h-1)*20+16) = cell_data_alias
+
+						Fetch Next From query1
+						h = h + 1
+						If h > 10 Then   'I only handle up to 10 sectors, could increase if want to 
+							Exit Do 
+						End If
+					Loop
+
+					'here we delete the selected cells
+					'------------------------------------
+					Delete From query1
+					Close Table query1
+	
+					'This gets the selected site
+					'-------------------------------------
+					Select * From sites_sys(j) Where site = sitex Into query1
+
+					'here we read all the undo data for sites into memory
+					'--------------------------------------------
+					cell_data_alias = sites_sys(j) + ".site"	
+					undo_siteid = cell_data_alias
+					cell_data_alias = sites_sys(j) + ".Sitename"	
+					undo_site_name = cell_data_alias
+					cell_data_alias = sites_sys(j) + ".System"	
+					undo_site_sys = cell_data_alias
+					cell_data_alias = sites_sys(j) + ".Status"	
+					undo_site_status = cell_data_alias
+					cell_data_alias = sites_sys(j) + ".Type"	
+					undo_site_type = cell_data_alias
+					cell_data_alias = sites_sys(j) + ".LAT"	
+					undo_site_lat = cell_data_alias
+					cell_data_alias = sites_sys(j) + ".LON"	
+					undo_site_lon = cell_data_alias
+					cell_data_alias = sites_sys(j) + ".Ht"	
+					undo_site_ht = cell_data_alias
+
+					'here we delete the selected site
+					'------------------------------------
+					Delete From query1
+					Close Table query1
+
+				Else			'then we are only deleting the selected cell
+					'this writes to the undo store
+					'--------------------------------
+					undo_type = "delete_cell"
+
+					'This gets the selected site id
+					'-------------------------------------
+					Select * From cells_sys(j) Where rowid = i_row_id Into Query1
+					sitex =  Query1.site
+					Close Table Query1
+	
+					Select * From cells_sys(j) Where site = sitex Into Query1
+					count = SelectionInfo(SEL_INFO_NROWS)
+					Close Table Query1
+
+					'This gets the selected cell
+					'-------------------------------------
+					Select * From cells_sys(j) Where rowid = i_row_id Into Query1
+
+					'here we read all the undo data for cell into memory
+					'--------------------------------------------
+					h = 1
+					Fetch First From Query1
+					cell_data_alias = cells_sys(j) + ".Cell"	
+					undo_cell_data((h-1)*20+1) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Type"
+					undo_cell_data((h-1)*20+2) = cell_data_alias	
+					cell_data_alias = cells_sys(j) + ".System"	
+					undo_cell_data((h-1)*20+3) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Status"	
+					undo_cell_data((h-1)*20+4) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".PCI_SC_BCCH_PN"	
+					undo_cell_data((h-1)*20+5) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".ZCRS_BSIC"	
+					undo_cell_data((h-1)*20+6) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".ZCRS_Cnt"	
+					undo_cell_data((h-1)*20+7) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".LON"	
+					undo_cell_data_lon(h) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".LAT"	
+					undo_cell_data_lat(h) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Az"	
+					undo_cell_data((h-1)*20+9) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Ant_HBW"	
+					undo_cell_data((h-1)*20+10) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Ant_type"	
+					undo_cell_data((h-1)*20+11) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".MDT"	
+					undo_cell_data((h-1)*20+12) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".EDT"	
+					undo_cell_data((h-1)*20+13) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Ht"	
+					undo_cell_data((h-1)*20+14) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Obj_Size"	
+					undo_cell_data((h-1)*20+15) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".Comment"	
+					undo_cell_data((h-1)*20+16) = cell_data_alias
+					cell_data_alias = cells_sys(j) + ".ZCRS_Cnt"	
+					undo_cell_data((h-1)*20+17) = cell_data_alias
+
+					'here we delete the selected cell
+					'------------------------------------
+					Delete From query1
+					Close Table query1
+	
+
+					If count = 1 and sites_ok Then       'then the selected cell is the only cell, so we have to delete the site also
+						undo_type = "delete_only_cell"
+						'This gets the selected site
+						'-------------------------------------
+						Select * From sites_sys(j) Where site = sitex Into Query1
+
+						'here we read all the undo data for sites into memory
+						'--------------------------------------------
+						cell_data_alias = sites_sys(j) + ".site"	
+						undo_siteid = cell_data_alias
+						cell_data_alias = sites_sys(j) + ".Sitename"	
+						undo_site_name = cell_data_alias
+						cell_data_alias = sites_sys(j) + ".System"	
+						undo_site_sys = cell_data_alias
+						cell_data_alias = sites_sys(j) + ".Status"	
+						undo_site_status = cell_data_alias
+						cell_data_alias = sites_sys(j) + ".Type"	
+						undo_site_type = cell_data_alias
+						cell_data_alias = sites_sys(j) + ".LAT"	
+						undo_site_lat = cell_data_alias
+						cell_data_alias = sites_sys(j) + ".LON"	
+						undo_site_lon = cell_data_alias
+						cell_data_alias = sites_sys(j) + ".Ht"	
+						undo_site_ht = cell_data_alias
+
+						'here we delete the selected site
+						'------------------------------------
+						Delete From query1
+						Close Table query1
+
+					End If
+				End If		
+				Set Map Redraw On
+			End If
+			Exit Sub
+		Next
+	End If
+
+returnpoint1:
+
+Exit Sub
+
+
+'Error Handler
+'-----------------
+general_error:
+Note "Error details are: "+error$()
+Resume returnpoint1
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+

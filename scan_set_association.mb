@@ -1,0 +1,197 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub scan_set_2G_scan_assoc_sub
+Declare Sub scan_set_3G_scan_assoc_sub
+Declare Sub scan_set_4G_scan_assoc_sub
+
+
+'---------------------------------------------------
+' this gets the 2G scan table association
+'---------------------------------------------------
+Sub scan_set_2G_scan_assoc_sub
+Dim radio_temp_s As String	 
+Dim radio_temp, i, j As Integer
+
+
+	'This sets up the radio buttons
+	'--------------------------------- 
+	radio_temp_s = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		Else
+			radio_temp_s = radio_temp_s + sys(i) + ";"
+		End If
+	Next
+
+	'this is the dialog to get the size of the scan file
+	'---------------------------------------
+	Dialog Title "Choose 2G Table for the 2G Scan Analysis..." width 245 height 250	
+
+	Control StaticText
+	Title "Which System is the 2G scan data for?" Position 10,10
+
+	Control RadioGroup
+	Title radio_temp_s
+	Position 15, 25 Width 80 
+	Value 1
+	Into radio_temp
+
+	Control OKButton
+	Position 20, 220
+	Control CancelButton
+	Position 180, 220
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+	'---------------------------------------
+
+	'This converts the radio input to a table name
+	'-------------------------------------------------
+	table_for_2G_scan = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		ElseIf radio_temp = i Then 
+			table_for_2G_scan = cells_sys(i)
+			Exit For
+		End If
+	Next
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this gets the 3G scan table association
+'---------------------------------------------------
+Sub scan_set_3G_scan_assoc_sub
+Dim radio_temp_s As String	 
+Dim radio_temp, i, j As Integer
+
+
+	'This sets up the radio buttons
+	'--------------------------------- 
+	radio_temp_s = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		Else
+			radio_temp_s = radio_temp_s + sys(i) + ";"
+		End If
+	Next
+
+
+	'this is the dialog to get the size of the scan file
+	'---------------------------------------
+	Dialog Title "Choose 3G Table for the 3G Scan Analysis..." width 245 height 250	
+
+	Control StaticText
+	Title "Which System is the 3G scan data for?" Position 10,10
+
+	Control RadioGroup
+	Title radio_temp_s
+	Position 15, 25 Width 80 
+	Value 1
+	Into radio_temp
+
+	Control OKButton
+	Position 20, 220
+	Control CancelButton
+	Position 180, 220
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+	'---------------------------------------
+
+	'This converts the radio input to a table name
+	'---------------------------------
+	table_for_3G_scan = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		ElseIf radio_temp = i Then 
+			table_for_3G_scan = cells_sys(i)
+			Exit For
+		End If
+	Next
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this gets the 4G scan table association
+'---------------------------------------------------
+Sub scan_set_4G_scan_assoc_sub
+Dim radio_temp_s As String	 
+Dim radio_temp, i, j As Integer
+
+
+	'This sets up the radio buttons
+	'--------------------------------- 
+	radio_temp_s = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		Else
+			radio_temp_s = radio_temp_s + sys(i) + ";"
+		End If
+	Next
+
+
+	'this is the dialog to get the size of the scan file
+	'---------------------------------------
+	Dialog Title "Choose 4G Table for the 4G Scan Analysis..." width 245 height 250	
+
+	Control StaticText
+	Title "Which System is the 4G scan data for?" Position 10,10
+
+	Control RadioGroup
+	Title radio_temp_s
+	Position 15, 25 Width 80 
+	Value 1
+	Into radio_temp
+
+	Control OKButton
+	Position 20, 220
+	Control CancelButton
+	Position 180, 220
+
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+	'---------------------------------------
+
+	'This converts the radio input to a table name
+	'---------------------------------
+	table_for_4G_scan = ""
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		ElseIf radio_temp = i Then 
+			table_for_4G_scan = cells_sys(i)
+			Exit For
+		End If
+	Next
+
+End Sub
+'---------------------------------------------------
+
+
+
+

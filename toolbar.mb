@@ -1,0 +1,532 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub toolbar_sub
+Declare Sub analyse_sc_plan_sub	
+Declare Sub change_cell_label_sub	
+Declare Sub co_toggle_sub	
+Declare Sub draw_line_toggle_sub	
+Declare Sub import_pairs2check_sub	
+Declare Sub initial_dialog_sub	
+Declare Sub nbr_management_sub	
+Declare Sub next_pair_sub	
+Declare Sub pre_add_site_sub	
+Declare Sub pre_area_redraw_sub	
+Declare Sub pre_calc_az_sub	
+Declare Sub pre_cell_edit_sub	
+Declare Sub pre_change_az_sub	
+Declare Sub pre_delete_site_sub	
+Declare Sub pre_edit_project_settings_sub	
+Declare Sub pre_export_sub	
+Declare Sub pre_ft_test_sub	
+Declare Sub pre_global_redraw_toolbar_sub	
+Declare Sub pre_import_sub	
+Declare Sub pre_move_sub	
+Declare Sub pre_nbr_edit_sub	
+Declare Sub pre_nbr_stats_import_sub	
+Declare Sub pre_nbr_stats_review_sub	
+Declare Sub pre_show_co_pn_sub	
+Declare Sub pre_undo_sub	
+Declare Sub prev_pair_sub	
+Declare Sub scan_pre_import_2G_sub	
+Declare Sub scan_pre_import_3G_sub	
+Declare Sub scan_pre_import_4G_sub	
+Declare Sub scan_pre_show_BCCH_BSIC_sub	
+Declare Sub scan_pre_show_PCI_sub	
+Declare Sub scan_pre_show_SC_sub	
+Declare Sub scan_pre_show_SC_links_sub	
+Declare Sub scan_pre_show_PCI_links_sub	
+Declare Sub scan_pre_show_BCCH_BSIC_links_sub	
+Declare Sub set_search_prop_sub	
+Declare Sub set_nbr_prop_sub	
+Declare Sub set_thermatic_display_sub	
+Declare Sub set_z_sub	
+
+
+'---------------------------------------------------
+' this is the engine for cell edit mode
+'---------------------------------------------------
+Sub toolbar_sub
+
+
+'---------------------------------------------------
+	' this creates the main program control buttons, import database, turn-on/off nl analyser
+'---------------------------------------------------
+
+
+	Create ButtonPad "Utils" As
+	'-------------------------------------
+
+	PushButton
+	Calling initial_dialog_sub                        'pre_import_sub
+	ID 0
+	Icon MI_ICON_OPEN_FILE
+	HelpMsg "Open or Create Project \n Open or Create Project"
+
+	Separator
+
+	PushButton
+	Calling pre_export_sub
+	ID 1
+	Icon MI_ICON_SAVE_FILE
+	HelpMsg "Export Database \n Export Database"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_nbr_edit_sub
+	ID 2
+	Icon MI_ICON_MB_11                    'MI_ICON_MAPSYMB_2
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Nbr Edit \n Nbr Edit"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling set_nbr_prop_sub
+	ID 3
+	Icon MI_ICON_MISC_27
+	HelpMsg "Set nbr properties \n Set nbr properties"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_show_co_pn_sub
+	ID 4
+	Icon MI_ICON_SIGNS_5                               'MI_ICON_COMMUNICATION_6                         '134 File "C:\Program Files\MapInfo\MapBasic\SAMPLES\DLLEXAMP\RESDLL\WIN32\ICO32.DLL"                             'MI_ICON_COMMUNICATION_6
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Find Co/Adj PCI/SC/BCCH/BSIC/ZCrootseq \n Find Co-Adj PCI/SC/BCCH/BSIC/ZCrootseq"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling set_search_prop_sub
+	ID 5
+	Icon MI_ICON_SIGNS_3
+	HelpMsg "Set Co/Adj Search Properties \n Set Co/Adj Search Properties"
+	Disable
+
+	Separator
+
+	PushButton
+	Calling analyse_sc_plan_sub
+	ID 6   '23
+	Icon MI_ICON_MB_7
+	HelpMsg "Analyse SC Plan \n Analyse SC Plan"
+	Disable
+
+	Separator
+
+	PushButton
+	Calling import_pairs2check_sub
+	ID 7   '22
+	Icon MI_ICON_MB_9
+	HelpMsg "Import Pairs for Review \n Import Pairs for Review"
+	Disable
+
+	Separator
+
+	PushButton
+	Calling prev_pair_sub
+	ID 8    '24
+	Icon MI_ICON_ARROW_10
+	HelpMsg "Go to Previous Pair \n Go to Previous Pair"
+	Disable
+
+	Separator
+
+	PushButton
+	Calling next_pair_sub
+	ID 9    '25
+	Icon MI_ICON_ARROW_9
+	HelpMsg "Go to Next Pair \n Go to Next Pair"
+	Disable
+
+	Separator
+
+	PushButton
+	Calling pre_global_redraw_toolbar_sub
+	ID 10   '8
+	Icon MI_ICONS_MAPS_1
+	HelpMsg "Redraw Cells Global \n Redraw Cells Global"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_area_redraw_sub
+	ID 10    '6
+	Icon MI_ICON_SEARCH_BDY
+	Cursor MI_CURSOR_FINGER_LEFT
+	DrawMode DM_CUSTOM_POLYGON
+	HelpMsg "Redraw Cells by Area \n Redraw Cells by Area"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling nbr_management_sub
+	ID 12    '9
+	Icon MI_ICON_MB_10
+	HelpMsg "Import-Export-Analyse Nbr Lists \n Import-Export-Analyse Nbr Lists"
+	Disable
+
+	Separator
+
+	PushButton
+'	Calling analyse_nl_sub
+	ID 13      '7
+	Icon MI_ICON_ADD_NODE
+	HelpMsg "Spare NL \n Spare"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_nbr_stats_review_sub
+	ID 14       '30
+	Icon MI_ICON_MARITIME_8
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Nbr Stats Graphical Review - ctrl to see cell-stats info \n Nbr Stats Graphical Review - ctrl to see cell-stats info"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling pre_nbr_stats_import_sub
+	ID 15        '31
+	Icon MI_ICON_COMMUNICATION_4
+	HelpMsg "Import Nbr Stats data \n Import Nbr Stats data"
+	Disable
+
+	Separator
+
+	ToolButton
+	ID 102
+	Icon MI_ICON_ARROW_19
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Spare"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling scan_pre_import_2G_sub
+	ID 17
+	Icon MI_ICON_MB_14
+	HelpMsg "Import 2G Scan data \n Import 2G Scan data"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling scan_pre_show_BCCH_BSIC_links_sub
+	ID 103
+	Icon MI_ICON_COMMUNICATION_3
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Show BCCH_BSIC signal origins from 2G scan data\n Show BCCH_BSIC signal origins from 2G scan data"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling scan_pre_show_BCCH_BSIC_sub
+	ID 16
+	Icon MI_ICON_DISTRICT_MANY
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Show Specific BCCH-BSIC from 2G Scan data \n Show Specific BCCH-BSIC from 2G Scan data"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	ID 100
+	Icon MI_ICON_ARROW_19
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Spare"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling scan_pre_import_3G_sub
+	ID 19
+	Icon MI_ICON_MB_14
+	HelpMsg "Import 3G Scan data \n Import 3G Scan data"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling scan_pre_show_SC_links_sub
+	ID 101
+	Icon MI_ICON_COMMUNICATION_3
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Show SC signal origins from 3G scan data\n Show SC signal origins from 3G scan data"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling scan_pre_show_SC_sub
+	ID 18
+	Icon MI_ICON_DISTRICT_MANY
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Show Specific SC from 3G Scan data \n Show Specific SC from 3G Scan data"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	ID 104
+	Icon MI_ICON_ARROW_19
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Spare"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling scan_pre_import_4G_sub
+	ID 21
+	Icon MI_ICON_MB_14
+	HelpMsg "Import 4G Scan data \n Import 4G Scan data"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling scan_pre_show_PCI_links_sub
+	ID 105
+	Icon MI_ICON_COMMUNICATION_3
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Show PCI signal origins from 4G scan data\n Show PCI signal origins from 4G scan data"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling scan_pre_show_PCI_sub
+	ID 20
+	Icon MI_ICON_DISTRICT_MANY
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Show Specific PCI from 4G Scan data \n Show Specific PCI from 4G Scan data"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_cell_edit_sub
+	ID 22
+	Icon MI_ICON_WRENCH                        'MI_ICON_HELP
+	Cursor MI_CURSOR_FINGER_UP
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Edit Cell Parameters \n Edit Cell Parameters"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_move_sub
+	ID 23
+	Icon MI_ICON_TRANSPORT_9
+	Cursor MI_CURSOR_DRAG_OBJ
+	DrawMode DM_CUSTOM_LINE
+	HelpMsg "Move Site w mouse => press shift to move cell only \n Move Site w mouse => press shift to move cell only"
+	unCheck
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_change_az_sub
+	ID 24
+	Icon MI_ICON_RUN
+	Cursor MI_CURSOR_DRAG_OBJ
+	DrawMode DM_CUSTOM_LINE
+	HelpMsg "Change Azimuth w mouse \n Change Azimuth w mouse"
+	unCheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling pre_undo_sub
+	ID 25
+	Icon MI_ICON_UNDO
+	HelpMsg "Undo Last Move or Az Change \n Undo Last Move or Az Change"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_calc_az_sub
+	Cursor MI_CURSOR_DRAG_OBJ
+	DrawMode DM_CUSTOM_LINE
+	ID 26
+	Icon MI_ICON_MISC_12
+	HelpMsg "Calc Azimuth \n Calc Azimuth"
+	Uncheck
+	Disable
+
+	Separator
+
+	PushButton
+	Calling pre_edit_project_settings_sub
+	ID 27
+	Icon MI_ICON_SYMBOL_STYLE
+	HelpMsg "View/Edit/Save Project Settings \n View/Edit/Save Project Settings"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_add_site_sub
+	ID 28
+	Icon MI_ICON_COMMUNICATION_6
+	Cursor MI_CURSOR_FINGER_LEFT
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Add Sites Mode \n Add Sites Mode"
+	Disable
+
+	Separator
+
+	ToolButton
+	Calling pre_delete_site_sub
+	ID 29
+	Icon MI_ICON_MISC_18
+	Cursor MI_CURSOR_FINGER_LEFT
+	DrawMode DM_CUSTOM_POINT
+	HelpMsg "Delete Sites Mode \n Delete Sites Mode"
+	Disable
+
+	Separator
+
+	PushButton
+	Calling change_cell_label_sub
+	ID 30
+	Icon MI_ICON_MISC_22
+	HelpMsg "Change Cell Hover Info\n Change Cell Hover Info"
+	Disable
+
+
+	'--------------------------------
+	Title "RFDT Program Controls"
+	Width 3
+	Position (toolbar_position_x,toolbar_position_y)
+
+
+If enable_toolbar = True Then
+	Alter Button ID 1 Enable
+	Alter Button ID 2 Enable
+	Alter Button ID 3 Enable
+	Alter Button ID 4 Enable
+	Alter Button ID 5 Enable
+	Alter Button ID 6 Enable
+	Alter Button ID 7 Enable
+	Alter Button ID 10 Enable
+	Alter Button ID 11 Enable
+	Alter Button ID 12 Enable
+'	Alter Button ID 13 Enable
+	Alter Button ID 14 Enable
+	Alter Button ID 15 Enable
+	Alter Button ID 16 Enable
+	Alter Button ID 17 Enable
+	Alter Button ID 18 Enable
+	Alter Button ID 19 Enable
+	Alter Button ID 20 Enable
+	Alter Button ID 21 Enable
+	Alter Button ID 22 Enable
+	Alter Button ID 23 Enable
+	Alter Button ID 24 Enable
+	Alter Button ID 25 Enable
+	Alter Button ID 26 Enable
+	Alter Button ID 27 Enable
+	Alter Button ID 28 Enable
+	Alter Button ID 29 Enable
+	Alter Button ID 30 Enable
+	Alter Button ID 101 Enable
+	Alter Button ID 103 Enable
+	Alter Button ID 105 Enable
+
+Else
+	Alter Button ID 1 Disable
+	Alter Button ID 2 Disable
+	Alter Button ID 3 Disable
+	Alter Button ID 4 Disable
+	Alter Button ID 5 Disable
+	Alter Button ID 6 Disable
+	Alter Button ID 7 Disable
+	Alter Button ID 10 Disable
+	Alter Button ID 11 Disable
+	Alter Button ID 12 Disable
+'	Alter Button ID 13 Disable
+	Alter Button ID 14 Disable
+	Alter Button ID 15 Disable
+	Alter Button ID 16 Disable
+	Alter Button ID 17 Disable
+	Alter Button ID 18 Disable
+	Alter Button ID 19 Disable
+	Alter Button ID 20 Disable
+	Alter Button ID 21 Disable
+	Alter Button ID 22 Disable
+	Alter Button ID 23 Disable
+	Alter Button ID 24 Disable
+	Alter Button ID 25 Disable
+	Alter Button ID 26 Disable
+	Alter Button ID 27 Disable
+	Alter Button ID 28 Disable
+	Alter Button ID 29 Disable
+	Alter Button ID 30 Disable
+	Alter Button ID 101 Disable
+	Alter Button ID 103 Disable
+	Alter Button ID 105 Disable
+
+End If
+
+
+If 	enable_pairs2check_arrows = true Then
+	Alter Button ID 8 Enable		'24 Enable
+	Alter Button ID 9 Enable		'25 Enable
+Else
+	Alter Button ID 8 Disable       '24 Disable
+	Alter Button ID 9 Disable       '25 Disable
+End If
+
+End Sub
+'---------------------------------------------------
+
+
+

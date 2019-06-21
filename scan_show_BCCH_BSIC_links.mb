@@ -1,0 +1,41 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub scan_show_BCCH_BSIC_links_sub
+Declare Sub scan_pre_show_BCCH_BSIC_links_sub
+Declare Sub scan_choose_data_type_sub
+Declare Sub scan_import_2G_scan_sub
+Declare Sub scan_set_2G_scan_assoc_sub
+Declare Sub add_nbr_sub
+Declare Sub del_nbr_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+
+
+
+
+'---------------------------------------------------
+' Makes some adustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub scan_pre_show_BCCH_BSIC_links_sub
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this lets the user click on a cell and it shows a thermatic map of the that cells SC RSCP or EcIo
+'---------------------------------------------------
+Sub scan_show_BCCH_BSIC_links_sub
+
+End Sub
+
+'------------------------------------

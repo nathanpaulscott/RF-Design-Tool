@@ -1,0 +1,975 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub google_export_drive_sub
+Declare Sub pre_google_export_drive_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+Declare Sub date_check_sub
+Declare Sub test_nbrq1_sub
+Declare Sub select_output_file_sub
+Declare Sub manage_thematic_ranges_sub
+Declare Sub load_thematic_template_sub
+Declare Sub save_thematic_template_sub
+Declare Sub choose_cols_sub
+Declare Sub gettablelist (tablelist() as String) 
+Declare Function choosetable As String 
+Declare Sub getcollist (collist() as String) 
+Declare Function choosecol As String 
+Declare Function Hex(ByVal iInput As Integer, ByVal iFormat As Integer) As String
+
+
+
+'---------------------------------------------------
+Sub pre_google_export_drive_sub
+Dim i_win_id As String	
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Map Redraw Off
+		Set Event Processing Off
+	End If
+
+
+	' We need to check all tables before the export
+	'------------------------------------------------------------
+	Call check_tables_sub
+
+	Call save_tables_sub
+
+	Call google_export_drive_sub
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this exports a drive file => file with "lat, lon, meas1...measN" to google in .kml format
+'---------------------------------------------------
+Sub google_export_drive_sub
+
+Dim data_alias As Alias
+Dim data, output_filename_short, output_filename, output_path, temp_string, num_rows_s As String
+Dim i, j, k, l, m, mold, num_rows_i, i_row_id As Integer
+Dim first_table_flag As Logical
+Dim temp_lat, temp_lon As Float
+Dim test1, test2, test3, test4 As String
+Dim table_in, tablearray(1) As String
+Dim tablenum As Integer 
+Dim use_latlon As Logical
+Dim num_ranges As Integer
+Dim thematic_flag As Logical
+Dim ge_colour(10) As String
+Dim colour_r, colour_g, colour_b As Integer
+Dim colour_r_s, colour_g_s, colour_b_s As String
+Dim col_a As Alias
+Dim thematic_col, lat_col, lon_col As String
+
+
+
+OnError Goto general_error
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+'	Call date_check_sub
+
+	'gets the currently open table list
+	'-----------------------------------
+	Call GetTableList(tablearray)
+	g_colarray(1) = "-"
+	For i = 2 to 300
+		g_colarray(i) = ""
+	Next
+
+	'creates the input and output table selction dialog
+	'----------------------------------------------
+	thematic_flag = False
+	output_filename = "...nothing selected..."
+	use_latlon = False
+
+	Dialog Title "Export Specification..." width 330 height 140 Position 200,100
+
+		Control StaticText
+		Title "Choose the Table to Export..." 
+		Position 10, 10
+		Control PopupMenu 
+		Position 10, 20 Width 100
+		Calling choose_cols_sub
+		Title From Variable tablearray 
+		Into g_table_in_i
+		ID 3
+
+		Control Checkbox
+		Position 120, 10 Width 80
+		Title "Use Thematic Col"
+		Value thematic_flag
+		Into thematic_flag
+		Control PopupMenu 
+		Position 120, 20 Width 80
+		Title From Variable g_colarray 
+		Into g_thematic_col_i
+		ID 4
+
+		Control Checkbox
+		Position 210, 10 Width 80
+		Title "LonLat From Cols"
+		Value use_latlon
+		Into use_latlon
+		Control StaticText
+		Title "Lon Col" 
+		Position 295, 22
+		Control PopupMenu 
+		Position 210, 20 Width 80
+		Title From Variable g_colarray 
+		Into g_lon_col_i
+		ID 5
+		Control StaticText
+		Title "Lat Col" 
+		Position 295, 42
+		Control PopupMenu 
+		Position 210, 40 Width 80
+		Title From Variable g_colarray 
+		Into g_lat_col_i
+		ID 6
+
+		Control StaticText
+		Title "Choose the Output File Name and Location..." 
+		Position 10, 45
+		Control Button
+		Position 10, 55
+		Title "Browse"
+		Calling select_output_file_sub 
+		Control EditText
+		Value g_outputfilename_export_drive
+		Into g_outputfilename_export_drive
+		Position 10, 72 Width 180
+		ID 1
+		Control Button
+		Position 200, 70 Width 100
+		Title "Manage Thematic Ranges"
+		Calling manage_thematic_ranges_sub 
+		Control StaticText
+		Title "Thematic Ranges: " & g_current_thematic_ranges
+		Position 205, 90
+		ID 2
+
+		Control OKButton
+		Position 20,110
+		Control Cancelbutton 
+		Position 270,110
+
+		If CommandInfo(CMD_INFO_DLG_OK) Then 
+			table_in = TableInfo(g_table_in_i, TAB_INFO_NAME) 
+			If thematic_flag Then
+				thematic_col = ColumnInfo(table_in, "COL" & g_thematic_col_i, TAB_INFO_NAME) 
+			End If
+			If use_latlon Then
+				lon_col = ColumnInfo(table_in, "COL" & g_lon_col_i, TAB_INFO_NAME) 
+				lat_col = ColumnInfo(table_in, "COL" & g_lat_col_i, TAB_INFO_NAME) 
+			End If
+		End If 
+
+	'find the number fo thematic ranges entered
+	'--------------------------------------------
+	For i = 1 to 10
+		If g_range_from(i) = 0 And g_range_to(i) = 0 Then
+			num_ranges = i - 1
+			Exit For
+		End If
+	Next
+
+	'convert the mi colors to GE colors => mi uses RGB in long decimal format, GE uses FFBBGGRR hex format, where FF is the transparency level
+	'----------------------------------------------------------------------------------------------------------------------------
+	For i = 1 to num_ranges
+		colour_r = Fix(StyleAttr(g_range_colour(i),BRUSH_FORECOLOR) / (256^2))
+		colour_g = Fix((StyleAttr(g_range_colour(i),BRUSH_FORECOLOR) - colour_r*(256)^2)/256)
+		colour_b = StyleAttr(g_range_colour(i),BRUSH_FORECOLOR) - colour_r*256^2 - colour_g*256
+		ge_colour(i) = "FF" & Hex(colour_b,2) & Hex(colour_g,2) & Hex(colour_r,2)
+	Next
+
+	If g_outputfilename_export_drive = "" Then
+		Exit Sub
+	End If
+	output_filename = g_outputfilename_export_drive
+	output_path = PathToDirectory$(output_filename)
+	output_filename_short = PathToFilename$(output_filename)
+
+	If thematic_flag Then
+		col_a = thematic_col
+		Create Index On table_in (col_a)
+	End If
+
+'for thermatic maps use shade, set shade, create styles
+'there is no way to read a current thematic map's settings from mapbasic, confirmed
+'seems like you have to create your own thematic ranges and colours dialog as MI will not let you use theirs, and you will also have to save these to your own template files as you can't access MIs
+'just put a static text indictaing the template to use, and a button to bring up the edit templates dialog.  This dialog has up to 10 ranges.  each one has a min, max and colour, also has button to load template and save template as
+
+
+	Print Chr$(12)
+	Print "Please wait.  Exporting....."
+
+
+	'This cleans the file
+	'---------------------------------------
+OnError Goto file_open_error
+
+	Open File output_filename For Output As #1
+
+OnError GoTo general_error
+
+	For i = 1 to 1000000   ' I am cleaning up to 1,000,000 lines
+		data = ""
+		print #1, data
+	Next
+	Close File #1
+
+
+	'This opens the cleaned file for writing
+	'---------------------------------------
+	Open File output_filename For Output As #1
+
+	'Main Headers
+	'---------------------------------------
+	data = "<?xml version=""1.0"" encoding=""UTF-8""?>"
+	print #1, data
+	data = "<kml xmlns=""http://www.opengis.net/kml/2.2"" xmlns:gx=""http://www.google.com/kml/ext/2.2"" xmlns:kml=""http://www.opengis.net/kml/2.2"" xmlns:atom=""http://www.w3.org/2005/Atom"">"
+'	data = "<kml xmlns=""http://earth.google.com/kml/2.2"">"
+	print #1, data
+	data = "<Document>"
+	print #1, data
+
+'################################################################
+'here you define all the colour styles of the thematic map, will come from your previous thematic dialog
+'################################################################
+	'point Style Definitions
+	'---------------------------
+	For i = 1 to num_ranges
+		'Style for the symbol
+		'-------------------
+		data = "<Style id=""meas_sym_range_" & i & """>"
+		print #1, data
+		data = "<IconStyle>"
+		print #1, data
+		data = "<color>" & ge_colour(i) & "</color>"
+		print #1, data
+		data = "<scale>0.5</scale>"
+		print #1, data
+		data = "<Icon>"
+		print #1, data
+		data = "<href>http://maps.google.com/mapfiles/kml/shapes/donut.png</href>"
+		print #1, data
+		data = "</Icon>"
+		print #1, data
+		data = "<hotSpot x=""0.5"" y=""0.5"" xunits=""fraction"" yunits=""fraction""/>"
+		print #1, data
+		data = "</IconStyle>"
+		print #1, data
+'		data = "<LabelStyle>"
+'		print #1, data
+'		data = "<scale>0.7</scale>"
+'		print #1, data
+'		data = "</LabelStyle>"
+'		print #1, data
+		data = "</Style>"
+		print #1, data
+	Next
+
+	'actual points here
+	'---------------------
+	data = "<Folder>"
+	print #1, data
+	data = "<name>" & table_in & "</name>"
+	print #1, data
+
+	'does each range now
+	'---------------------
+	For i = 1 to num_ranges
+		data = "<Folder>"
+		print #1, data
+		data = "<name>Range" & i & ":" & g_range_from(i) & " to " & g_range_to(i) & "</name>"
+		print #1, data
+		col_a = thematic_col
+		Select * from table_in Into query1 Where col_a >= g_range_from(i) And col_a < g_range_to(i)
+		num_rows_s = TableInfo(query1, TAB_INFO_NROWS)
+		num_rows_i = Val(num_rows_s)
+
+		'Steps through each point
+		'---------------------------
+		Fetch First From query1
+		Do While Not EOT (query1)
+			'This creates the point object
+			'-------------------------------------
+			data = "<Placemark>"
+			print #1, data
+'				data = "<name></name>"
+'				print #1, data
+'				data = "<description></description>"
+'				print #1, data
+				data = "<styleUrl>meas_sym_range_" & i & "</styleUrl>"
+				print #1, data
+				data = "<Point>"
+				print #1, data
+					data = "<extrude>1</extrude>"
+					print #1, data
+					data = "<altitudeMode>ClampedToGround</altitudeMode>"
+					print #1, data
+					data = "<coordinates>"
+					print #1, data
+						If use_latlon Then
+							col_a = "query1." & lon_col
+							temp_lon = col_a
+							col_a = "query1." & lat_col
+							temp_lat = col_a
+						Else
+							temp_lon = ObjectGeography(query1.obj, OBJ_GEO_POINTX)						
+							temp_lat = ObjectGeography(query1.obj, OBJ_GEO_POINTY)
+						End If
+						test1 = str$(fix(temp_lat))
+						test2 = str$(format$(temp_lat - fix(temp_lat),"#.######"))
+						test2 = right$(test2,len(test2)-instr(1,test2,".")+1)
+						test3 = str$(fix(temp_lon))
+						test4 = str$(format$(temp_lon - fix(temp_lon),"#.######"))
+						test4 = right$(test4,len(test4)-instr(1,test4,".")+1)
+						data = test3 & test4 & "," & test1 & test2 & "," & 0       ' query1.Ht
+						print #1, data
+					data = "</coordinates>"
+					print #1, data
+				data = "</Point>"
+				print #1, data
+			data = "</Placemark>"
+			print #1, data
+
+			Fetch Next From query1
+			i_row_id = query1.rowid
+
+			mold = m
+			m = Minimum(100,int(100*i_row_id/num_rows_i))
+			If m <> mold Then
+				Print Chr$(12)
+				Print "Exporting " & table_in & " points. Please wait..."
+				Print m & "% " & String$(m,"|")
+			End If
+		Loop
+		data = "	</Folder>"
+	   	print #1, data
+		Close Table query1
+	Next
+	data = "</Folder>"
+	print #1, data
+	data = "</Document>"
+	print #1, data
+	data = "</kml>"
+	print #1, data
+
+exitpoint:
+	Close File #1
+
+	Print Chr$(12)
+	Print "Finished Exporting"
+
+returnpoint1:
+Call test_nbrq1_sub
+If q1_exists = "On" Then
+	Close Table query1
+End If
+
+Exit Sub
+
+'Error Handlers
+'------------------------
+general_error:
+Note "Got an error, exiting now.  Details are: "+error$()
+Resume returnpoint1
+
+file_open_error:
+Note "Your ouput file is currently open in another program (like XL).  Close it and try again."
+Resume returnpoint1
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+
+
+'Sub to get the output file name and location from the user
+'-----------------------------------------------------------
+Sub select_output_file_sub 
+
+	g_outputfilename_export_drive = FileSaveAsDlg(pf_user_path, "", "kml", "Choose Export Location and Filename")
+	If g_outputfilename_export_drive = "" Then
+		Exit Sub
+	End If
+
+	Alter Control 1
+	Value g_outputfilename_export_drive
+
+End Sub
+
+
+
+
+
+
+
+'sub to get the thematic ranges, load and save also
+'-----------------------------------------------------
+Sub manage_thematic_ranges_sub
+Dim range_from_old(10), range_to_old(10) As Float
+Dim brush_old(10) As Brush
+Dim i, j, k As Integer
+Dim bad_input As Logical
+
+	For i = 1 to 10
+		range_from_old(i) = g_range_from(i)
+		range_to_old(i) = g_range_to(i)
+		brush_old(i) = g_range_colour(i)
+	Next
+
+try_again:
+	bad_input = False
+	Dialog Title "Manage Thematic Ranges..." width 160 height 290 Position 400,200
+
+		Control Button
+		Position 10, 10
+		Title "Load Template"
+		Calling load_thematic_template_sub 
+		Control Button
+		Position 80, 10
+		Title "Save Template"
+		Calling save_thematic_template_sub 
+
+		Control StaticText
+		Title "Set Both Ranges = 0 to Ignore"
+		Position 10, 30
+
+		Control StaticText
+		Title ">= Min"
+		Position 10, 40 Width 30
+		Control StaticText
+		Title "< Max"
+		Position 50, 40 Width 30
+
+		Control EditText
+		Value g_range_from(1)
+		Into g_range_from(1)
+		Position 10, 55 Width 30
+		ID 10
+		Control EditText
+		Value g_range_to(1)
+		Into g_range_to(1)
+		Position 50, 55 Width 30
+		ID 11
+		Control BrushPicker
+		Position 90, 52
+		Value g_range_colour(1)
+		Into g_range_colour(1)
+		ID 12
+
+		Control EditText
+		Value g_range_from(2)
+		Into g_range_from(2)
+		Position 10, 75 Width 30
+		ID 20
+		Control EditText
+		Value g_range_to(2)
+		Into g_range_to(2)
+		Position 50, 75 Width 30
+		ID 21
+		Control BrushPicker
+		Position 90, 72
+		Value g_range_colour(2)
+		Into g_range_colour(2)
+		ID 22
+
+		Control EditText
+		Value g_range_from(3)
+		Into g_range_from(3)
+		Position 10, 95 Width 30
+		ID 30
+		Control EditText
+		Value g_range_to(3)
+		Into g_range_to(3)
+		Position 50, 95 Width 30
+		ID 31
+		Control BrushPicker
+		Position 90, 92
+		Value g_range_colour(3)
+		Into g_range_colour(3)
+		ID 32
+
+		Control EditText
+		Value g_range_from(4)
+		Into g_range_from(4)
+		Position 10, 115 Width 30
+		ID 40
+		Control EditText
+		Value g_range_to(4)
+		Into g_range_to(4)
+		Position 50, 115 Width 30
+		ID 41
+		Control BrushPicker
+		Position 90, 112
+		Value g_range_colour(4)
+		Into g_range_colour(4)
+		ID 42
+
+		Control EditText
+		Value g_range_from(5)
+		Into g_range_from(5)
+		Position 10, 135 Width 30
+		ID 50
+		Control EditText
+		Value g_range_to(5)
+		Into g_range_to(5)
+		Position 50, 135 Width 30
+		ID 51
+		Control BrushPicker
+		Position 90, 132
+		Value g_range_colour(5)
+		Into g_range_colour(5)
+		ID 52
+
+		Control EditText
+		Value g_range_from(6)
+		Into g_range_from(6)
+		Position 10, 155 Width 30
+		ID 60
+		Control EditText
+		Value g_range_to(6)
+		Into g_range_to(6)
+		Position 50, 155 Width 30
+		ID 61
+		Control BrushPicker
+		Position 90, 152
+		Value g_range_colour(6)
+		Into g_range_colour(6)
+		ID 62
+
+		Control EditText
+		Value g_range_from(7)
+		Into g_range_from(7)
+		Position 10, 175 Width 30
+		ID 70
+		Control EditText
+		Value g_range_to(7)
+		Into g_range_to(7)
+		Position 50, 175 Width 30
+		ID 71
+		Control BrushPicker
+		Position 90, 172
+		Value g_range_colour(7)
+		Into g_range_colour(7)
+		ID 72
+
+		Control EditText
+		Value g_range_from(8)
+		Into g_range_from(8)
+		Position 10, 195 Width 30
+		ID 80
+		Control EditText
+		Value g_range_to(8)
+		Into g_range_to(8)
+		Position 50, 195 Width 30
+		ID 81
+		Control BrushPicker
+		Position 90, 192
+		Value g_range_colour(8)
+		Into g_range_colour(8)
+		ID 82
+
+		Control EditText
+		Value g_range_from(9)
+		Into g_range_from(9)
+		Position 10, 215 Width 30
+		ID 90
+		Control EditText
+		Value g_range_to(9)
+		Into g_range_to(9)
+		Position 50, 215 Width 30
+		ID 91
+		Control BrushPicker
+		Position 90, 212
+		Value g_range_colour(9)
+		Into g_range_colour(9)
+		ID 92
+
+		Control EditText
+		Value g_range_from(10)
+		Into g_range_from(10)
+		Position 10, 235 Width 30
+		ID 100
+		Control EditText
+		Value g_range_to(10)
+		Into g_range_to(10)
+		Position 50, 235 Width 30
+		ID 101
+		Control BrushPicker
+		Position 90, 232
+		Value g_range_colour(10)
+		Into g_range_colour(10)
+		ID 102
+
+		Control OKButton
+		Position 20,260 
+		Control Cancelbutton 
+		Position 100,260
+
+		If Not CommandInfo(CMD_INFO_DLG_OK) Then 
+			For i = 1 to 10
+				g_range_from(i) = range_from_old(i)
+				g_range_to(i) = range_to_old(i)
+				g_range_colour(i) = brush_old(i)
+			Next
+			Exit Sub
+		End If 
+
+	'This tests for bad input
+	'---------------------------
+	For i = 1 to 10
+		If g_range_from(i) > g_range_to(i) Then
+			Note "Bad Range: range #" & i & " => """ & g_range_from(i) & """ is not less than """ & g_range_to(i) & """, please fix..."
+			bad_input = True
+		End If
+		If i > 1 And g_range_from(i) <> 0 And g_range_to(i) <> 0 Then
+			If g_range_from(i) < g_range_to(i-1) Then
+				Note "Overlapping Ranges: range #" & i & " => """ & g_range_from(i) & """ is less than range#" & (i - 1) & " => """ & g_range_to(i-1) & """, please fix..."
+				bad_input = True
+			End If
+		End If
+	Next
+
+	If bad_input = True Then
+		Goto try_again
+	End If
+
+	'This tests to see if any changes were made
+	'--------------------------------------------
+	For i = 1 to 10
+		If range_from_old(i) <> g_range_from(i) Or range_to_old(i) <> g_range_to(i) Then    'Or brush_old(i) <> g_range_colour(i)   'this doesn't work for some reason
+			g_current_thematic_ranges = "set"
+			Alter Control 2
+				Title "Thematic Ranges: " & g_current_thematic_ranges
+			Exit For
+		End If
+	Next
+
+End Sub
+
+
+
+
+
+'Loads the chosen thematic template
+'------------------------------
+Sub load_thematic_template_sub
+Dim input_filename, input_path, line_data As String
+Dim length_line, i, j, k, pos(4), a, b, c As Integer
+
+
+		' we are loading all info from the project file
+		'-----------------------------------------------
+		input_filename = FileOpenDlg("","","tpl","Please select a thematic template file...")
+		If input_filename = "" Then
+			Exit Sub
+		End If
+		input_path = PathToDirectory$(input_filename)
+
+		Open File input_filename For Input As #1
+		i = 1
+		j = 1
+		Do While Not EOF(1)
+			Line Input #1, line_data
+			line_data = LTrim$(line_data)                  ' this removes spaces from the beginning of the line		
+			line_data = RTrim$(line_data)					  ' this removes spaces from the end of the line
+			length_line = len(line_data)
+			If j = 1 Then
+				g_range_from(i) = Val(line_data)
+				Alter Control 10*i
+					Value line_data
+			ElseIf j = 2 Then
+				g_range_to(i) = Val(line_data)
+				Alter Control i*10 + 1
+					Value line_data
+			ElseIf j = 3 Then
+				pos(1) = InStr(1,line_data,Chr$(40))
+				pos(2) = InStr(1,line_data,Chr$(44))
+				pos(3) = InStr(pos(2)+1,line_data,Chr$(44))
+				pos(4) = InStr(1,line_data,Chr$(41))
+				If pos(3) = 0 Then		'case of only 2 values in the brush
+					a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+					b = val(mid$(line_data, pos(2)+1, pos(4)-pos(2)-1))
+					c = -1
+				Else		'case of 3 values in the brush					
+					a = val(mid$(line_data, pos(1)+1, pos(2)-pos(1)-1))
+					b = val(mid$(line_data, pos(2)+1, pos(3)-pos(2)-1))
+					c = val(mid$(line_data, pos(3)+1, pos(4)-pos(3)-1))
+				End If
+				g_range_colour(i) = MakeBrush(a,b,c)
+				Alter Control i*10 + 2
+					Value g_range_colour(i)
+			End If
+
+			If j = 3 Then
+				j = 1
+				i = i + 1
+				If i > 10 Then
+					Goto outa_here
+				End If
+			Else
+				j = j + 1
+			End If
+		Loop
+outa_here:
+		Close File #1
+
+End Sub
+
+
+
+
+
+
+'Saves the chosen thematic template
+'------------------------------
+Sub save_thematic_template_sub
+Dim output_filename, output_filename_short, output_path, data As String
+Dim i, j, k As Integer
+
+
+	output_filename = FileSaveAsDlg(pf_user_path, "", "tpl", "Choose Thematic Template Location and Filename")
+	If output_filename = "" Then
+		Exit Sub
+	End If
+
+	output_path = PathToDirectory$(output_filename)
+	output_filename_short = PathToFilename$(output_filename)
+
+	Print Chr$(12)
+	Print "Please wait.  Exporting Template....."
+
+	'This cleans the file
+	'---------------------------------------
+OnError Goto file_open_error
+
+	Open File output_filename For Output As #1
+
+OnError GoTo 0
+
+	For i = 1 to 100000   ' I am cleaning up to 100,000 lines
+		data = ""
+		print #1, data
+	Next
+	Close File #1
+
+	'This opens the cleaned file for writing
+	'---------------------------------------
+	Open File output_filename For Output As #1
+
+	For i = 1 to 10
+		data = ReadControlValue(i*10)
+		print #1, data
+		data = ReadControlValue(i*10+1)
+		print #1, data
+		data = ReadControlValue(i*10+2)
+		print #1, data
+	Next
+
+	Close File #1
+
+	Print Chr$(12)
+	Print "Finished Exporting"
+
+returnpoint1:
+
+Exit Sub
+'-----------
+file_open_error:
+Note "Your ouput file is currently open in another program (like XL).  Close it and try again."
+Resume returnpoint1
+
+End Sub
+
+
+
+
+
+
+
+'subs to choose from all open tables - got from internet
+'--------------------------------------------------
+Sub gettablelist (tablelist() as String) 
+Dim i,j as integer 
+
+	i = NumTables() 
+	ReDim tablelist(i) 
+	For j = 1 to i 
+		tablelist(j) = Tableinfo(j, TAB_INFO_NAME) 
+	Next 
+
+End Sub 
+
+
+
+Function choosetable As String 
+Dim tablenum As Integer 
+Dim tablearray(1) As String 
+
+	Call GetTableList(tablearray) 
+
+	Dialog Title "Choose table" 
+
+	Control PopupMenu 
+	Title From Variable tablearray 
+	Into tablenum 
+
+	Control OKButton 
+	Control Cancelbutton 
+
+	If CommandInfo(CMD_INFO_DLG_OK) Then 
+		choosetable = TableInfo(tablenum, TAB_INFO_NAME) 
+	End If 
+
+End Function
+
+
+
+
+
+
+
+
+
+'gets the cols from the chosen table for the popup box
+'-----------------------------------------------------
+Sub choose_cols_sub
+
+	g_table_in_i = ReadControlValue(3)
+	Call getcollist(g_colarray) 
+	
+	Alter Control 4
+		Title From Variable g_colarray
+	Alter Control 5
+		Title From Variable g_colarray
+	Alter Control 6
+		Title From Variable g_colarray
+
+End Sub
+
+
+
+
+
+
+'subs to choose cols from a table
+'-------------------------------------------
+Sub getcollist (collist() as String) 
+Dim i,j as integer 
+
+	i = NumCols(TableInfo(g_table_in_i, TAB_INFO_NAME)) 
+	For j = 1 to i 
+		collist(j) = ColumnInfo(g_table_in_i,"COL" & j, COL_INFO_NAME) 
+	Next 
+
+End Sub 
+
+
+
+Function choosecol As String 
+Dim colnum As Integer 
+Dim colarray(1) As String 
+
+	Call getcollist(g_colarray) 
+
+	Dialog Title "Choose Col" 
+
+	Control PopupMenu 
+	Title From Variable colarray 
+	Into colnum 
+
+	Control OKButton 
+	Control Cancelbutton 
+
+	If CommandInfo(CMD_INFO_DLG_OK) Then 
+		choosecol = ColumnInfo(g_table_in_i, "COL" & colnum, TAB_INFO_NAME) 
+	End If 
+
+End Function
+
+
+
+
+
+
+'Dec to Hex converter from internet
+'-----------------------------------
+Function Hex(ByVal iInput As Integer, ByVal iFormat As Integer) As String
+ Dim x As Integer
+ Dim i, iDummy As SmallInt
+ Dim sGlyph, sOut As String
+
+ x = iInput
+ Do While 1
+  i=i+1
+  iDummy = (x/16^(i-1)) Mod 16
+  Do Case iDummy
+   Case 10
+    sGlyph = "A"
+   Case 11
+    sGlyph = "B"
+   Case 12
+    sGlyph = "C"
+   Case 13
+    sGlyph = "D"
+   Case 14
+    sGlyph = "E"
+   Case 15
+    sGlyph = "F"
+   Case Else
+    sGlyph = Str$(iDummy)
+
+  End Case
+
+  sOut = sGlyph + sOut
+  If x < 16^i Then
+   Exit Do
+  End If
+ Loop
+
+ If iFormat Then
+  iDummy = iFormat-Len(sOut)
+  If iDummy > 0 Then
+   sOut = String$(iDummy,"0") & sOut
+  Else
+   sOut = Right$(sOut,iFormat)
+  End If
+ End If
+
+ Hex = sOut
+
+End Function

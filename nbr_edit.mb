@@ -1,0 +1,1002 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub nbr_edit_sub
+Declare Sub pre_nbr_edit_sub
+Declare Sub add_nbr_sub
+Declare Sub del_nbr_sub
+Declare Sub choose_host_sub
+Declare Sub choose_nbr_pos_sub (desired_pos as Integer)
+Declare Sub prepare_nbr_sub
+Declare Sub x_factor2_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+Declare Sub check_layers_sub
+Declare Sub show_first_tier_nbrs_sub
+Declare Sub test_nbrq1_sub
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_nbr_edit_sub
+Dim host_val As String
+Dim i_win_id As String	
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+	End If
+	
+	host_val = "nul"
+
+OnError Goto general_error
+
+	Call check_tables_sub
+
+	Call check_layers_sub
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+OnError GoTo closed_2
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+		disable_edit = "Off"
+	End If
+returnpoint_2:
+OnError Goto general_error
+
+	If add_nbr_flag = "On" and disable_edit = "Off" Then
+		Alter Menu Item ID 1006 Check			'add_nbr_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	ElseIf del_nbr_flag = "On" and disable_edit = "Off" Then
+		Alter Menu Item ID 1007 Check			'del_nbr_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	ElseIf disable_edit = "Off" Then
+		Alter Menu Item ID 1005 Check			'choose_host_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	Else
+		Alter Menu Item ID 1005 Check			'choose_host_sub Check
+		Alter Menu Item ID 1006 Disable 		'add_nbr_sub Disable
+		Alter Menu Item ID 1007 Disable		'del_nbr_sub Disable
+	End If
+
+'---------------------------------------------------
+
+	If nbr_show_ft_flag Then
+		Call show_first_tier_nbrs_sub
+		Goto ft_end
+	Else
+		Call nbr_edit_sub
+	End If
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+OnError GoTo closed_3
+If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+		disable_edit = "Off"
+	End If
+returnpoint_3:
+OnError Goto general_error
+
+ft_end:
+	If add_nbr_flag = "On" and disable_edit = "Off" Then
+		Alter Menu Item ID 1006 Check			'add_nbr_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	ElseIf del_nbr_flag = "On" and disable_edit = "Off" Then
+		Alter Menu Item ID 1007 Check			'del_nbr_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	ElseIf disable_edit = "Off" Then
+		Alter Menu Item ID 1005 Check			'choose_host_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	Else
+		Alter Menu Item ID 1005 Check			'choose_host_sub Check
+		Alter Menu Item ID 1006 Disable 		'add_nbr_sub Disable
+		Alter Menu Item ID 1007 Disable		'del_nbr_sub Disable
+	End If
+
+OnError Goto closed13
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+	Else
+point13:
+		host_val = "nul"
+	End If
+OnError Goto general_error
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+get_outa_here:
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+	Exit Sub
+
+
+'-----------------------------------------------------
+general_error:
+Note "There was an error, the code is: " & Error$() & ".  Exiting..."
+Resume get_outa_here
+
+closed_2:
+disable_edit = "On"
+Resume returnpoint_2
+
+closed_3:
+disable_edit = "On"
+Resume returnpoint_3
+
+closed13:
+Resume point13
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is the engine for adding nbrs
+'---------------------------------------------------
+Sub add_nbr_sub
+
+	Alter Menu Item choose_host_sub UnCheck
+	Alter Menu Item add_nbr_sub Check
+	Alter Menu Item del_nbr_sub UnCheck
+
+	add_nbr_flag = "On"
+	del_nbr_flag = "Off"
+
+End Sub
+'---------------------------------------------------
+
+
+'---------------------------------------------------
+' this is the engine for deleting nbrs
+'---------------------------------------------------
+Sub del_nbr_sub
+
+	Alter Menu Item choose_host_sub UnCheck
+	Alter Menu Item add_nbr_sub UnCheck
+	Alter Menu Item del_nbr_sub Check
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "On"
+
+End Sub
+'---------------------------------------------------
+
+
+'---------------------------------------------------
+' 
+'---------------------------------------------------
+Sub choose_host_sub
+
+	Alter Menu Item choose_host_sub Check
+	Alter Menu Item add_nbr_sub UnCheck
+	Alter Menu Item del_nbr_sub UnCheck
+
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is the engine for the NL editing state
+'---------------------------------------------------
+Sub nbr_edit_sub
+Dim select_ok, s_click, c_click As Logical
+Dim x, y, x2, y2 As Float
+Dim nbr_sysind, host_sysind, desired_pos, blank_space_num, host_row_id, nbr_row_id, count, i, j, k, i_found, i_row_id, i_win_id, pen1, pen2 As Integer
+Dim table_selected_alias, cell_data_alias As Alias
+Dim sel, sel2 As Object
+Dim bucket, table_selected, finished_flag, layer1, host_val, nbr_val, found_blank, host_table, host_sys, nbr_table, nbr_sys, sitex, namex, cellx, pnx, bsicx, zcrsx, typex, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex As String
+Dim pen3 As String
+Dim nbr_cnt(10) As Integer
+
+
+
+OnError Goto general_error
+
+	' need to set the coord sys so that mapinfo uses the sys we select
+	'-----------------------------------------------
+	Run Command "Set " + proj 
+	Set Distance Units "km"
+	'-------------------------------------------------
+
+	finished_flag = "Off"
+	desired_pos = -1    'this is the default setting if we don't want to specify a nbr position when we add
+
+
+	' this checks that the front window is a mapper
+	'---------------------------------------------------
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Set Map Redraw On
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the point where the user clicked and if shift or ctrl was pressed
+	'------------------------------------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	s_click = CommandInfo(CMD_INFO_SHIFT)
+	c_click = CommandInfo(CMD_INFO_CTRL)
+
+	' the user is using the point-mode tool (this is set in the dialog in main_sub), determine how many objects are at the chosen point.
+	'---------------------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+	If i_found = 0 Then
+		'do nothing, no objects found where the user clicked.
+	Else
+
+
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'This shows the cell info, if the CTRL key was pressed while clicking					
+		'-----------------------------------------------------------------------
+		If c_click Then
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+
+				' this tests to see which table is open and then which has been selected
+				'-------------------------------------
+				select_ok = False
+				For j = 1 to 10
+					If sys(j) = "" Then
+						Exit For
+					ElseIf table_selected = cells_sys(j) Then
+						select_ok = True
+						Exit For
+					End If
+				Next
+
+				
+				' Fetch the row of the object the user clicked on.
+				'------------------------------------------------------
+				If select_ok = True Then
+					' Fetch the row of the object the user clicked on.
+					'------------------------------------------------------
+					Fetch rec i_row_id From table_selected
+						cell_data_alias = table_selected + ".Site"
+						sitex =  cell_data_alias
+						cell_data_alias = table_selected + ".Sitename"
+						namex = cell_data_alias
+						cell_data_alias = table_selected + ".Cell"
+						cellx = cell_data_alias
+						cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+						pnx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_BSIC"
+						bsicx = cell_data_alias
+						cell_data_alias = table_selected + ".ZCRS_Cnt"
+						zcrsx = cell_data_alias
+						cell_data_alias = table_selected + ".HT"
+						htx = cell_data_alias
+						cell_data_alias = table_selected + ".AZ"
+						azx = cell_data_alias
+						cell_data_alias = table_selected + ".MDT"
+						mdtx = cell_data_alias
+						cell_data_alias = table_selected + ".EDT"
+						edtx = cell_data_alias
+						cell_data_alias = table_selected + ".STATUS"
+						statusx = cell_data_alias
+						cell_data_alias = table_selected + ".Comment"
+						commentx = cell_data_alias
+						cell_data_alias = table_selected + ".ANT_HBW"
+						hbwx = cell_data_alias
+						cell_data_alias = table_selected + ".OBJ_SIZE"
+						sizex = cell_data_alias
+						cell_data_alias = table_selected + ".Type"
+						typex = cell_data_alias
+
+					Dialog Title "View Cells Parameters" width 180 height 290	 Position 20,40
+					Control GroupBox
+					Title "Cell Details" 
+					Position 10, 10 Width 160 Height 55
+					Control StaticText
+					Title "Site:" Position 15, 20
+					Control StaticText
+					Title sitex Position 75, 20
+					Control StaticText
+					Title "Site Name:" Position 15, 35
+					Control StaticText
+					Title namex Position 75, 35
+					Control StaticText
+					Title "Cell ID:" Position 15, 50
+					Control StaticText
+					Title cellx Position 75, 50
+					Control StaticText
+					Title "Pci/Sc/Pn/Bcch:" Position 15, 75
+					Control StaticText
+					Title pnx Position 75, 75 
+					Control StaticText
+					Title "Zcrs/Bsic:" Position 15, 90
+					Control StaticText
+					Title bsicx Position 75, 90
+					Control StaticText
+					Title "Cnt:" Position 110, 90
+					Control StaticText
+					Title zcrsx Position 125, 90
+					Control StaticText
+					Title "Azimuth (deg):" Position 15, 105
+					Control StaticText
+					Title azx Position 75, 105
+					Control StaticText
+					Title "Ant HBW (deg):" Position 15, 120
+					Control StaticText
+					Title hbwx Position 75, 120
+					Control StaticText
+					Title "Object Size (m):" Position 15, 135
+					Control StaticText
+					Title sizex Position 75, 135
+					Control StaticText
+					Title "Height (m/ft):" Position 15, 150
+					Control StaticText
+					Title htx Position 75, 150
+					Control StaticText
+					Title "MDT (deg):" Position 15, 165
+					Control StaticText
+					Title mdtx Position 75, 165
+					Control StaticText
+					Title "EDT (deg):" Position 15, 180
+					Control StaticText
+					Title edtx Position 75, 180
+					Control StaticText
+					Title "Status:" Position 15, 195
+					Control StaticText
+					Title statusx Position 75, 195
+					Control StaticText
+					Title "Comments:" Position 15, 210
+					Control StaticText
+					Title Commentx Position 75, 210
+					Control StaticText
+					Title "Type:" Position 15, 225
+					Control StaticText
+					Title typex Position 75, 225
+
+					Control OKButton
+					Position 60, 250
+
+					If CommandInfo(CMD_INFO_DLG_OK) = True Then
+						Exit Sub
+					Else
+						Exit Sub
+					End If
+				End If
+			Next
+
+
+
+
+
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'this is the regular nbr management mode
+		'----------------------------------------------
+		Else
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			Set Map Redraw Off
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'This is the code for selecting a new host
+				'------------------------------------------
+				If add_nbr_flag = "Off" and del_nbr_flag = "Off" Then
+
+					' this tests to see which table is open and then which has been selected
+					'-------------------------------------
+					select_ok = False
+					If Left$(table_selected,6) = "cells_" Then
+						For j = 1 to 10
+							If sys(j) = "" Then
+								Exit For
+							ElseIf table_selected = cells_sys(j) Then
+								host_sys = sys(j)
+								host_sysind = j
+								select_ok = True
+								Exit For
+							End If
+						Next
+					End If
+
+					'if the point clicked on contains an object of the table sys(x), we process it
+					'---------------------------------------------------
+					If select_ok = True Then
+						Call save_tables_sub
+
+						' Get the row ID number of the object that was a hit.
+						'---------------------------------------------------
+						i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+						host_row_id = i_row_id
+
+						' Fetch the row of the object the user clicked on.
+						'---------------------------------------------------
+						Fetch rec host_row_id From table_selected
+						layer1 = LayerInfo( i_win_id, 1, LAYER_INFO_NAME)
+
+
+						'Print important data to screen
+						'---------------------------------------------------
+						Print Chr$(12)
+						cell_data_alias =  table_selected_alias + ".Site" 
+						Print "Site: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".Sitename"
+						Print "Site Name: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".Cell"
+						Print "Cell ID: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".PCI_SC_BCCH_PN"
+						Print "PN/SC/BCCH: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".AZ" 
+						Print "Azimuth: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".MDT" 
+						Print "MDT: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".EDT" 
+						Print "EDT: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".HT" 
+						Print "Height: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".STATUS" 
+						Print "Status: " + cell_data_alias
+						cell_data_alias =  table_selected_alias + ".Comment" 
+						Print "Comments: " + cell_data_alias
+
+						Call prepare_nbr_sub             'have to do this here, if you do in the pre_nbr_edit, it causes crashes if the user clicked on the nbr table before you closed it
+
+						Select * From table_selected Where rowid = host_row_id Into query1 NoSelect
+						Commit Table query1 As pf_user_path & "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+						Close Table query1
+						Open Table pf_user_path & "nbrs_RFDT.TAB"
+
+						Add Map Layer nbrs_RFDT
+
+						' this changes the display properties of the host object in the nbrs_RFDT table
+						'--------------------------------------
+						Fetch First from nbrs_RFDT
+						sel = nbrs_RFDT.obj
+						x = centroidx(nbrs_RFDT.obj)
+						y = centroidy(nbrs_RFDT.obj)
+						host_val = nbrs_RFDT.Cell
+
+						'This sets the colours based on the system
+						'----------------------------------------
+						Alter Object sel 
+						Info OBJ_INFO_BRUSH, brush_host(host_sysind)
+						Alter Object sel 
+						Info OBJ_INFO_PEN, pen_host(host_sysind)
+						Update nbrs_RFDT
+							set obj = sel where rowid = 1
+
+						' new - this gets all nbrs from the host cell Into query1 NoSelect
+						'-------------------------------------------------------------
+						Select * From nbrs_DB Where nbrs_DB.Host_Cell = host_val And nbrs_DB.Host_Sys = host_sys Into query1 NoSelect
+						If TableInfo("query1",TAB_INFO_NROWS) = 0 Then
+							Goto no_nbrs_all_sys
+						End If
+
+						' this puts the nbr objects into the nbrs_RFDT tab
+						'-------------------------------------------------------
+						For j = 1 to 10
+							If sys(j) = "" Then
+								Exit For
+							ElseIf is_display_cells_sys(j) = True Then            ' don't think you need to test for it being open here as the display should take care of that
+								' gets the target sys nl from query1
+								'-----------------------------------------------
+								Select * From query1 Where query1.Nbr_Sys = sys(j) Into query2 NoSelect
+								nbr_cnt(j) = TableInfo("query2",TAB_INFO_NROWS)
+								If nbr_cnt(j) = 0 Then
+									Close table query2
+									Goto no_nbrs_sys
+								End If
+
+								Fetch First From query2
+								Do While NOT EOT(query2)
+									nbr_val = query2.Nbr_Cell
+									If nbr_val <> "" and nbr_val <> "0" then	
+										Select * From cells_sys(j) Where cell = nbr_val Into query3 NoSelect
+										If TableInfo("query3",TAB_INFO_NROWS) > 0 Then
+											Insert Into nbrs_RFDT
+												Select * from query3
+											Close Table query3
+											If nbr_lines_flag Then
+												Fetch Last From nbrs_RFDT
+												x2 = centroidx(nbrs_RFDT.obj)
+												y2 = centroidy(nbrs_RFDT.obj)
+												sel = nbrs_RFDT.obj
+												Alter Object sel 
+													Info OBJ_INFO_BRUSH, brush_nbr(j)
+													Info OBJ_INFO_PEN, pen_nbr(j)
+												Update nbrs_RFDT
+													set obj = sel where rowid = nbrs_RFDT.rowid
+												sel = CreateLine(x, y, x2, y2)
+												Alter Object sel 
+												Info OBJ_INFO_PEN, pen_connector(j)
+												Insert Into nbrs_RFDT (Cell, System, obj)
+													Values (nbr_val,sys(j),sel)
+											Else
+												Fetch Last from nbrs_RFDT
+												sel = nbrs_RFDT.obj
+												Alter Object sel 
+													Info OBJ_INFO_BRUSH, brush_nbr(j)
+													Info OBJ_INFO_PEN, pen_nbr(j)
+												Update nbrs_RFDT
+													set obj = sel where rowid = nbrs_RFDT.rowid
+											End If	
+										Else
+											Print "This Cell(" & host_val & ") Has An Undefined Neighbor(" & nbr_val & ")"
+											Close Table query3
+										End If
+									End If
+									Fetch Next From query2
+								Loop
+								Close table query2
+							End If
+no_nbrs_sys:
+						Next
+no_nbrs_all_sys:
+						Close Table query1
+
+						'This gets out of the i loop so no more underlying objects are processed => the top sector is processed as the host only
+						'-------------------------------------------------------------
+						For j = 1 to 10
+							If sys(j) = "" Then
+								Exit For
+							ElseIf is_display_cells_sys(j) Then
+								Print sys(j) & ": " & nbr_cnt(j) & " nbrs"
+							End If
+						Next
+						Exit For
+					End If
+
+
+
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'This is the code for adding a nbr
+				'------------------------------------------
+				ElseIf add_nbr_flag = "On" and del_nbr_flag = "Off" Then
+					Set Table nbrs_DB FASTEDIT ON
+
+					' this tests to see which table is open and then which has been selected
+					'-------------------------------------
+					select_ok = False
+					If Left$(table_selected,6) = "cells_" Then
+						For j = 1 to 10
+							If sys(j) = "" Then
+								Exit For
+							ElseIf table_selected = cells_sys(j) Then
+								nbr_sys = sys(j)
+								nbr_sysind = j
+								select_ok = True
+								Exit For
+							End If
+						Next
+					End If
+
+					'If we selected one of the cells tables we go ahead
+					'-------------------------------------------------
+					If select_ok = True Then
+						Call save_tables_sub
+
+						' Get the row ID number of the object that was a hit.
+						'---------------------------------------------------
+						i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+						'This is the case where the shift key was pressed, so we tell the user which positions are free and ask the user which position to add the new nbr
+						'-----------------------------------------------------------------------
+						If s_click Then 		
+							Call choose_nbr_pos_sub (desired_pos)   'calls the dialog to let the user choose the br pos and declares the passed variable
+							If desired_pos = -1 Then
+								Exit For
+							End If
+						'********** next need to put the code in the next section to add the nbr to the desired position if that option is selected (desired position <> -1)
+						End If
+
+						finished_flag = "Off"
+						found_blank = "No"
+
+						'this gets the new nbr data
+						'------------------------------
+						Fetch rec i_row_id from table_selected
+							cell_data_alias = table_selected + ".Cell"
+							nbr_val = cell_data_alias
+							nbr_table = "cells_" + nbr_sys								
+							nbr_row_id = i_row_id
+
+						'Then get shte host data from the nbrs table
+						'----------------------------------------------
+						Fetch rec 1 from nbrs_RFDT
+							host_val = nbrs_RFDT.Cell
+							host_sys = nbrs_RFDT.System
+							host_table = "cells_" & host_sys
+						Select * From host_table Where cell = host_val Into query1 NoSelect
+							cell_data_alias = "query1.rowid"
+							host_row_id = cell_data_alias
+						Close Table query1	
+						For j = 1 to 10
+							If sys(j) = "" Then
+								Exit For
+							ElseIf host_sys = sys(j) Then
+								host_sysind = j
+								Exit For
+							End If
+						Next
+						If nbr_val = host_val And nbr_sys = host_sys Then
+							'do nothing, here, you are trying to add the host to itself
+							Exit For
+						End If
+
+
+						' this is to check for already existing table_selected that you want to add, if not it finds the first available blank and adds the nbr there
+						' if it finds a space for the nbr, it sets the finished flag to "ON" and we know it has been done
+						'-----------------------------------------------------
+						If desired_pos = -1 Then    'here, we didn't specify a nbr position at all earlier
+							' check if the new nbr is already in the NL or not
+							'--------------------------------------------------------
+							Select * From nbrs_DB Where nbrs_DB.Host_Cell = host_val And nbrs_DB.Host_Sys = host_sys And nbrs_DB.Nbr_Sys = nbr_sys Into query1 NoSelect
+							nbr_cnt(nbr_sysind) = TableInfo("query1",TAB_INFO_NROWS)
+							Select * From query1 Where query1.Nbr_Cell = nbr_val Into query2 NoSelect
+							If TableInfo("query2",TAB_INFO_NROWS) = 0 Then			'it is not there, so we can add it
+								'Do nbr size check
+								'---------------------
+								If nbr_cnt(nbr_sysind) < g_nl_max_size(10*(host_sysind-1)+nbr_sysind) And nbr_enforce_max_size_flag Then
+									finished_flag = "On"
+								ElseIf Not nbr_enforce_max_size_flag Then
+									finished_flag = "On"
+								End If
+							Else 			'it is there, so we do nothing
+								finished_flag = "already there"        
+							End If
+							Close Table query2
+							Close Table query1
+
+						'This code is still under development, right now, I just used deisred pos = -1
+						'------------------------------------------------
+						ElseIf desired_pos > g_nl_max_size(10*(host_sysind-1)+nbr_sysind) Then        'here is for the case where the desired pos is non-specific
+						ElseIf desired_pos >= 1 and desired_pos <=g_nl_max_size(10*(host_sysind-1)+nbr_sysind) Then 	'here is for the case where the desired pos is specific
+						End If
+
+						'Now the position has been found, do the processing
+						'------------------------------------------------							
+						If finished_flag = "On" Then
+							nbr_cnt(nbr_sysind) = nbr_cnt(nbr_sysind) + 1
+
+							Insert Into nbrs_DB 
+								Values (host_val, host_sys, nbr_val, nbr_sys)
+							Insert Into change_request 
+								Values ("Add Nbr " & nbr_sys & " to " & host_sys, host_val, nbr_val,"nbr is number: " & nbr_cnt(nbr_sysind) & " in NL")
+
+							' this changes the objects properties
+							'--------------------------------------
+							Fetch First from nbrs_RFDT
+							x = Centroidx(nbrs_RFDT.obj)
+							y = Centroidy(nbrs_RFDT.obj)
+							Select * from nbr_table where rowid = nbr_row_id Into query1 NoSelect
+							x2 = Centroidx(query1.obj)
+							y2 = Centroidy(query1.obj)
+							Insert Into nbrs_RFDT Select * From query1
+							Close Table query1
+
+							Fetch Last From nbrs_RFDT
+							sel = nbrs_RFDT.obj
+							Alter Object sel 
+								Info OBJ_INFO_BRUSH, brush_nbr(nbr_sysind)
+								Info OBJ_INFO_PEN, pen_nbr(nbr_sysind)
+							Update nbrs_RFDT
+								set obj = sel where rowid = nbrs_RFDT.rowid
+
+							If nbr_lines_flag Then
+								Insert Into nbrs_RFDT (Cell, System, obj) 
+									Values (nbr_val,nbr_sys,CreateLine(x, y, x2, y2))
+								Fetch Last From nbrs_RFDT 
+								sel = nbrs_RFDT.obj
+								Alter Object sel	
+									Info OBJ_INFO_PEN, pen_connector(nbr_sysind)
+								Update nbrs_RFDT	
+									set obj = sel where rowid = nbrs_RFDT.rowid
+							End If	
+
+						ElseIf finished_flag = "Off" Then
+							Set Map Redraw On
+							Note "Can't Add!  The Neighbor List is Full at " & g_nl_max_size(10*(host_sysind-1)+nbr_sysind) & " nbrs"
+						End If
+
+						'This does the mutual nbr processing
+						'--------------------------------------					
+						'this adds recip nbr to the nbrs_DB table
+						'-------------------------------------------					
+						If mutual_flag Then
+							finished_flag = "Off"
+							found_blank = "No"
+
+							'This reverses all the nbr and host values
+							'--------------------------------------					
+							bucket = nbr_val
+							nbr_val = host_val
+							host_val = bucket
+
+							bucket = nbr_table
+							nbr_table = host_table
+							host_table = bucket
+
+							bucket = nbr_sys
+							nbr_sys = host_sys
+							host_sys = bucket
+
+							bucket = nbr_sysind
+							nbr_sysind = host_sysind
+							host_sysind = val(bucket)
+
+							bucket = nbr_row_id
+							nbr_row_id = host_row_id
+							host_row_id = val(bucket)
+
+							'This is to check for already existing nbrs that you want to add
+							'------------------------------------------------------------------
+							Select * From nbrs_DB Where nbrs_DB.Host_Cell = host_val And nbrs_DB.Host_Sys = host_sys And nbrs_DB.Nbr_Sys = nbr_sys Into query1 NoSelect
+							nbr_cnt(nbr_sysind) = TableInfo("query1",TAB_INFO_NROWS)
+
+							Select * From query1 Where query1.Nbr_Cell = nbr_val Into query2 NoSelect
+							If TableInfo("query2",TAB_INFO_NROWS) = 0 Then			'it is not there, so we can add it
+								'Do nbr size check
+								'---------------------
+								If nbr_cnt(nbr_sysind) < g_nl_max_size(10*(host_sysind-1)+nbr_sysind) And nbr_enforce_max_size_flag Then
+									finished_flag = "On"
+								ElseIf Not nbr_enforce_max_size_flag Then
+									finished_flag = "On"
+								End If
+							Else 			'it is there, so we do nothing
+								finished_flag = "already there"        
+							End If
+							Close Table query2
+							Close Table query1
+
+							If finished_flag = "On" Then
+								nbr_cnt(nbr_sysind) = nbr_cnt(nbr_sysind) + 1
+								Insert Into nbrs_DB 
+									Values (host_val, host_sys, nbr_val, nbr_sys)
+								Insert Into change_request 
+									Values ("Add Nbr " & nbr_sys & " to " & host_sys, host_val, nbr_val,"recip nbr is number: " & nbr_cnt(nbr_sysind) & " in NL")
+							ElseIf finished_flag = "Off" Then
+									Set Map Redraw On
+									Note "Can't Add!!  Recip Neighbor List is Full at " & g_nl_max_size(10*(host_sysind-1)+nbr_sysind) & " nbrs"
+							End If
+						End If
+
+						'This gets us out of the for loop so we do not process the underlying objects if there are any
+						'------------------------------------------------------------
+						Exit For
+					End If
+
+
+
+
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'This is the code for deleting a nbr
+				'------------------------------------------
+				ElseIf add_nbr_flag = "Off" and del_nbr_flag = "On" Then
+					Set Table nbrs_DB FASTEDIT ON
+
+					'we only go here if the table selected was the nbrs table
+					'this deletes the nbr
+					'------------------------
+					If table_selected = nbrs_RFDT Then	
+						Call save_tables_sub
+
+						' Get the row ID number of the object that was a hit.
+						'---------------------------------------------------
+						i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+						Fetch rec i_row_id from nbrs_RFDT
+						If i_row_id = 1 Then 
+							'Note "You can't delete the Host Cell."
+						ElseIf nbr_lines_flag and (i_row_id/2 - fix(i_row_id/2)) <> 0 Then    'then it is an odd row and it contains a line not an object
+							' do nothing
+						Else       'we selected an acceptable nbr to remove
+
+							'this finds all the nbr and host vars
+							'---------------------------------------
+							Fetch rec i_row_id from table_selected
+								cell_data_alias = table_selected + ".cell"
+								nbr_val = cell_data_alias
+								cell_data_alias = table_selected + ".SYSTEM"
+								nbr_sys = cell_data_alias
+								nbr_table = "cells_" + nbr_sys								
+							Select * From nbr_table Where cell = nbr_val Into query1 NoSelect
+								cell_data_alias = "query1.rowid"
+								nbr_row_id = cell_data_alias
+							Close Table query1	
+
+							Fetch rec 1 from nbrs_RFDT
+								host_val = nbrs_RFDT.cell
+								host_sys = nbrs_RFDT.SYSTEM
+								host_table = "cells_" + host_sys
+							Select * From host_table Where cell = host_val Into query1 NoSelect
+								cell_data_alias = "query1.rowid"
+								host_row_id = cell_data_alias
+							Close Table query1	
+
+							' this gets the sysinds for host and nbr
+							'------------------------------------------
+							For j = 1 to 10
+								If sys(j) = "" Then
+									Exit For
+								End If
+								If host_sys = sys(j) Then
+									host_sysind = j
+								End If
+								If nbr_sys = sys(j) Then
+									nbr_sysind = j
+								End If
+							Next
+
+							' this deletes the neighbor from the nbrs_DB table
+							'-----------------------------------------------------
+							finished_flag = "Off"
+							Select * From nbrs_DB Where nbrs_DB.Host_Cell = host_val And nbrs_DB.Host_Sys = host_sys And nbrs_DB.Nbr_Sys = nbr_sys Into query1 NoSelect
+							nbr_cnt(nbr_sysind) = TableInfo("query1",TAB_INFO_NROWS)
+							If nbr_cnt(nbr_sysind) > 0 Then
+								Select * From query1 Where query1.Nbr_Cell = nbr_val Into query2 NoSelect
+								If TableInfo("query2",TAB_INFO_NROWS) > 0 Then							
+									' this deletes the neighbor object and it's line if it is there
+									'---------------------------------------------------------------
+									Delete Object From nbrs_RFDT Where rowid = i_row_id
+									If nbr_lines_flag Then 
+										Delete Object From nbrs_RFDT Where rowid = i_row_id + 1
+									End If
+
+									' this deletes the nbr from the nbrs_DB table
+									'------------------------------------------------
+									Delete From query2
+									finished_flag = "On"
+								End If
+								Close Table query2
+							End If
+							Close Table query1
+
+							If finished_flag = "Off" Then
+								Set Map Redraw On
+								Note "The neighbor wasn't in the database to delete: " & host_val & " - " & nbr_val
+								Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+									Values ("Del Nbr " & nbr_sys & " from " & host_sys, host_val, nbr_val,"chosen nbr wasn't in the nbr DB")
+							ElseIf finished_flag = "On" Then 
+								Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+									Values ("Del Nbr " & nbr_sys & " from " & host_sys, host_val, nbr_val,"chosen nbr")
+							End If
+
+
+							'This does the mutual nbr processing
+							'--------------------------------------					
+							If mutual_flag Then
+								'This reverses all the nbr and host values
+								'--------------------------------------					
+								bucket = nbr_val
+								nbr_val = host_val
+								host_val = bucket
+
+								bucket = nbr_table
+								nbr_table = host_table
+								host_table = bucket
+
+								bucket = nbr_sys
+								nbr_sys = host_sys
+								host_sys = bucket
+
+								bucket = nbr_sysind
+								nbr_sysind = host_sysind
+								host_sysind = val(bucket)
+
+								bucket = nbr_row_id
+								nbr_row_id = host_row_id
+								host_row_id = val(bucket)
+
+
+								' this deletes the neighbor value from the neighbor table (remember host_table is actually now the neighbor table as we are doing reciprocal proccessing
+								'---------------------------------------------------------------
+								finished_flag = "Off"
+								Select * From nbrs_DB Where nbrs_DB.Host_Cell = host_val And nbrs_DB.Host_Sys = host_sys And nbrs_DB.Nbr_Sys = nbr_sys Into query1 NoSelect
+								nbr_cnt(nbr_sysind) = TableInfo("query1",TAB_INFO_NROWS)
+								If nbr_cnt(nbr_sysind) > 0 Then
+									Select * From query1 Where query1.Nbr_Cell = nbr_val Into query2 NoSelect
+									If TableInfo("query2",TAB_INFO_NROWS) > 0 Then							
+										' this deletes the nbr from the nbrs_DB table
+										'------------------------------------------------
+									Delete From query2
+										finished_flag = "On"
+									End If
+									Close Table query2
+								End If
+								Close Table query1
+
+								If finished_flag = "Off" Then
+									Set Map Redraw On
+									Note "The recip nbr wasn't in the database to delete: " & host_val & " - " & nbr_val
+									Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+										Values ("Del Nbr " & nbr_sys & " from " & host_sys, host_val, nbr_val,"chosen recip nbr wasn't in the nbr DB")
+								ElseIf finished_flag = "On" Then 
+									Insert Into change_request (Action, Host_Cell, Parameter,Comment)
+										Values ("Del Nbr " & nbr_sys & " from " & host_sys, host_val, nbr_val,"chosen recip nbr")
+								End If
+							End If
+							Exit For
+						End If
+					End If
+				End If
+			Next
+		End If
+	End If
+
+get_outa_here:
+
+	Exit Sub
+'---------------------------------
+general_error:
+Note "There was an error, the code is: " & Error$() & ".  Exiting..."
+Resume get_outa_here
+
+End Sub
+'---------------------------------------------------
+
+
+

@@ -1,0 +1,109 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub set_nbr_prop_sub
+Declare Sub set_first_tier_prop_sub
+Declare Sub set_first_tier_sys_sub
+Declare Sub export_first_tier_nbrs_sub
+Declare Sub set_nl_max_size_sub
+Declare Sub choose_host_sub
+
+
+
+'---------------------------------------------------
+' this lets the user set the show nbrs properties (incl. the first tier/best server analysis properties)
+'---------------------------------------------------
+Sub set_nbr_prop_sub
+Dim data As String
+Dim i, j As Integer
+
+
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "Please Set the NL Display Preferences" width 250 height 240
+
+	Control Checkbox
+	Title "Make All NL Changes 'Mutual'"
+	Value mutual_flag
+	Into mutual_flag
+	Position 15, 10 Width 130
+	
+	Control Checkbox
+	Title "Use Connector Lines Between Nbrs"
+	Value nbr_lines_flag
+	Into nbr_lines_flag
+	Position 15, 25 Width 130
+
+	Control Checkbox
+	Title "Enforce Max NL Sizes When Adding Nbrs"
+	Value nbr_enforce_max_size_flag
+	Into nbr_enforce_max_size_flag
+	Position 15, 40 Width 160
+
+	Control Button
+	Title "Set NL Max Sizes"
+	Calling set_nl_max_size_sub
+	Position 15, 55 Width 80
+
+	Control GroupBox
+	Title "First Tier Analysis" 
+	Position 10, 80 Width 230 Height 123
+
+	Control Checkbox
+	Title "Calc and Show 'FIRST TIER' Nbrs when click on cell"
+	Value 	nbr_show_ft_flag
+	Into nbr_show_ft_flag
+	Position 15, 95 Width 180
+
+	Control Checkbox
+	Title "Draw Footprint of Cell Also"
+	Value ft_draw_host_flag
+	Into ft_draw_host_flag
+	Position 15, 110 Width 180
+
+	Control Checkbox
+	Title "Only Consider On-Air Sites"
+	Value 	ft_only_onair_flag
+	Into ft_only_onair_flag
+	Position 15, 125 Width 180
+
+	Control Button
+	Title "First Tier Parameters"
+	Calling set_first_tier_prop_sub
+	Position 15, 140 Width 80
+
+	Control Button
+	Title "Set First Tier Systems"
+	Calling set_first_tier_sys_sub
+	Position 15, 160 Width 80
+
+	Control Button
+	Title "Export First Tier Nbrs"
+	Calling export_first_tier_nbrs_sub
+	Position 15, 180 Width 80
+
+	Control OKButton
+	Position 30, 215
+	Control CancelButton
+	Position 180, 215
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Exit Sub
+	End If
+
+	If nbr_show_ft_flag Then
+		Call choose_host_sub
+		disable_edit = "On"
+		Alter Menu Item ID 1005 Check			'choose_host_sub Check
+		Alter Menu Item ID 1006 Disable 		'add_nbr_sub Disable
+		Alter Menu Item ID 1007 Disable		'del_nbr_sub Disable
+	End If
+End Sub
+'---------------------------------------------------
+
+
+
+

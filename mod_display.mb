@@ -1,0 +1,57 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub mod_display_sub
+Declare Sub set_display_sub
+Declare Sub set_thermatic_display_sub
+Declare Sub apply_display_sub
+
+'---------------------------------------------------
+' this is the main screen for the user to determine which display properties menu to go into
+' basically the user goes into other dialogs to set display properties, then when they press ok on this main dialog, it applies all the changes if any
+'---------------------------------------------------
+Sub mod_display_sub
+
+	dont_redraw = "On"
+
+	Dialog Title "Project Settings...." width 400 height 300
+
+	Control GroupBox
+	Title "Display Properties" 
+	Position 10, 200 Width 120 Height 50
+
+	Control Button	
+	Title "&Set Object Display"
+	Calling set_display_sub
+	Position 20, 210 Width 100
+
+	Control Button	
+	Title "&Apply Changes"
+	Calling apply_display_sub
+	Position 20, 230 Width 100
+
+
+	Control GroupBox 
+	Title "Thermatic Display Properties" 
+	Position 140, 200 Width 120 Height 50
+
+	Control Button	
+	Title "&Set Thermatic Map Display"
+	Calling set_thermatic_display_sub
+	Position 150, 210 Width 100
+
+	Control OKButton
+	Position 50, 270
+	Control CancelButton
+	Position 300, 270
+
+	If CommandInfo(CMD_INFO_DLG_OK) = True Then
+		Exit Sub
+	End If
+
+
+End Sub
+'---------------------------------------------------
+

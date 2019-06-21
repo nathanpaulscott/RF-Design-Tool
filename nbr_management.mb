@@ -1,0 +1,1089 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub nbr_management_sub
+Declare Sub nbr_management_prep_sub
+Declare Sub show_nl_size_stats_loaded_sub
+Declare Sub show_nl_size_stats_file_sub
+Declare Sub show_nl_oneway_stats_loaded_sub
+Declare Sub show_nl_oneway_stats_file_sub
+Declare Sub compare_nl_1_sub
+Declare Sub compare_nl_2_sub
+Declare Sub set_nl_anal_sys_sub
+Declare Sub export_loaded_nl_sub
+Declare Sub pre_import_nbrs_sub
+Declare Sub nbrs_not_in_cells_sub
+
+
+
+
+
+
+
+'---------------------------------------------------
+' allows the user to see sstats, compare or export/import nbr lists
+'---------------------------------------------------
+Sub nbr_management_sub
+Dim data As String
+Dim i, j As Integer
+
+
+	Set ProgressBars Off
+	Set Event Processing Off
+
+	' This is the dialog
+	'-----------------------------
+	Dialog Title "NL Analysis" width 160 height 315
+	Position 20,20
+
+	Control GroupBox
+	Title "NL Analysis"
+	Position 10, 10 Width 140 Height 265
+
+	Control Button
+	Title "Set NL Source & Target Systems"
+	Calling set_nl_anal_sys_sub
+	Position 15, 25 Width 120
+
+	Control Button
+	Title "NL Size Analysis for Loaded NL"
+	Calling show_nl_size_stats_loaded_sub
+	Position 15, 50 Width 120
+
+	Control Button
+	Title "1-Way NL Analysis for Loaded NL"
+	Calling show_nl_oneway_stats_loaded_sub
+	Position 15, 75 Width 120
+
+	Control Button
+	Title "NL Size Analysis for NL File"
+	Calling show_nl_size_stats_file_sub
+	Position 15, 100 Width 120
+
+	Control Button
+	Title "1-Way NL Analysis for NL File"
+	Calling show_nl_oneway_stats_file_sub
+	Position 15, 125 Width 120
+
+	Control Button
+	Title "Compare Loaded NL with NL File"
+	Calling compare_nl_1_sub
+	Position 15, 150 Width 120
+
+	Control Button
+	Title "Compare Two NL Files"
+	Calling compare_nl_2_sub
+	Position 15, 175 Width 120
+
+	Control Button
+	Title "Export/Remove Nbrs not in cell DB"
+	Calling nbrs_not_in_cells_sub
+	Position 15, 200 Width 120
+
+	Control Button
+	Title "Export Loaded NL to .csv"
+	Calling export_loaded_nl_sub
+	Position 15, 225 Width 120
+
+	Control Button
+	Title "Import .csv to Loaded NL"
+	Calling pre_import_nbrs_sub
+	Position 15, 250 Width 120
+
+	Control OKButton
+	Position 30, 285
+	Control CancelButton
+	Position 90, 285
+
+	If CommandInfo(CMD_INFO_DLG_OK) <> True Then
+		Call nbr_management_prep_sub
+		Exit Sub
+	End If
+
+	Call nbr_management_prep_sub
+
+	Set ProgressBars On
+	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+' allows the user to select the system for the NL analysis
+'---------------------------------------------------
+Sub set_nl_anal_sys_sub
+Dim radio1, radio2 As String
+Dim i, j, k, source_i, target_i As Integer
+
+
+
+		source_i = 1
+		target_i = 1
+		For i = 1 to 10
+			If sys(i) = "" Then
+				Exit For
+			ElseIf g_nl_stats_source_sys = sys(i) Then
+				source_i = i
+			ElseIf g_nl_stats_target_sys = sys(i) Then
+				target_i = i
+			End If
+		Next
+		radio1 = cells_sys(1) & ";" & cells_sys(2) & ";" & cells_sys(3) & ";" & cells_sys(4) & ";" & cells_sys(5) & ";" & cells_sys(6) & ";" & cells_sys(7) & ";" & cells_sys(8) & ";" & cells_sys(9) & ";" & cells_sys(10)
+		radio2 = cells_sys(1) & ";" & cells_sys(2) & ";" & cells_sys(3) & ";" & cells_sys(4) & ";" & cells_sys(5) & ";" & cells_sys(6) & ";" & cells_sys(7) & ";" & cells_sys(8) & ";" & cells_sys(9) & ";" & cells_sys(10)
+
+		Dialog Title "Set NL Analysis Systems" width 250 height 280	
+
+		Control GroupBox
+		Title "Choose the Source System for NL Analysis" 
+		Position 10, 10 Width 230 Height 100
+
+		Control RadioGroup
+		Title radio1
+		Position 20, 25 Width 150
+		Value source_i
+		Into source_i
+
+		Control GroupBox
+		Title "Choose the Target Systems for First Tier Analysis" 
+		Position 10, 125 Width 230 Height 100
+
+		Control RadioGroup
+		Title radio2
+		Position 20, 140 Width 150 
+		Value target_i
+		Into target_i
+
+		Control OKButton
+		Position 40, 250
+		Control CancelButton
+		Position 170, 250
+
+		If NOT CommandInfo(CMD_INFO_DLG_OK) Then
+			Exit Sub
+		End If
+
+		g_nl_stats_source_sys = sys(source_i)
+		g_nl_stats_target_sys = sys(target_i)
+
+Exit Sub
+
+'Error Handlers
+'------------------
+
+
+End	Sub
+
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this checks if tables to be used in the following sub are open, if so, it closes them
+'-----------------------------------------------------------------------------------
+Sub nbr_management_prep_sub
+
+OnError GoTo closed1
+	If TableInfo(query1, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+
+		Close Table query1
+	End  If	 
+returnpoint1:
+OnError GoTo closed2
+	If TableInfo(query2, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Close Table query2
+	End  If	 
+returnpoint2:
+OnError GoTo closed3
+	If TableInfo(query3, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Close Table query3
+	End  If	 
+returnpoint3:
+OnError GoTo closed4
+	If TableInfo(query4, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Close Table query4
+	End  If	 
+returnpoint4:
+OnError GoTo closed5
+	If TableInfo(NL_Stats1, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Drop Table NL_Stats1
+	End  If	 
+returnpoint5:
+OnError GoTo closed6
+	If TableInfo(NL_Stats2, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Drop Table NL_Stats2
+	End  If	 
+returnpoint6:
+OnError GoTo closed7
+	If TableInfo(NL_Stats_Size, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Drop Table NL_Stats_Size
+	End  If	 
+returnpoint7:
+OnError GoTo closed8
+	If TableInfo(nl_import1, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Close Table nl_import1
+		Kill "nl_import1.tab"
+		Kill "nl_import1.ind"
+	End  If	 
+returnpoint8:
+OnError GoTo closed9
+	If TableInfo(nl_import2, TAB_INFO_NAME) <> "" Then
+OnError goto 0
+		Close Table nl_import2
+		Kill "nl_import2.tab"
+		Kill "nl_import2.ind"
+	End  If	 
+returnpoint9:
+	Exit Sub
+'----------------------------
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+closed3:
+Resume returnpoint3
+
+closed4:
+Resume returnpoint4
+
+closed5:
+Resume returnpoint5
+
+closed6:
+Resume returnpoint6
+
+closed7:
+Resume returnpoint7
+
+closed8:
+Resume returnpoint8
+
+closed9:
+Resume returnpoint9
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------
+'This calcs size stats for the NL, graphs them and exports them
+'---------------------------------------------
+Sub show_nl_size_stats_loaded_sub
+Dim i,j,k As Integer
+Dim col_a As Alias
+
+
+
+	Call nbr_management_prep_sub
+
+	Create Table "NL_Stats_Size" (NL_Size Integer, Cell_Count Integer) File pf_user_path & "NL_Stats_Size.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats_Size FastEdit On
+	For i = 0 to 70
+		Insert Into NL_Stats_Size Values(i,0)
+	Next
+
+	'NL Size analysis
+	'-------------------
+	Select * From nbrs_DB Where nbrs_DB.Host_Sys = g_nl_stats_source_sys And nbrs_DB.Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo("query1",TAB_INFO_NROWS) = 0 Then
+		Note "There are no nbrs between the selected systems.  Exiting..."
+		Close Table query1
+		Exit Sub
+	End If
+
+	Select Host_Cell, Count(*) From query1 Into query2 Group By Host_Cell
+OnError Goto file_open_error1
+	Export "query2" Into pf_user_path & "NL_Size_per_Source.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint1:
+OnError Goto 0
+	Select COL2, Count(*) From query2 Into query3 Group By Count
+	Add Column NL_Stats_Size(Cell_Count) From query3 Set To COL2 Where COL1 = COL1
+	Commit Table NL_Stats_Size
+	Close Table query3
+	Close Table query2
+	Close Table query1
+	Graph NL_Size, Cell_Count From NL_Stats_Size
+		Position (4,0)
+	Set Graph Type Line Rotated Off Title "NL Distribution Analysis"
+	Set Graph Series 2 Line (2,0,0,16711680) Symbol(34,16711680,1)
+
+OnError Goto file_open_error2
+	Export "NL_Stats_Size" Into pf_user_path & "NL_Stats_Size.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint2:
+
+	Note "Done analysing NL Size stats for Loaded NL.  Exported NL size distribution to 'NL_Stats_Size.csv' and the NL size per source to 'NL_Size_per_Source.csv'"
+
+Exit Sub
+'------------------
+file_open_error1:
+Note "The file 'NL_Size_per_Source.csv' is open, couldn't export"
+Resume returnpoint1
+
+file_open_error2:
+Note "The file 'NL_Stats_Size.csv' is open, couldn't export"
+Resume returnpoint2
+
+End Sub
+
+
+
+
+
+
+
+'---------------------------------------------
+'This calcs size stats for the NL, graphs them and exports them
+'---------------------------------------------
+Sub show_nl_size_stats_file_sub
+Dim i,j,k As Integer
+Dim col_a As Alias
+Dim filename, filename_short, user_path_nl As String
+
+
+
+	Call nbr_management_prep_sub
+
+	filename = FileOpenDlg("","","csv","Please select the NL file...")
+	If filename = "" Then
+		Exit Sub
+	End If
+	filename_short = PathToTableName$(filename)
+	user_path_nl = PathToDirectory$(filename)
+
+	Print Chr$(12)
+	Print "Importing NL file for processing, please wait..."
+
+OnError Goto file_open_error3
+	Register Table filename TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_nl & "nl_import1.tab"
+OnError Goto 0
+	Open Table user_path_nl & "nl_import1.tab"
+	Set Table nl_import1 FastEdit On
+	Create Index On nl_import1 (Host_Cell)
+	Create Index On nl_import1 (Host_Sys)
+	Create Index On nl_import1 (Nbr_Cell)
+	Create Index On nl_import1 (Nbr_Sys)
+
+	Select * From nl_import1 Where Host_Sys = g_nl_stats_source_sys And Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo(query1,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Note "There are no nbr pairs from the selected systems.  Exiting..."
+		Exit Sub
+	End If
+
+	Print Chr$(12)
+	Print "Processing Stats, please wait..."
+
+	Create Table "NL_Stats1" (Host_Cell Char(100), Nbr_Cell Char(100)) File pf_user_path & "NL_Stats1.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats1 FastEdit On
+	Create Index On NL_Stats1(Host_Cell)
+	Create Index On NL_Stats1(Nbr_Cell)	
+	Create Table "NL_Stats_Size" (NL_Size Integer, Cell_Count Integer) File pf_user_path & "NL_Stats_Size.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats_Size FastEdit On
+	For i = 0 to 70
+		Insert Into NL_Stats_Size Values(i,0)
+	Next
+
+	Select Host_Cell, Nbr_Cell From query1 Where Host_Cell <> "" And Nbr_Cell <> "" Into query2
+	If TableInfo(query2,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Exit Sub
+	End If
+	Insert Into NL_Stats1 Select * From query2
+	Close Table query1
+
+	'NL Size analysis
+	'-------------------
+	Select Host_Cell, Count(*) From NL_Stats1 Into query1 Group By Host_Cell
+OnError Goto file_open_error1
+	Export "query1" Into pf_user_path & "NL_Size_per_Source.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint1:
+OnError Goto 0
+	Select COL2, Count(*) From query1 Into query2 Group By Count
+	Add Column NL_Stats_Size(Cell_Count) From query2 Set To COL2 Where COL1 = COL1
+	Commit Table NL_Stats_Size
+	Close Table query1
+	Graph NL_Size, Cell_Count From NL_Stats_Size
+		Position (4,0)
+	Set Graph Type Line Rotated Off Title "NL Distribution Analysis"
+	Set Graph Series 2 Line (2,0,0,16711680) Symbol(34,16711680,1)
+OnError Goto file_open_error2
+	Export "NL_Stats_Size" Into pf_user_path & "NL_Stats_Size.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint2:
+
+	Note "Done analysing NL Size stats for selected NL File.  Exported NL size distribution to 'NL_Stats_Size.csv' and the NL size per source to 'NL_Size_per_Source.csv'"
+
+
+returnpoint_exit:
+
+Exit Sub
+'------------------
+file_open_error1:
+Note "The file 'NL_Size_per_Source.csv' is open, couldn't export"
+Resume returnpoint1
+
+file_open_error2:
+Resume returnpoint2
+
+file_open_error3:
+Note "Import file is open, close it and try again.  Exiting..."
+Resume returnpoint_exit
+
+End Sub
+
+
+
+
+
+'---------------------------------------------
+
+'This calcs oneway stats for the NL, graphs them and exports them
+'---------------------------------------------
+Sub show_nl_oneway_stats_loaded_sub
+Dim i,j,k As Integer
+Dim col_a As Alias
+
+
+
+	Call nbr_management_prep_sub
+
+	Create Table "NL_Stats1" (Host_Cell Char(100), Nbr_Cell Char(100), Host_Nbr Char(200), Nbr_Host Char(200)) File pf_user_path & "NL_Stats1.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats1 FastEdit On
+	Create Index On NL_Stats1(Host_Cell)
+	Create Index On NL_Stats1(Nbr_Cell)	
+	Create Index On NL_Stats1(Host_Nbr)	
+	Create Index On NL_Stats1(Nbr_Host)
+
+
+	Select Host_Cell, Nbr_Cell, Host_Cell & "_" & Nbr_Cell, Nbr_Cell & "_" & Host_Cell From nbrs_DB Where nbrs_DB.Host_Sys = g_nl_stats_source_sys And nbrs_DB.Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo("query1",TAB_INFO_NROWS) > 0 Then
+		Insert Into NL_Stats1 Select * From query1
+		Close Table query1
+	Else
+		Note "There are no nbrs between the selected systems.  Exiting..."
+		Close Table query1
+		Exit Sub
+	End If
+
+	'1 Way analysis
+	'-------------------
+	Add Column NL_Stats1(OneWay Char(1)) From NL_Stats1 Set to "N" Where Host_Nbr = Nbr_Host
+	Select Host_Cell, Nbr_Cell From NL_Stats1 Where OneWay = "" Into query1
+OnError Goto file_open_error1
+	Export "query1" Into pf_user_path & "NL_Stats_OneWay.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint1:
+OnError Goto 0
+	Close Table query1
+	Select Host_Cell, Count(*) From NL_Stats1 Where OneWay = "" Into query1 Group By Host_Cell Order By COL2
+	Graph Host_Cell, Count From query1
+		Position (4,0)
+	Set Graph Type Line Rotated Off Title "One-Way Nbr Distribution Analysis"
+	Set Graph Series 2 Line (2,0,0,16711680) Symbol(34,16711680,1)
+
+	Note "Done analysing OneWay stats for Loaded NL.  Exported to 'NL_Stats_Oneway.csv'"
+
+
+Exit Sub
+'------------------
+file_open_error1:
+Note "The file 'NL_Stats_OneWay.csv' is open, couldn't export"
+Resume returnpoint1
+
+End Sub
+
+
+
+
+
+'---------------------------------------------
+'This calcs oneway stats for the NL, graphs them and exports them
+'---------------------------------------------
+Sub show_nl_oneway_stats_file_sub
+Dim i,j,k As Integer
+Dim col_a As Alias
+Dim filename, filename_short, user_path_nl As String
+
+
+
+	Call nbr_management_prep_sub
+
+	filename = FileOpenDlg("","","csv","Please select the NL file...")
+	If filename = "" Then
+		Exit Sub
+	End If
+	filename_short = PathToTableName$(filename)
+	user_path_nl = PathToDirectory$(filename)
+
+	Print Chr$(12)
+	Print "Importing NL file for processing, please wait..."
+
+OnError Goto file_open_error2
+	Register Table filename TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_nl & "nl_import1.tab"
+OnError Goto 0
+	Open Table user_path_nl & "nl_import1.tab"
+	Set Table nl_import1 FastEdit On
+	Create Index On nl_import1 (Host_Cell)
+	Create Index On nl_import1 (Host_Sys)
+	Create Index On nl_import1 (Nbr_Cell)
+	Create Index On nl_import1 (Nbr_Sys)
+
+	Select * From nl_import1 Where Host_Sys = g_nl_stats_source_sys And Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo(query1,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Note "There are no nbr pairs from the selected systems, exiting..."
+		Exit Sub
+	End If
+
+	Print Chr$(12)
+	Print "Processing Stats, please wait..."
+
+	Create Table "NL_Stats1" (Host_Cell Char(100), Nbr_Cell Char(100), Host_Nbr Char(200), Nbr_Host Char(200)) File pf_user_path & "NL_Stats1.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats1 FastEdit On
+	Create Index On NL_Stats1(Host_Cell)
+	Create Index On NL_Stats1(Nbr_Cell)	
+	Create Index On NL_Stats1(Host_Nbr)	
+	Create Index On NL_Stats1(Nbr_Host)
+
+	Select Host_Cell, Nbr_Cell, Host_Cell & "_" & Nbr_Cell, Nbr_Cell & "_" & Host_Cell From query1 Where Host_Cell <> "" And Nbr_Cell <> "" Into query2
+	If TableInfo(query2,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Exit Sub
+	End If
+	Insert Into NL_Stats1 Select * From query2
+	Close Table query1
+
+	'1 Way analysis
+	'-------------------
+	Add Column NL_Stats1(OneWay Char(1)) From NL_Stats1 Set to "N" Where Host_Nbr = Nbr_Host
+	Select Host_Cell, Nbr_Cell From NL_Stats1 Where OneWay = "" Into query1
+OnError Goto file_open_error1
+	Export "query1" Into pf_user_path & "NL_Stats_OneWay.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint1:
+OnError Goto 0
+	Close Table query1
+	Select Host_Cell, Count(*) From NL_Stats1 Where OneWay = "" Into query1 Group By Host_Cell Order By COL2
+	Graph Host_Cell, Count From query1
+		Position (4,0)
+	Set Graph Type Line Rotated Off Title "One-Way Nbr Distribution Analysis"
+	Set Graph Series 2 Line (2,0,0,16711680) Symbol(34,16711680,1)
+
+	Note "Done analysing OneWay stats for Selected NL File.  Exported to 'NL_Stats_Oneway.csv'"
+
+returnpoint_exit:
+
+Exit Sub
+'------------------
+file_open_error1:
+Note "The file 'NL_Stats_OneWay.csv' is open, couldn't export"
+Resume returnpoint1
+
+file_open_error2:
+Note "Import file is open, close it and try again.  Exiting..."
+Resume returnpoint_exit
+
+End Sub
+
+
+
+
+
+
+'---------------------------------------------
+'This compares the loaded NL to a NL in a .csv file
+'---------------------------------------------
+Sub compare_nl_1_sub
+Dim i,j,k As Integer
+Dim col_a As Alias
+Dim filename, filename_short, user_path_nl As String
+
+
+
+	Call nbr_management_prep_sub
+
+	filename = FileOpenDlg("","","csv","Please select the NL file to compare...")
+	If filename = "" Then
+		Exit Sub
+	End If
+	filename_short = PathToTableName$(filename)
+	user_path_nl = PathToDirectory$(filename)
+
+	Print Chr$(12)
+	Print "Importing NL file for processing, please wait..."
+
+OnError Goto file_open_error2
+	Register Table filename TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_nl & "nl_import1.tab"
+OnError Goto 0
+	Open Table user_path_nl & "nl_import1.tab"
+	Set Table nl_import1 FastEdit On
+	Create Index On nl_import1 (Host_Cell)
+	Create Index On nl_import1 (Host_Sys)
+	Create Index On nl_import1 (Nbr_Cell)
+	Create Index On nl_import1 (Nbr_Sys)
+
+	Select * From nl_import1 Where Host_Sys = g_nl_stats_source_sys And Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo(query1,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Note "There are no nbr pairs from the selected systems(Host_Cell: " & g_nl_stats_source_sys & ", Nbr_Cell: " & g_nl_stats_target_sys & "), exiting..."
+		Exit Sub
+	End If
+
+	Print Chr$(12)
+	Print "Processing Stats, please wait..."
+
+	Create Table "NL_Stats1" (Host_Cell Char(100), Nbr_Cell Char(100), Host_Nbr Char(200)) File pf_user_path & "NL_Stats1.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats1 FastEdit On
+	Create Index On NL_Stats1(Host_Cell)
+	Create Index On NL_Stats1(Nbr_Cell)	
+	Create Index On NL_Stats1(Host_Nbr)	
+	Select Host_Cell, Nbr_Cell, Host_Cell & "_" & Nbr_Cell From query1 Where Host_Cell <> "" And Nbr_Cell <> "" Into query2
+	If TableInfo(query2,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Exit Sub
+	End If
+	Insert Into NL_Stats1 Select * From query2
+	Close Table query1
+
+	Create Table "NL_Stats2" (Host_Cell Char(100), Nbr_Cell Char(100), Host_Nbr Char(200)) File pf_user_path & "NL_Stats2.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats2 FastEdit On
+	Create Index On NL_Stats2(Host_Cell)
+	Create Index On NL_Stats2(Nbr_Cell)	
+	Create Index On NL_Stats2(Host_Nbr)	
+
+	Select Host_Cell, Nbr_Cell, Host_Cell & "_" & Nbr_Cell From nbrs_DB Where nbrs_DB.Host_Sys = g_nl_stats_source_sys And nbrs_DB.Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo("query1",TAB_INFO_NROWS) > 0 Then
+		Insert Into NL_Stats2 Select * From query1
+		Close Table query1
+	Else
+		Note "There are no loaded nbrs between the selected systems.  Exiting..."
+		Close Table query1
+		Exit Sub
+	End If
+
+	'NL compare
+	'-------------------
+	Add Column NL_Stats1(Common Char(1)) From NL_Stats2 Set to "Y" Where Host_Nbr = Host_Nbr
+	Add Column NL_Stats2(Common Char(1)) From NL_Stats1 Set to "Y" Where Host_Nbr = Host_Nbr
+	Select Host_Cell, Nbr_Cell From NL_Stats1 Where Common = "" Into query1
+OnError Goto file_open_error1
+	Export "query1" Into pf_user_path & "NL_Compare_Nbrs_NOT_In_File_NL.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint1:
+OnError Goto 0
+	Close Table query1
+	Select Host_Cell, Nbr_Cell From NL_Stats2 Where Common = "" Into query1
+OnError Goto file_open_error3
+	Export "query1" Into pf_user_path & "NL_Compare_Nbrs_NOT_In_Loaded_NL.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint3:
+OnError Goto 0
+	Close Table query1
+
+	Note "Done comparing Loaded NL vs NL file.  Results exported to 'NL_Compare_Nbrs_NOT_In_Loaded_NL.csv' and 'NL_Compare_Nbrs_NOT_In_File_NL.csv'"
+
+returnpoint_exit:
+
+Exit Sub
+'-------------------
+file_open_error1:
+Note "The file 'NL_Compare_Nbrs_NOT_In_File_NL.csv' is open, couldn't export"
+Resume returnpoint1
+
+file_open_error3:
+Note "The file 'NL_Compare_Nbrs_NOT_In_Loaded_NL.csv' is open, couldn't export"
+Resume returnpoint3
+
+file_open_error2:
+Note "Import file is open, close it and try again.  Exiting..."
+Resume returnpoint_exit
+
+End Sub
+
+
+
+
+
+'---------------------------------------------
+'This compares the two NLs from two .csv files
+'---------------------------------------------
+Sub compare_nl_2_sub
+Dim i,j,k As Integer
+Dim col_a As Alias
+Dim filename1, filename_short1, user_path_nl1 As String
+Dim filename2, filename_short2, user_path_nl2 As String
+
+
+
+	Call nbr_management_prep_sub
+
+	filename1 = FileOpenDlg("","","csv","Please select the First NL file to compare...")
+	If filename1 = "" Then
+		Exit Sub
+	End If
+	filename_short1 = PathToTableName$(filename1)
+	user_path_nl1 = PathToDirectory$(filename1)
+
+	filename2 = FileOpenDlg("","","csv","Please select the Second NL file to compare...")
+	If filename2 = "" Then
+		Exit Sub
+	End If
+	filename_short2 = PathToTableName$(filename2)
+	user_path_nl2 = PathToDirectory$(filename2)
+
+	Print Chr$(12)
+	Print "Importing NL files for processing, please wait..."
+
+OnError Goto file_open_error1
+	Register Table filename1 TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_nl1 & "nl_import1.tab"
+OnError Goto 0
+	Open Table user_path_nl1 & "nl_import1.tab"
+	Set Table nl_import1 FastEdit On
+	Create Index On nl_import1 (Host_Cell)
+	Create Index On nl_import1 (Host_Sys)
+	Create Index On nl_import1 (Nbr_Cell)
+	Create Index On nl_import1 (Nbr_Sys)
+
+OnError Goto file_open_error2
+	Register Table filename2 TYPE ASCII Delimiter 44 Titles Charset "WindowsLatin1" Into user_path_nl2 & "nl_import2.tab"
+OnError Goto 0
+	Open Table user_path_nl2 & "nl_import2.tab"
+	Set Table nl_import2 FastEdit On
+	Create Index On nl_import2 (Host_Cell)
+	Create Index On nl_import2 (Host_Sys)
+	Create Index On nl_import2 (Nbr_Cell)
+	Create Index On nl_import2 (Nbr_Sys)
+
+	Print Chr$(12)
+	Print "Processing Stats, please wait..."
+
+	Select * From nl_import1 Where Host_Sys = g_nl_stats_source_sys And Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo(query1,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Note "First NL file error, there are no nbr pairs from the selected systems(Host_Cell: " & g_nl_stats_source_sys & ", Nbr_Cell: " & g_nl_stats_target_sys & "), exiting..."
+		Exit Sub
+	End If
+
+	Create Table "NL_Stats1" (Host_Cell Char(100), Nbr_Cell Char(100), Host_Nbr Char(200)) File pf_user_path & "NL_Stats1.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats1 FastEdit On
+	Create Index On NL_Stats1(Host_Cell)
+	Create Index On NL_Stats1(Nbr_Cell)	
+	Create Index On NL_Stats1(Host_Nbr)	
+	Select Host_Cell, Nbr_Cell, Host_Cell & "_" & Nbr_Cell From query1 Where Host_Cell <> "" And Nbr_Cell <> "" Into query2
+	If TableInfo(query2,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Exit Sub
+	End If
+	Insert Into NL_Stats1 Select * From query2
+	Close Table query1
+
+	Select * From nl_import2 Where Host_Sys = g_nl_stats_source_sys And Nbr_Sys = g_nl_stats_target_sys Into query1
+	If TableInfo(query1,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Note "Second NL file error, there are no nbr pairs from the selected systems(Host_Cell: " & g_nl_stats_source_sys & ", Nbr_Cell: " & g_nl_stats_target_sys & "), exiting..."
+		Exit Sub
+	End If
+
+	Create Table "NL_Stats2" (Host_Cell Char(100), Nbr_Cell Char(100), Host_Nbr Char(200)) File pf_user_path & "NL_Stats2.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Set Table NL_Stats2 FastEdit On
+	Create Index On NL_Stats2(Host_Cell)
+	Create Index On NL_Stats2(Nbr_Cell)	
+	Create Index On NL_Stats2(Host_Nbr)	
+	Select Host_Cell, Nbr_Cell, Host_Cell & "_" & Nbr_Cell From query1 Where Host_Cell <> "" And Nbr_Cell <> "" Into query2
+	If TableInfo(query2,TAB_INFO_NROWS) = 0 Then
+		Close Table query1
+		Exit Sub
+	End If
+	Insert Into NL_Stats2 Select * From query2
+	Close Table query1
+
+	'NL compare
+	'-------------------
+	Add Column NL_Stats1(Common Char(1)) From NL_Stats2 Set to "Y" Where Host_Nbr = Host_Nbr
+	Add Column NL_Stats2(Common Char(1)) From NL_Stats1 Set to "Y" Where Host_Nbr = Host_Nbr
+
+	Select Host_Cell, Nbr_Cell From NL_Stats1 Where Common = "" Into query1
+OnError Goto file_open_error3
+	Export "query1" Into pf_user_path & "NL_Compare_Nbrs_NOT_In_File_2_NL.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint3:
+OnError Goto 0
+	Close Table query1
+	Select Host_Cell, Nbr_Cell From NL_Stats2 Where Common = "" Into query1
+OnError Goto file_open_error4
+	Export "query1" Into pf_user_path & "NL_Compare_Nbrs_NOT_In_File_1_NL.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint4:
+OnError Goto 0
+	Close Table query1
+
+	Note "Done comparing 2 NL Files.  Results exported to 'NL_Compare_Nbrs_NOT_In_File_1_NL.csv' and 'NL_Compare_Nbrs_NOT_In_File_2_NL.csv'"
+
+
+returnpoint_exit:
+
+Exit Sub
+'-------------------
+file_open_error1:
+Note filename1 & " is open, close it and try again.  Exiting..."
+Resume returnpoint_exit
+
+file_open_error2:
+Note filename2 & " is open, close it and try again.  Exiting..."
+Resume returnpoint_exit
+
+file_open_error3:
+Note "The file 'NL_Compare_Nbrs_NOT_In_File_1_NL.csv' is open, couldn't export"
+Resume returnpoint3
+
+file_open_error4:
+Note "The file 'NL_Compare_Nbrs_NOT_In_File_2_NL.csv' is open, couldn't export"
+Resume returnpoint4
+
+End Sub
+
+
+
+
+
+
+
+'--------------------------------
+'This exports the loadedNL to .csv
+'--------------------------------
+Sub export_loaded_nl_sub
+Dim i,j,k As Integer
+Dim filename, filename_short, user_path_nl As String
+Dim date_d As Date
+
+
+
+
+	Call nbr_management_prep_sub
+
+	date_d = CurDate()
+
+	Print Chr$(12)
+	Print "Exporting NL, please wait..."
+
+	'NL export
+	'--------------
+	Commit Table nbrs_DB
+	Pack Table nbrs_DB Data
+
+OnError Goto file_open_error1
+	Export "nbrs_DB" Into pf_user_path & "NL_Export_" & date_d & ".csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+returnpoint1:
+OnError Goto 0
+
+	Note "Done exporting NL.  File exported to 'NL_Export_" & date_d & ".csv'"
+
+Exit Sub
+'-------------------
+file_open_error1:
+Note "The file 'NL_Compare_Nbrs_NOT_In_File_NL.csv' is open, couldn't export"
+Resume returnpoint1
+
+End Sub
+
+
+
+
+
+'----------------------------------------------------------------
+' shows which source or target cells are NOT in the cells tables, exports NL with these cells highlighted
+'----------------------------------------------------------------
+Sub nbrs_not_in_cells_sub
+Dim i, j, k As Integer
+Dim remove_flag As Logical
+
+
+
+	Print Chr$(12)
+	Print "Analysing NL, please wait..."
+
+OnError GoTo closed1
+	If TableInfo(test1, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Drop Table test1
+	End If
+returnpoint1:
+OnError Goto general_error
+	If FileExists(pf_user_path + "test1.tab") = True Then
+		Open Table pf_user_path + "test1.tab"
+		Drop Table test1
+	End  If	 
+OnError GoTo closed2
+	If TableInfo(test2, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+		Drop Table test2
+	End If
+returnpoint2:
+OnError Goto general_error
+	If FileExists(pf_user_path + "test2.tab") = True Then
+		Open Table pf_user_path + "test2.tab"
+		Drop Table test2
+	End  If	 
+
+	remove_flag = False
+	If Ask("Do you want to actually remove the nbr pairs where one or both are not in the cell DB?","Remove","Just Export") Then
+		remove_flag = True
+	End If
+
+	'Check for hosts or nbrs that are not in the cells tables - a bit of a pain
+	'-----------------------------------------------------------------------------
+	Select Host_Cell, Host_Sys, Nbr_Cell, Nbr_Sys, Host_Cell & "_" & Host_Sys, Nbr_Cell & "_" & Nbr_Sys From nbrs_DB Into query1
+	Commit Table query1 As pf_user_path + "test1.tab" TYPE NATIVE Charset "WindowsLatin1"
+	Open Table pf_user_path + "test1.tab"
+	Close Table query1
+
+	'We put all cell tables into one table (as done for export)
+	'-------------------------------------------------------------------
+	If sys(1) <> "" Then
+OnError Goto cells_not_open
+		Select Cell & "_" & System From cells_sys(1) Into query1
+OnError Goto general_error
+		Commit Table query1 As pf_user_path + "test2.tab" TYPE NATIVE Charset "WindowsLatin1"
+		Open Table pf_user_path + "test2.tab"
+		Close Table query1
+	End If
+
+	For j = 2 to 10
+		If sys(j) <> "" Then
+OnError Goto cells_not_open2
+			Insert Into test2
+				Select Cell & "_" & System From cells_sys(j)
+OnError Goto general_error
+		End If
+	Next
+	Commit Table test2
+	Close Table selection
+
+	Add Column test1 (Host_Found Char(1)) From test2 Set to "Y" Where COL5 = COL1
+	Add Column test1 (Nbr_Found Char(1)) From test2 Set to "Y" Where COL6 = COL1
+	Select Host_Cell, Host_Sys, Nbr_Cell, Nbr_Sys, Host_Found, Nbr_Found From test1 Into query1
+
+OnError Goto file_open_error1
+	Export "query1" Into pf_user_path & "NL_Export_Analysis.csv" Type "ASCII" Overwrite Delimiter "," CharSet "WindowsLatin1" Titles Overwrite
+file_open_return1:
+OnError Goto general_error
+	Close Table query1
+
+	If remove_flag Then
+		' This closes any open nbrs_DB table and deletes all files
+		'------------------------------------------------------------
+OnError GoTo nbrs_table_open
+		If TableInfo(nbrs_DB, TAB_INFO_NAME) <> "" Then
+OnError Goto general_error
+			Close Table nbrs_DB
+		End If
+returnpoint_7:
+OnError Goto general_error
+		If FileExists(pf_user_path + "nbrs_DB.tab") Then
+			Kill pf_user_path + "nbrs_DB.tab"
+		End If	 
+		If FileExists(pf_user_path + "nbrs_DB.dat") Then
+			Kill pf_user_path + "nbrs_DB.dat"	 
+		End If
+		If FileExists(pf_user_path + "nbrs_DB.ind") Then
+			Kill pf_user_path + "nbrs_DB.ind"	 
+		End If
+
+		'Creates the blank nbrs_DB Table
+		'-----------------------------------
+		Create Table nbrs_DB (Host_Cell char(100), Host_Sys Char(20), Nbr_Cell char(100), Nbr_Sys Char(20)) File pf_user_path + "nbrs_DB.tab" 	
+		Set Table nbrs_DB Fastedit On
+		Create Index On nbrs_DB (Host_Cell)
+		Create Index On nbrs_DB (Host_Sys)
+		Create Index On nbrs_DB (Nbr_Cell)
+		Create Index On nbrs_DB (Nbr_Sys)
+		Commit Table nbrs_DB
+
+		Select Host_Cell, Host_Sys, Nbr_Cell, Nbr_Sys From test1 Where Host_Found = "Y" And Nbr_Found = "Y" Into query1
+		Insert Into nbrs_DB
+			Select * From query1
+		Commit Table nbrs_DB
+		Close Table query1
+	End If
+
+cells_not_open_return2:
+OnError GoTo closed4
+	If TableInfo(test2, TAB_INFO_NAME) <> "" Then
+OnError GoTo general_error
+		Drop Table test2
+	End If
+returnpoint4:
+OnError GoTo general_error
+	If FileExists(pf_user_path + "test2.tab") = True Then
+		Open Table pf_user_path + "test2.tab"
+		Drop Table test2
+	End  If	 
+
+cells_not_open_return:
+OnError GoTo closed3
+	If TableInfo(test1, TAB_INFO_NAME) <> "" Then
+OnError GoTo general_error
+		Drop Table test1
+	End If
+returnpoint3:
+OnError GoTo general_error
+	If FileExists(pf_user_path + "test1.tab") = True Then
+		Open Table pf_user_path + "test1.tab"
+		Drop Table test1
+	End  If	 
+
+general_returnpoint:
+
+	Print Chr$(12)
+	Print "Done analysing, results exported to 'NL_Export_Analysis.csv'."
+
+
+	Exit Sub
+'-------------------
+general_error:
+Note "There was an error: " & Error$()
+Resume general_returnpoint
+
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+closed3:
+Resume returnpoint3
+
+closed4:
+Resume returnpoint4
+
+cells_not_open:
+Resume cells_not_open_return
+
+cells_not_open2:
+Resume cells_not_open_return2
+
+file_open_error1:
+Note "The file 'NL Export Analysis.csv' is open, couldn't export"
+Resume file_open_return1
+
+nbrs_table_open:
+Resume returnpoint_7
+
+End Sub

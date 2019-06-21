@@ -1,0 +1,403 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub draw_cells_algo_sub(ByVal dc_lon As Float, ByVal dc_lat As Float, ByVal dc_hbw As String, ByVal dc_size As String, ByVal dc_az As String, ByVal dc_ibs As String, dc_obj As Object)
+Declare Sub ft_sub (ByVal table_to_use As String, ByVal sys_source As Integer, ByVal sys_target As Integer, ByVal single_cell As Logical, ByVal draw_cell As Logical, ByVal export_ft As Logical, first_tier_cells() As String)
+Declare Sub area_redraw_sub
+Declare Sub pre_global_redraw_sub
+Declare Sub pre_area_redraw_sub
+Declare Sub prepare_nbr_sub
+Declare Sub check_tables_sub
+Declare Sub save_tables_sub
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub pre_area_redraw_sub
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	Alter Menu Item ID 1005 Check 		'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+'---------------------------------------------------
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+
+	Call check_tables_sub
+	
+	Call area_redraw_sub
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+'	Set ProgressBars On
+'	Set Map Redraw On
+'	Set Event Processing On
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for area edit
+'---------------------------------------------------
+Sub area_redraw_sub
+Dim finalx, finaly, x, y, x2, y2, X0, Y0, oldx, oldy, multlen, newhbw, aznew, sizenew, azorig As Float
+Dim radio, z, i, k, h, m, mold, i_row_id, i_win_id, num_rows_i As Integer
+Dim sitex, namex, cellx, pnx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex, typex, num_rows_s As String
+Dim temppnt, center, endpnt, sector1, user_poly, sector As Object
+Dim found_objects, change_flag1, change_flag2, change_flag_sys(10) As Logical
+Dim first_tier_cells(100) As String
+Dim footprints_ok As logical
+Dim space, start As Integer
+
+
+
+'	Set Map Redraw On
+'	Set Event Processing On
+
+	Run Command "Set " + proj          ' need to set the coord sys so that mapinfo uses the sys we select
+	Set Distance Units "km"
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+
+	' this is for getting the polygon co-ords
+	'-------------------------------
+	'get the polygon that the user selected
+   '----------------------------------------
+    user_poly = CommandInfo(CMD_INFO_CUSTOM_OBJ)
+
+	'this puts the selected cell objects into temp tables for analysis
+   '----------------------------------------   
+	found_objects = False
+ 	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+		If is_open_cells_sys(i) = "On" Then
+			Select * From cells_sys(i) Where obj Within user_poly Into Query1        'was "entirely within", did not like it
+			If SelectionInfo(SEL_INFO_NROWS) > 0 Then
+				found_objects = True
+			End If
+			Close Table Query1 
+		End If
+	Next
+
+	Call prepare_nbr_sub
+
+	'----------------------------------
+	If NOT found_objects Then
+		Exit Sub
+	End If
+
+	space = 15
+	start = 28
+
+	' Get redraw info from the user
+	'-------------------------------------
+	Dialog Title "Redraw Cells by Area" Width 250 Height 375
+
+	Control StaticText
+	Title "System Selection" 
+	Position 10, 10
+	Control GroupBox
+	Title "Choose the Systems to Redraw" 
+	Position 10, start Width 230 Height 170
+
+	Control Checkbox 
+	Position 20, start+space
+	Into change_flag_sys(1)
+	Value False
+	Control StaticText
+	Title sys(1) 
+	Position 35, start+space+1
+
+	Control Checkbox 
+	Position 20, start+space*2
+	Into change_flag_sys(2)
+	Value False
+	Control StaticText
+	Title sys(2) 
+	Position 35, start+space*2+1
+
+	Control Checkbox 
+	Position 20, start+space*3
+	Into change_flag_sys(3)
+	Value False
+	Control StaticText
+	Title sys(3) 
+	Position 35, start+space*3+1
+
+	Control Checkbox 
+	Position 20, start+space*4
+	Into change_flag_sys(4)
+	Value False
+	Control StaticText
+	Title sys(4) 
+	Position 35, start+space*4+1
+
+	Control Checkbox 
+	Position 20, start+space*5
+	Into change_flag_sys(5)
+	Value False
+	Control StaticText
+	Title sys(5) 
+	Position 35, start+space*5+1
+
+	Control Checkbox 
+	Position 20, start+space*6
+	Into change_flag_sys(6)
+	Value False
+	Control StaticText
+	Title sys(6) 
+	Position 35, start+space*6+1
+
+	Control Checkbox 
+	Position 20, start+space*7
+	Into change_flag_sys(7)
+	Value False
+	Control StaticText
+	Title sys(7) 
+	Position 35, start+space*7+1
+
+	Control Checkbox 
+	Position 20, start+space*8
+	Into change_flag_sys(8)
+	Value False
+	Control StaticText
+	Title sys(8) 
+	Position 35, start+space*8+1
+
+	Control Checkbox 
+	Position 20, start+space*9
+	Into change_flag_sys(9)
+	Value False
+	Control StaticText
+	Title sys(9) 
+	Position 35, start+space*9+1
+
+	Control Checkbox 
+	Position 20, start+space*10
+	Into change_flag_sys(10)
+	Value False
+	Control StaticText
+	Title sys(10) 
+	Position 35, start+space*10+1
+
+
+	Control StaticText
+	Title "Redraw Settings" 
+	Position 10, 215
+	Control GroupBox
+	Title "Cell Size" 
+	Position 10, 230 Width 230 Height 50
+	Control StaticText
+	Title "Use" 
+	Position 17, 251
+	Control Checkbox 
+	Position 35,251
+	Into change_flag1
+	Value False
+	Control RadioGroup
+	Title " ; " 
+	Position 55, 245 Width 15 
+	Value 1
+	Into radio
+	Control StaticText
+	Title "Multiply Cell Size by:" 
+	Position 70, 245
+	Control EditText
+	Value "1" 
+	Position 145, 245 Width 20
+	Into multlen
+	Control StaticText
+	Title "times current size" 
+	Position 170, 245
+	Control StaticText
+	Title "Set Cell Size to:" 
+	Position 70, 260
+	Control EditText
+	Value "200" 
+	Position 145, 260 Width 20
+	Into sizenew
+	Control StaticText
+	Title "(m)" 
+	Position 170, 260
+	ID 1
+
+	Control GroupBox
+	Title "Cell Beamwitdh" 
+	Position 10, 285 Width 230 Height 35
+	Control StaticText
+	Title "Use" 
+	Position 17, 310
+	Control Checkbox 
+	Position 35, 310
+	Into change_flag2
+	Value False
+	Control StaticText
+	Title "Set Cell Beamwidth to:" 
+	Position 70, 310
+	Control EditText
+	Value "65" 
+	Position 145, 310 Width 20
+	Into newhbw
+	Control StaticText
+	Title "degrees" 
+	Position 170, 310
+	ID 2
+
+	Control OKButton
+	Position 40, 335
+	Control CancelButton
+	Position 170, 335
+	If CommandInfo(CMD_INFO_DLG_OK) = False Then
+		Exit Sub
+	End If
+
+'	Set Map Redraw On
+'	Set Event Processing On
+
+
+	' Process the search results
+	' ----------------------------------
+	footprints_ok = False
+	For i = 1 to 10
+		If sys(i) = "" Then
+			Exit For
+		End If
+
+		'This puts the selected cell objects into temp tables for analysis
+		'--------------------------------------------------------------------   
+		If is_open_cells_sys(i) = "On" And change_flag_sys(i) Then
+			Select * From cells_sys(i) Where obj Within user_poly Into query1
+			num_rows_s = TableInfo(query1, TAB_INFO_NROWS)
+			num_rows_i = Val(num_rows_s)
+
+			If num_rows_i > 0 Then
+
+				'For the footprints analysis, we call the sub here, it will update all objects in the query1 table
+				'only need to recolour them after that
+				'------------------------------------------------------
+				If draw_cells_type = "footprints" Then
+					If num_rows_i < 10 And Not footprints_ok Then
+						footprints_ok = True
+					Elseif Not footprints_ok Then
+						If Ask("Are you sure you want to redraw as footprints, it can take while?","Yes","No") Then
+							footprints_ok = True
+						Else
+							Exit Sub
+						End If
+					End If
+					'##############################################################
+					Call ft_sub("query1",i,i,False,True,False,first_tier_cells)
+					'##############################################################
+					Goto footprint_next_sys
+				End If
+
+				Fetch First From query1
+				Do While Not EOT(query1)
+					sector = query1.obj
+					azx = query1.Az
+					sizex = query1.OBJ_SIZE
+					hbwx = query1.ANT_HBW
+					statusx = query1.STATUS
+					finaly = query1.lat
+					finalx = query1.lon
+					i_row_id = query1.rowid
+
+					' this does the changing, it also changes the az of the sectors based on the current value in the database
+					'-------------------------------------------------------------------------------------------------------------
+					If radio = 1 and val(sizex) < 1000000 Then           'otherwise it is set explicitly in the dialog
+						sizenew = multlen * val(sizex)
+					ElseIf val(sizex) > 1000000 Then          'this deals with a situation where the user put in a weird val for obj size in the cells table
+						sizenew = 200							
+					End If
+
+					azorig = val(azx)
+
+					If Not change_flag1 Then
+						sizenew = val(sizex)
+					End If
+
+					If Not change_flag2 Then
+						newhbw = val(hbwx)
+					End If
+
+					'this writes the changes to the database
+					'---------------------------------------------------
+					Update query1 
+						Set OBJ_SIZE = sizenew where rowid = i_row_id
+
+					If 	val(hbwx) <> 360 Then 'this is for non-omnis
+						' this does the changing, it also changes the az of the sectors based on the current value in the database
+						'-----------------------------------
+						'by doing this update here, the omnis stay as omnis even if I change the hbw in the redraw dialog
+						Update query1 
+							Set ANT_HBW = newhbw where rowid = i_row_id
+					End If
+
+
+
+					'Put the draw cells code here instead of calling draw_Cell_sub to speed it up and only draw the selected cells
+					'---------------------------------------------------------
+					Fetch Rec i_row_id From query1				' need to refresh these 2 values from the database as I have just changed them above
+						sizex = query1.OBJ_SIZE
+						hbwx = query1.ANT_HBW
+						typex = query1.Type
+					'############################################
+					Call draw_cells_algo_sub(finalx, finaly, hbwx, sizex, azx, typex, sector1)
+					'############################################
+
+					'this makes the on-air sites a different colour to the off-air sites
+					If statusx = "On-Air" then
+						Alter Object sector1 
+						Info OBJ_INFO_PEN, pen_on_air(i)
+						Info OBJ_INFO_Brush, brush_on_air(i)
+					Else
+						Alter Object sector1 
+						Info OBJ_INFO_PEN, pen_not_on_air(i)
+						Info OBJ_INFO_Brush, brush_not_on_air(i)
+					End If	
+
+					Update query1
+						Set obj = sector1 Where rowid = i_row_id	
+
+					mold = m
+					m = Minimum(100,int(100*i_row_id/num_rows_i))
+					If m <> mold Then
+						Print Chr$(12)
+						Print "Redrawing " & sys(i) & " cells. Please wait..."
+						Print m & "% " & String$(m,"|")
+					End If
+					Fetch Next From query1
+				Loop
+				Close Table query1
+			End If
+		End If
+footprint_next_sys:
+	Next
+
+	Print Chr$(12)
+	Print "Re-drawing cells complete."
+
+End Sub
+'---------------------------------------------------
+

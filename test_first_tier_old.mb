@@ -1,0 +1,1047 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub test_ft_sub
+Declare Sub test_pre_ft_sub
+Declare Sub prepare_nbr_sub
+Declare Sub x_factor2_sub
+Declare Sub save_tables_sub
+Declare Sub check_tables_sub
+Declare Sub check_layers_sub
+
+
+
+
+
+'---------------------------------------------------
+' Makes some adjustments to the menus before calling the actual sub
+'---------------------------------------------------
+Sub test_pre_ft_sub
+Dim host_val As String
+Dim i_win_id As String	
+
+
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then				' we need to check this incase there are no mappers open or in front
+		Set ProgressBars Off
+		Set Event Processing Off
+
+	Else
+		Set ProgressBars Off
+		Set Event Processing Off
+'		Set Map Redraw Off
+	End If
+
+	
+	host_val = "nul"
+
+	OnError Goto closed12
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		Fetch First From nbrs_RFDT
+		host_val = nbrs_RFDT.cell
+	End If
+	
+point12:
+
+	Call check_tables_sub
+
+	Call check_layers_sub
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	OnError GoTo closed_2
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+		disable_edit = "Off"
+	End If
+returnpoint_2:
+
+
+	If add_nbr_flag = "On" and disable_edit = "Off" Then
+		Alter Menu Item ID 1006 Check			'add_nbr_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	ElseIf del_nbr_flag = "On" and disable_edit = "Off" Then
+		Alter Menu Item ID 1007 Check			'del_nbr_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	ElseIf disable_edit = "Off" Then
+		Alter Menu Item ID 1005 Check			'choose_host_sub Check
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+	Else
+		Alter Menu Item ID 1005 Check			'choose_host_sub Check
+		Alter Menu Item ID 1006 Disable 		'add_nbr_sub Disable
+		Alter Menu Item ID 1007 Disable		'del_nbr_sub Disable
+	End If
+
+'---------------------------------------------------
+
+	Call test_ft_sub
+
+'---------------------------------------------------
+' this adds items to the right click menu when a mapper is the front window
+'---------------------------------------------------
+	OnError GoTo closed_3
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		Alter Menu Item ID 1006 Enable 		'add_nbr_sub Enable
+		Alter Menu Item ID 1007 Enable			'del_nbr_sub Enable
+		disable_edit = "Off"
+	End If
+returnpoint_3:
+
+OnError Goto closed13
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+	Else
+point13:
+		host_val = "nul"
+	End If
+
+	Call save_tables_sub
+
+	Close Table Selection
+
+	Set ProgressBars On
+	Set Map Redraw On
+	Set Event Processing On
+
+	Exit Sub
+
+
+'-----------------------------------------------------
+closed_2:
+disable_edit = "On"
+Resume returnpoint_2
+
+closed_3:
+disable_edit = "On"
+Resume returnpoint_3
+
+closed12:
+Resume point12
+
+closed13:
+Resume point13
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this is the engine for the NL editing state
+'---------------------------------------------------
+Sub test_ft_sub
+Dim select_ok, s_click, c_click As Logical
+Dim x, y, x2, y2 As Float
+Dim nbr_sysind, host_sysind, desired_pos, blank_space_num, host_row_id, nbr_row_id, count, i, j, k, i_found, i_row_id, i_win_id, pen1, pen2 As Integer
+Dim table_selected_alias, cell_data_alias As Alias
+Dim sel, sel2 As Object
+Dim bucket, table_selected, finished_flag, layer1, host_val, nbr_val, found_blank, host_table, host_sys, nbr_table, nbr_sys, sitex, namex, cellx, pnx, bsicx, htx, mdtx, edtx, azx, statusx, commentx, hbwx, sizex As String
+Dim nl(64), pen3 As String
+Dim nbr_cnt(2) As Integer
+
+
+Dim min_dist_cnt As Integer
+Dim s_pair, s_host, s_nbr, s_data, host_type As String
+Dim bearing_min(100), min_dist(100), min_dist_ave, min_dist_tot, f_max_ol, f_dist, bear_s2t, bear_t2s, bearing_old(100), dist_old(100), bearing_old2(100), dist_old2(100) As Float
+Dim host_lat, host_lon, host_az As Float
+Dim host_window, nbr_window, nbr_zone As Integer
+
+
+	' need to set the coord sys so that mapinfo uses the sys we select
+	'-----------------------------------------------
+	Run Command "Set " + proj 
+	Set Distance Units "km"
+	'-------------------------------------------------
+
+
+	finished_flag = "Off"
+	desired_pos = -1    'this is the default setting if we don't want to specify a nbr position when we add
+
+
+	' this checks that the front window is a mapper
+	'---------------------------------------------------
+	i_win_id = FrontWindow()
+	If WindowInfo(i_win_id, WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Set Map Redraw On
+		Note "This tool only works on Map windows."
+		Exit Sub
+	End If
+
+	' Determine the point where the user clicked and if shift or ctrl was pressed
+	'------------------------------------------------------------------------------
+	x = CommandInfo(CMD_INFO_X)
+	y = CommandInfo(CMD_INFO_Y)
+	s_click = CommandInfo(CMD_INFO_SHIFT)
+	c_click = CommandInfo(CMD_INFO_CTRL)
+
+	' the user is using the point-mode tool (this is set in the dialog in main_sub), determine how many objects are at the chosen point.
+	'---------------------------------------------------
+	i_found = SearchPoint(i_win_id, x, y)
+	If i_found = 0 Then
+		'do nothing, no objects found where the user clicked.
+	Else
+
+
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'This shows the cell info, if the CTRL key was pressed while clicking					
+		'-----------------------------------------------------------------------
+		If c_click Then
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+
+				' this tests to see which table is open and then which has been selected
+				'-------------------------------------
+				select_ok = False
+				For j = 1 to 2
+					If table_selected = cells_sys(j) Then
+						select_ok = True
+						Exit For
+					End If
+				Next
+
+				
+				' Fetch the row of the object the user clicked on.
+				'------------------------------------------------------
+				If select_ok = True Then
+					Fetch rec i_row_id From table_selected
+						cell_data_alias = table_selected + ".site"
+						sitex =  cell_data_alias
+						cell_data_alias = table_selected + ".sitename"
+						namex = cell_data_alias
+						cell_data_alias = table_selected + ".cell"
+						cellx = cell_data_alias
+						cell_data_alias = table_selected + ".PCI_SC_BCCH_PN"
+						pnx = cell_data_alias
+						cell_data_alias = table_selected + ".BSIC"
+						bsicx = cell_data_alias
+						cell_data_alias = table_selected + ".HT"
+						htx = cell_data_alias
+						cell_data_alias = table_selected + ".AZ"
+						azx = cell_data_alias
+						cell_data_alias = table_selected + ".MDT"
+						mdtx = cell_data_alias
+						cell_data_alias = table_selected + ".EDT"
+						edtx = cell_data_alias
+						cell_data_alias = table_selected + ".STATUS"
+						statusx = cell_data_alias
+						cell_data_alias = table_selected + ".Comment"
+						commentx = cell_data_alias
+						cell_data_alias = table_selected + ".ANT_HBW"
+						hbwx = cell_data_alias
+						cell_data_alias = table_selected + ".OBJ_SIZE"
+						sizex = cell_data_alias
+
+
+					Dialog Title "View Cells Parameters" width 180 height 275	 Position 20,40
+					Control GroupBox
+					Title "Cell Details" 
+					Position 10, 10 Width 160 Height 55
+					Control StaticText
+					Title "Site:" Position 15, 20
+					Control StaticText
+					Title sitex Position 75, 20
+					Control StaticText
+					Title "Site Name:" Position 15, 35
+					Control StaticText
+					Title namex Position 75, 35
+					Control StaticText
+					Title "Cell ID:" Position 15, 50
+					Control StaticText
+					Title cellx Position 75, 50
+					Control StaticText
+					Title "PN/SC:" Position 15, 75
+					Control StaticText
+					Title pnx Position 75, 75 
+					Control StaticText
+					Title "BSIC:" Position 15, 90
+					Control StaticText
+					Title bsicx Position 75, 90
+					Control StaticText
+					Title "Azimuth (deg):" Position 15, 105
+					Control StaticText
+					Title azx Position 75, 105
+					Control StaticText
+					Title "Ant HBW (deg):" Position 15, 120
+					Control StaticText
+					Title hbwx Position 75, 120
+					Control StaticText
+					Title "Object Size (m):" Position 15, 135
+					Control StaticText
+					Title sizex Position 75, 135
+					Control StaticText
+					Title "Height (m/ft):" Position 15, 150
+					Control StaticText
+					Title htx Position 75, 150
+					Control StaticText
+					Title "MDT (deg):" Position 15, 165
+					Control StaticText
+					Title mdtx Position 75, 165
+					Control StaticText
+					Title "EDT (deg):" Position 15, 180
+					Control StaticText
+					Title edtx Position 75, 180
+					Control StaticText
+					Title "Status:" Position 15, 195
+					Control StaticText
+					Title statusx Position 75, 195
+					Control StaticText
+
+					Title "Comments:" Position 15, 210
+					Control StaticText
+					Title Commentx Position 75, 210
+
+					Control OKButton
+					Position 60, 235
+					If CommandInfo(CMD_INFO_DLG_OK) = True Then
+						Exit Sub
+					Else
+						Exit Sub
+					End If
+				End If
+			Next
+
+
+
+
+
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'*****************************************
+		'this is the regular nbr management mode
+		'----------------------------------------------
+		Else
+			' Process the search results if the user clicked on an object of some kind
+			'---------------------------------------------------
+			Set Map Redraw Off
+			For i = 1 to i_found ' searchpoint = 1 is the top object found, the max searchpoint number is the bottom object
+				' Get the name of the table containing a "hit".
+				'---------------------------------------------------
+				table_selected_alias = SearchInfo(i, SEARCH_INFO_TABLE)
+				table_selected = table_selected_alias
+
+				' Get the row ID number of the object that was a hit.
+				'---------------------------------------------------
+				i_row_id = SearchInfo(i, SEARCH_INFO_ROW)	
+
+				' this only allows the first cells table to be selected
+				'-------------------------------------
+				select_ok = False
+				If table_selected = cells_sys(1) Then
+					select_ok = True
+				End If
+
+				Call save_tables_sub
+
+
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'*****************************************
+				'This is the code for selecting a new host
+				'------------------------------------------
+				'if the point clicked on contains an object of the table sys(1 to 2), we process it
+				'---------------------------------------------------
+				If select_ok = True Then
+					host_row_id = i_row_id
+
+					' Fetch the row of the object the user clicked on.
+					'---------------------------------------------------
+					Fetch rec host_row_id From table_selected
+					layer1 = LayerInfo( i_win_id, 1, LAYER_INFO_NAME)
+					
+					'Print important data to screen
+					'---------------------------------------------------
+					Print Chr$(12)
+					cell_data_alias =  table_selected_alias + ".site" 
+					Print "Site: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".sitename"
+					Print "Site Name: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".cell"
+					Print "Cell ID: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".PCI_SC_BCCH_PN"
+					Print "PN/SC/BCCH: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".AZ" 
+					Print "Azimuth: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".MDT" 
+					Print "MDT: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".EDT" 
+					Print "EDT: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".HT" 
+					Print "Height: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".STATUS" 
+					Print "Status: " + cell_data_alias
+					cell_data_alias =  table_selected_alias + ".Comment" 
+					Print "Comments: " + cell_data_alias
+
+					Call prepare_nbr_sub             'have to do this here, if you do in the pre_nbr_edit, it causes crashes if the user clicked on the nbr table before you closed it
+
+					select * from table_selected where rowid = host_row_id Into Query1
+					Commit table Query1 As pf_user_path + "nbrs_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+					Close Table Query1
+					Open Table pf_user_path + "nbrs_RFDT.TAB"
+					Add Map Layer nbrs_RFDT
+
+					' this changes the display properties of the host object in the nbrs_RFDT table
+					'--------------------------------------
+					Fetch First from nbrs_RFDT
+					sel = nbrs_RFDT.obj
+					x = centroidx(nbrs_RFDT.obj)
+					y = centroidy(nbrs_RFDT.obj)
+					host_val = nbrs_RFDT.cell
+					host_sys = nbrs_RFDT.SYSTEM
+					host_sysind = nbrs_RFDT.System_Index
+					host_lat = nbrs_RFDT.LAT
+					host_lon = nbrs_RFDT.LON
+					host_az = nbrs_RFDT.AZ
+					host_type = nbrs_RFDT.TYPE
+					If host_type <> "Non-IBS" Then
+						Drop Table nbrs_RFDT
+						Goto bad_host
+					End If
+
+					'This sets the colours based on the system
+					'----------------------------------------
+					Alter Object sel 
+					Info OBJ_INFO_BRUSH, brush_host(host_sysind)
+					Alter Object sel 
+					Info OBJ_INFO_PEN, pen_host(host_sysind)
+					Update nbrs_RFDT
+						set obj = sel where rowid = 1
+
+					' this puts the nbr objects into the nbrs_RFDT tab, the sys is locked as 3G_F1 (1)
+					'--------------------------------------
+'here we have the source cell, now we need to determine the first tier cells and below we add them to the nbrs_RFDT table and draw them
+
+					
+		'#############################################################################################################
+		'this calcs the dist and bearing (source to target and target to source) for each pair 
+		'NOTE: the bearing is in degrees relative to the source boresight(S2T), target boresight(S2T)
+		'--------------------------------------------------------------------------------------------------
+		Alter Table table_selected
+			(Add DIST_KM Float)
+
+
+host_window = 200
+nbr_window = 240
+nbr_zone = 30
+
+		'Dist Calc
+		'------------
+		Update table_selected Set DIST_KM = Round(Distance(host_lat,host_lon,LAT,LON,"km"),0.001)
+		Commit Table table_selected
+
+'get a smaller list
+		Select SITE, CELL, SYSTEM, LAT, LON, AZ, TYPE, DIST_KM From table_selected Where DIST_KM < 8 Into query1
+		Commit table query1 As pf_user_path + "temp_table_RFDT.TAB" TYPE NATIVE Charset "WindowsLatin1"
+		Close Table query1
+		Open Table pf_user_path + "temp_table_RFDT.TAB"
+
+		Alter Table table_selected
+			(Drop DIST_KM)
+		Add Map Layer table_selected Position 2
+
+		Alter Table temp_table_RFDT
+			(Add BEARING Float, NCELL_BEARING Float, NCELL_AZ Float, NCELL_TYPE Char(30), NCELL_SITE Char(40), FIRST_TIER Char(1), CO_SITE Char(1))
+
+		'Sets the co-site flag
+		'------------------------
+
+		Select * From temp_table_RFDT Where DIST_KM = 0 Into query1
+		Update query1 Set CO_SITE = "Y"
+		Close Table query1
+		Select * From temp_table_RFDT Where CO_SITE <> "Y" Into query1
+		Update query1 Set CO_SITE = "N"
+'		Update query1 Set NCELL_LONx = (DIST_KM*1000/10)/z_x*COS(DEG_2_RAD*(90 - NCELL_AZ)) + NCELL_LON, NCELL_LATx = (DIST_KM*1000/10)/z_y*SIN(DEG_2_RAD*(90 - NCELL_AZ)) + NCELL_LAT
+		Close Table query1
+
+		'Quad 1 Az Calc
+		'----------------
+		Select * From temp_table_RFDT Where LON - host_lon >= 0 AND LAT - host_lat >= 0 Into query1
+		Update query1 Set BEARING = RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - host_az, NCELL_BEARING = 180 + RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - AZ
+		Close Table query1
+
+		'Quad 2 Az Calc
+		'----------------
+		Select * From temp_table_RFDT Where LON - host_lon >= 0 AND LAT - host_lat < 0 Into query1
+		Update query1 Set BEARING = 180 - RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - host_az, NCELL_BEARING = 360 - RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - AZ
+		Close Table query1
+
+		'Quad 3 Az Calc
+		'----------------
+		Select * From temp_table_RFDT Where LON - host_lon < 0 AND LAT - host_lat < 0 Into query1
+		Update query1 Set BEARING = 180 + RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - host_az, NCELL_BEARING = RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - AZ
+		Close Table query1
+
+		'Quad 4 Az Calc
+		'----------------
+		Select * From temp_table_RFDT Where LON - host_lon < 0 AND LAT - host_lat >= 0 Into query1
+		Update query1 Set BEARING = 360 - RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - host_az, NCELL_BEARING = 180 - RAD_2_DEG*ATN(ABS(LON - host_lon)/Maximum(1e-10,ABS(LAT - host_lat))) - AZ
+		Close Table query1
+
+		'Cleanup bearings so they are between -180 and +180 from the antenna boresight and = 0 for same site nbr cells
+		'------------------------------------------------------------------------------------------------------------------
+		Select * From temp_table_RFDT Where BEARING < -180 Into query1
+		Update query1 Set BEARING = 360 + BEARING
+		Close Table query1
+		Select * From temp_table_RFDT Where BEARING > 180 Into query1
+		Update query1 Set BEARING = BEARING - 360
+		Close Table query1
+		Select * From temp_table_RFDT Where NCELL_BEARING < -180 Into query1
+		Update query1 Set NCELL_BEARING = 360 + NCELL_BEARING
+		Close Table query1
+		Select * From temp_table_RFDT Where NCELL_BEARING > 180 Into query1
+		Update query1 Set NCELL_BEARING = NCELL_BEARING - 360
+		Close Table query1
+		Select * From temp_table_RFDT Where DIST_KM = 0 Into query1
+		Update query1 Set BEARING = 0, NCELL_BEARING = 0
+		Close Table query1
+
+		Commit Table temp_table_RFDT
+
+		'This determines which nbr cells are first tier
+		'------------------------------------------------
+'query1 was the table with theh hosts in it, now I have selected a host, so query1 is not used
+'query2 is the shortlist of candidate nbrs (now temp_Table_RFDT)
+' for these formulas, bearing is the same (bearing is S2T and ncell_bearing is T2S), but most other things are reversed
+		j = 0
+		For i = 1 to 100
+			min_dist(i) = 1000
+			bearing_min(i) = 0
+			dist_old(i) = 1000
+			bearing_old(i) = 0
+			dist_old2(i) = 1000
+			bearing_old2(i) = 0
+		Next
+		min_dist_ave = 0
+		min_dist_cnt = 0
+
+		'This finds the closest nbr cell in the whole host antenna window, then does 14 more searches excluding the 
+		'buffer zone around all previously found nbrs, there is no easy way to put this in a loop, so it has to be ugly
+		'NOTE: min_dist_cnt is the count of mi dist sites found, NOT cells!!!
+		'-----------------------------------------------------------------------------------------------------------------
+		Select * From temp_table_RFDT 
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+			Into query1 Order By DIST_KM	
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(1) = query1.DIST_KM
+			bearing_min(1) = query1.BEARING
+			min_dist_tot = min_dist(1)
+			min_dist_ave = min_dist(1) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto skip_host
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT 
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(2) = query1.DIST_KM
+			bearing_min(2) = query1.BEARING
+			min_dist_ave = min_dist(2) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(3) = query1.DIST_KM
+			bearing_min(3) = query1.BEARING
+			min_dist_ave = min_dist(3) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(4) = query1.DIST_KM
+			bearing_min(4) = query1.BEARING
+			min_dist_ave = min_dist(4) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(5) = query1.DIST_KM
+			bearing_min(5) = query1.BEARING
+			min_dist_ave = min_dist(5) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(6) = query1.DIST_KM
+			bearing_min(6) = query1.BEARING
+			min_dist_ave = min_dist(6) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(7) = query1.DIST_KM
+			bearing_min(7) = query1.BEARING
+			min_dist_ave = min_dist(7) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(8) = query1.DIST_KM
+			bearing_min(8) = query1.BEARING
+			min_dist_ave = min_dist(8) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(8)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(9) = query1.DIST_KM
+			bearing_min(9) = query1.BEARING
+			min_dist_ave = min_dist(9) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(8)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(9)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(10) = query1.DIST_KM
+			bearing_min(10) = query1.BEARING
+			min_dist_ave = min_dist(10) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(8)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(9)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(10)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(11) = query1.DIST_KM
+			bearing_min(11) = query1.BEARING
+			min_dist_ave = min_dist(11) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(8)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(9)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(10)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(11)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(10) = query1.DIST_KM
+			bearing_min(12) = query1.BEARING
+			min_dist_ave = min_dist(12) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(8)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(9)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(10)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(11)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(12)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(13) = query1.DIST_KM
+			bearing_min(13) = query1.BEARING
+			min_dist_ave = min_dist(13) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(8)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(9)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(10)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(11)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(12)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(13)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(14) = query1.DIST_KM
+			bearing_min(14) = query1.BEARING
+			min_dist_ave = min_dist(14) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+		Select * From temp_table_RFDT
+			Where 	CO_SITE = "N" 
+					AND TYPE = "Non-IBS"
+					AND BEARING >= -host_window/2 AND BEARING <= host_window/2 
+					AND Abs(BEARING - bearing_min(1)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(2)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(3)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(4)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(5)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(6)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(7)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(8)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(9)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(10)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(11)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(12)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(13)) > nbr_zone/2
+					AND Abs(BEARING - bearing_min(14)) > nbr_zone/2
+			Into query1 Order By DIST_KM
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then	
+			Fetch First From query1
+			min_dist(15) = query1.DIST_KM
+			bearing_min(15) = query1.BEARING
+			min_dist_ave = min_dist(15) + min_dist_ave
+			min_dist_cnt = min_dist_cnt + 1
+		Else
+			Close Table query1
+			Goto end_search
+		End If
+		Close Table query1
+
+end_search:
+
+		'This finds the closest cell at each min_dist(i) => identifies which cell/s of the closest sites is/are first tier
+		'-------------------------------------------------------------------------------------------------------------------
+		For i = 1 to min_dist_cnt		'this steps through each of the test segments to find the closest cells
+			Select * From temp_table_RFDT Where Round(DIST_KM,0.00001) = Round(min_dist(i),0.00001) AND Round(BEARING,0.001) = Round(bearing_min(i),0.001) Into query1			'here I have all the cells of the site who is closest in the current segment
+
+			'This selects the most likely first tier cells from the closest sites (it narrows the acceptable nbr window as the bearing from the host cell increases
+			'-------------------------------------------------------------------------------------------------------------------------------------------------------
+			Select * From query1 
+				Where	NCELL_BEARING >= -nbr_window/2 * Minimum(1,(30/Maximum(1e-10,Abs(BEARING)))^0.1) 			'.3/.4/.5 are more aggressive, but then cells near by but ont he side will not be first tier easily
+						AND NCELL_BEARING <= nbr_window/2 * Minimum(1,(30/Maximum(1e-10,Abs(BEARING)))^0.1) 
+				Into query2
+			If Tableinfo(query2,TAB_INFO_NROWS) > 0 Then			'there are cells who meet the criteria
+				Update query2 Set FIRST_TIER = "Y"
+				Close Table query2
+'				Else			'if none were found, we increase the nbr window by 50% and try again
+'					Close Table query2
+'					Select * From query1 Where	NCELL_BEARING >= Maximum(-180,-(1.4)*nbr_window/2) AND NCELL_BEARING <= Minimum(180,(1.4)*nbr_window/2) Into query2
+'					If Tableinfo(query2,TAB_INFO_NROWS) = 0 Then		'if none were found, we just make them all first tier, as it is probably a first tier site with antennas facing the other way
+'						Update query1 Set FIRST_TIER = "Y"
+'					End If
+'					Close Table query2
+			End If
+			Close Table query1
+
+			'this deals with IBS nbrs who are closer than the closest macro in each segment, these will have to be first tier, I make the host window smaller, and the IBS window 360
+			'-----------------------------------------------------------------------------------
+			Select * From temp_table_RFDT 
+				Where 	CO_SITE = "N" 
+						AND TYPE = "IBS"
+						AND DIST_KM < min_dist(i)*(0.9)
+						AND Abs(BEARING - bearing_min(i)) < nbr_zone/2
+				Into query1
+			Update query1 Set FIRST_TIER = "Y"
+			Close Table query1
+
+			'NOTE: I do not need to worry about the case of the HOST being IBS, I can get that done later through reciprocal analysis 
+		Next
+
+		'This goes back through the first tier cells and if it finds one excessively far, it removes it from first tier
+		'--------------------------------------------------------------------------------------------------------------
+		If min_dist_cnt > 0 Then
+			min_dist_ave = min_dist_ave / min_dist_cnt
+		Else
+			min_dist_ave = 0
+		End If
+
+		'orders the first tier candidates by bearing from low -180 to 180 instead of dist as they were originally
+		'-----------------------------------------------------------------------------------------------------------
+		i = 1
+		min_dist_ave = 0
+		Select DIST_KM, BEARING, NCELL_BEARING, SITE From temp_table_RFDT Where FIRST_TIER = "Y" Group By SITE Into query1 Order By BEARING	
+		Fetch First From query1
+		Do While Not EOT(query1)
+			bearing_min(i) = query1.BEARING
+			min_dist(i) = query1.DIST_KM
+			i = i + 1
+			Fetch Next From query1
+		Loop
+		min_dist_cnt = i - 1 		'this is now = to the number of sites with a cell that is first tier
+		Close Table query1
+
+		If min_dist_cnt > 1 Then
+			For i = 1 to min_dist_cnt
+				'For each seg, looks for a first tier cell that is too far
+				'-----------------------------------------------------------
+				If 	(min_dist(i)/min_dist(Maximum(1,i-2))) > (1 + Abs(bearing_min(i) - bearing_min(Maximum(1,i-2)))/30)*Minimum(1,(70/Maximum(1e-10,Abs(bearing_min(i))))^0.1) OR
+					(min_dist(i)/min_dist(Maximum(1,i-1))) > (1 + Abs(bearing_min(i) - bearing_min(Maximum(1,i-1)))/30)*Minimum(1,(70/Maximum(1e-10,Abs(bearing_min(i))))^0.1) OR
+					(min_dist(i)/min_dist(Minimum(min_dist_cnt,i+1))) > (1 + Abs(bearing_min(i) - bearing_min(Minimum(min_dist_cnt,i+1)))/30)*Minimum(1,(70/Maximum(1e-10,Abs(bearing_min(i))))^0.1) OR
+					(min_dist(i)/min_dist(Minimum(min_dist_cnt,i+2))) > (1 + Abs(bearing_min(i) - bearing_min(Minimum(min_dist_cnt,i+2)))/30)*Minimum(1,(70/Maximum(1e-10,Abs(bearing_min(i))))^0.1)
+				Then
+					Select * From temp_table_RFDT 
+						Where 	FIRST_TIER = "Y" 
+								AND Round(DIST_KM,0.00001) = Round(min_dist(i),0.00001) 
+								AND Round(BEARING,0.001) = Round(bearing_min(i),0.001) 
+						Into query1			'here I have all the cells of the site who is closest in the current segment
+					If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then			'there are cells who meet the criteria
+						Update query1 Set FIRST_TIER = ""
+					End If
+					Close Table query1
+				End If
+			Next
+		End If
+
+		'this probably needs some work
+		'--------------------------------
+		Select * From temp_table_RFDT 
+			Where 	CO_SITE = "N" 
+				AND TYPE = "IBS"
+				AND DIST_KM < min_dist_tot*(0.9)
+				AND BEARING >= -(0.5)*host_window/2 
+				AND BEARING < (0.5)*host_window/2 
+			Into query1
+		If Tableinfo(query1,TAB_INFO_NROWS) > 0 Then			'there are cells who meet the criteria
+			Update query1 Set FIRST_TIER = "Y"
+		End If
+		Close Table query1
+skip_host:
+'##################################################################################################################################3
+
+
+
+					nbr_cnt(1) = 0
+					Select * From temp_table_RFDT Where FIRST_TIER = "Y" Into query1
+					Fetch First From query1 
+					Do While Not EOT(query1)
+						nbr_cnt(1) = nbr_cnt(1)+1
+						x2 = centroidx(query1.obj)
+						y2 = centroidy(query1.obj)
+						sel = query1.obj
+						Alter Object sel 
+							Info OBJ_INFO_BRUSH, brush_nbr(1)
+							Info OBJ_INFO_PEN, pen_nbr(1)
+						sel2 =  CreateLine(x, y, x2, y2)
+						Alter Object sel2 
+						Info OBJ_INFO_PEN, pen_connector(1)
+						Insert Into nbrs_RFDT (Cell, obj) Values ("Connector",sel)
+						Insert Into nbrs_RFDT (Cell, obj) Values ("Connector",sel2)
+						Fetch Next From query1
+					Loop
+					Close Table query1
+					Drop Table temp_table_RFDT
+
+					'This gets out of the i loop so no more underlying objects are processed => the top sector is processed as the host only
+					'-------------------------------------------------------------
+					If sys(1) <> "" and is_display_cells_sys(1) Then
+						Print sys(1) + ": " + nbr_cnt(1) + " nbrs"
+					End If
+					Exit For
+				End If
+			Next
+		End If
+	End If
+bad_host:
+
+End Sub
+'---------------------------------------------------
+
+
+

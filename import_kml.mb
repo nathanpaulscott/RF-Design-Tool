@@ -1,0 +1,780 @@
+'note: this is untested code, I just copied fromt eh internet and integrated, would need a bit of testing to really be sure about it, it seems to work right now....
+
+
+
+
+
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub import_kml_sub
+Declare Sub prepare_nbr_sub
+Declare Sub date_check_sub
+declare sub exitt
+declare sub MainForm
+declare sub Copyright
+declare sub infoz
+Declare sub Convers1
+Declare sub convers2
+Declare sub OpenFile
+Declare sub CreateTable 'Choice of two kml format
+Declare sub CreateTable1 ' Earth Connection Utility TM provided with Mapinfo
+Declare sub CreateTable2 ' Google earth
+declare sub CreateObj    ' Create Object for the google earth convers(2)
+declare sub fieldsizer   ' Rezize field to minimum char$
+
+Declare Sub prepare_kml_sub(ByVal tab_name As String)
+
+dim NewFileType as String ' File type (KML)
+dim NewFilePath as String ' KML path
+dim NewFileN as String ' KML NAME
+dim sNewFilePath as String ' KML path without name
+dim sNewFileN as String ' KML NAME with _KML
+dim IntNumCol as Integer ' Store the nomber of column into global var
+dim ObjString as String
+dim CounnterRowId as Integer
+dim strbrush as brush
+dim strpen as pen
+dim strsymbol as symbol
+
+
+
+
+
+
+
+
+
+
+
+'*************************************************Sub import_kml**********************************************************
+Sub import_kml_sub
+
+	Call MainForm
+
+end sub
+
+
+
+
+'*************************************************MainForm**********************************************************
+sub MainForm 
+
+CLS
+dim i_source as smallint
+dim Colors as integer
+
+
+	Colors = RGB(255,0,0)
+	strBrush = makebrush(2,Colors,Colors)
+	strpen = makepen(1,2,Colors)
+	strsymbol = makesymbol(35,Colors,8)
+
+	Dialog
+		Title "Open Kml" 
+		Width 220
+		Height 87
+
+		Control Edittext
+		Value ""
+		Id 1
+		Position 10,10
+		Height 15
+		Width 150
+
+		Control Button
+		Calling OpenFile
+		Position 165, 10
+		Title "Open KML"
+		Height 15
+		Width 45
+
+		Control GroupBox
+		Title "KML Source"
+		Position 10, 31
+		Height 46 Width 150
+
+		Control RadioGroup
+		Title "&Google Earth 2010;&Earth Connection Utility TM (MapInfo) "
+		Value 2
+		Into i_source
+		ID 2
+		Position 15, 46 
+		Width 140
+
+		Control OkButton
+		Calling CreateTable
+		Position 170, 48
+end sub
+
+
+
+
+
+
+
+
+
+
+
+'*************************************************OpenFile**********************************************************
+sub OpenFile
+
+dim FilePathSpecs As string
+dim FileDirectory As String
+dim FileName As String
+dim FilePath As String
+dim FileType As String
+dim FilePoint As SmallInt
+
+FilePathSpecs = FileOpenDlg("","","kml","Open File") 'Change path after debugging
+FileDirectory = PathToDirectory$(FilePathSpecs)
+FileName = PathToFileName$(FilePathSpecs)
+FilePath = FileDirectory + FileName
+
+if FileDirectory = "" then exit sub end if
+
+FilePoint = InStr(1, FilePath, ".")
+FileType = Right$(FilePath, len(FilePath) - FilePoint)
+
+NewFileN = FileName 
+NewFilePath = FilePath 
+NewFileType = FileType
+
+Alter Control 1 Value FileDirectory
+
+Call prepare_kml_sub(PathToTableName$(FilePathSpecs))		'checks to see if the file to be imported is already open, if so it closes it.
+
+end sub
+
+
+
+
+
+
+
+
+
+
+
+
+'*************************************************CreateTable*******************************************************
+sub CreateTable
+
+dim i_source as smallint
+
+	i_source = readControlValue(2)
+	if i_source = 2 then call CreateTable1
+	else call CreateTable2
+	end if
+
+end sub
+
+
+
+
+
+
+
+
+'*************************************************CreateTable1**********************************************************
+'Create Table
+sub CreateTable1
+dim LineVarChars as String ' Var that will read each line in the KML.
+dim i as Smallint ' Counter
+dim j as Smallint ' "e counter
+dim LineCheker as String ' Define if the line is attribute, coordonate and geometry
+dim noCol as smallint ' Count the number of column
+dim ColLenth as smallint ' Determine the string length of the column name
+dim StrPos as smallint ' Position pour enlevé espace
+
+Do while i < 5000
+	If FileExists(left$(NewFilePath, len(NewFilePath)- len(NewFileN)) + left$(NewFileN, len(NewFileN)-4) + i + "_KML" + ".TAB") Then
+		i = i + 1
+	else
+		exit do
+	end if
+Loop
+
+'Create the Table
+sNewFileN = left$(NewFileN, len(NewFileN)-4) + i + "_KML"
+sNewFilePath = left$(NewFilePath, len(NewFilePath)- len(NewFileN))
+Create Table sNewFileN (temp char(1)) File sNewFilePath + sNewFileN + ".TAB" TYPE NATIVE Charset "WindowsLatin1" 'Temporary Fiel will be deleted at the end.
+Create Map For sNewFileN CoordSys Earth Projection 1, 0 
+
+i=0
+noCol = 0
+
+'determine the number of column
+Set CoordSys Earth Projection 1, 104
+Open file NewFilePath for input as #1
+
+Do While Not EOF(1)
+	line input #1,LineVarChars ' Line One and 2 is not necesary title and stuff.....
+	j = 0  'Have to revome space in string
+	Do while j < 5000 ' Random Number....less then 5000 space before line
+      	StrPos = InStr(1, LineVarChars, " ")
+      	If StrPos = 1 then 
+			LineVarChars = Right$(LineVarChars, len(LineVarChars) -1)
+		else 
+			exit do
+		end if
+	Loop
+				 
+	LineCheker = left$(LineVarChars, 4)
+	if LineCheker = "<tr>" then noCol = noCol + 1 end if
+	if LineCheker <> "<tr>" then i = i + 1 end if
+	if i = 3 then exit do end if
+Loop
+
+'Put Col name in array
+i = 0
+Close File #1
+Open file NewFilePath for input as #1
+IntNumCol = noCol
+Do While i < noCol
+line input #1,LineVarChars
+         j = 0  'Have to revome space in string
+         Do while j < 5000 ' Random Number....less then 5000 space before line
+                  StrPos = InStr(1, LineVarChars, " ")
+                  If StrPos = 1 then LineVarChars = Right$(LineVarChars, len(LineVarChars) -1)
+									else exit do
+									end if
+				 Loop
+StrPos = InStr(1, LineVarChars, "<tr>")
+If StrPos = 1 then
+LineCheker = Right$(LineVarChars, len(LineVarChars) - 8)
+ColLenth = InStr(1, LineCheker, "</td>")
+LineCheker = left$(LineCheker, ColLenth-1) ' Retreive column name
+Alter Table sNewFileN ( add LineCheker Char(254) ) Interactive '254 is the max number of char for a char type column 'Add column to table
+i=i+1
+end if
+Loop
+
+Alter Table sNewFileN ( drop temp ) Interactive
+Commit Table sNewFileN
+Close File #1
+
+call convers1
+end sub
+
+
+
+
+
+
+
+
+
+
+
+'*************************************************CreateTable*******************************************************
+sub convers1
+
+Open file NewFilePath for input as #1
+
+dim LineVarChars as String ' Var that will read each line in the KML.
+dim i as Integer ' Counter to store attribute
+dim j as Integer ' Counter mainly for trim and add attributes
+dim k as Integer ' Counter for node number
+dim StrPos as smallint ' Position pour enlevé espace
+dim ColumnAtt(0) as String
+dim Px as Float
+dim Py as Float
+dim CounnterRowId as Integer
+dim objpolyline as object
+dim polylineflag as string
+ReDim ColumnAtt(IntNumCol)
+
+i = 1
+j = 0
+CounnterRowId = 1
+' Ajouter les attributs champs
+
+Do While Not EOF(1)
+
+' Call Space
+
+line input #1,LineVarChars ' Line One and 2 is not necesary title and stuff.....
+
+         j = 0  'Have to revome space in string
+         Do while j < 5000 ' Random Number....less then 5000 space before line
+                  StrPos = InStr(1, LineVarChars, " ")
+                  If StrPos = 1 then LineVarChars = Right$(LineVarChars, len(LineVarChars) -1)
+									else exit do
+									end if
+				 Loop
+
+' first line
+
+if InStr(1, LineVarChars, "<?xml version=") <> 0 then polylineflag = "Flagdown" 
+' Find attribute table
+
+elseif InStr(1, LineVarChars, "<table border=") = 1 then polylineflag = "Flagdown"
+' Find Attributes
+
+elseif InStr(1, LineVarChars, "<tr><td>") = 1 then 
+			 polylineflag = "Flagdown"
+			 StrPos = Instr(1, LineVarChars, "</td><td>")
+			 LineVarChars = right$(LineVarChars, len(LineVarChars)- (StrPos + 8))
+			 LineVarChars = Left$(LineVarChars, len(LineVarChars)- 10)
+			 ColumnAtt(i) = LineVarChars 
+			 i = i + 1
+			 
+' Find point....
+
+elseif InStr(1, LineVarChars, "<Point>") > 1 then 
+       polylineflag = "Flagdown"
+			 StrPos = InStr(1, LineVarChars, "<coordinates>")
+			 LineVarChars = Right$(LineVarChars, len(LineVarChars)- (StrPos + 12))
+			 StrPos = InStr(1, LineVarChars, "</coordinates>")
+			 LineVarChars = Left$(LineVarChars, StrPos -1)
+			 			 
+			 StrPos = InStr(1, LineVarChars, ",")
+			 Px = Val(left$(LineVarChars, StrPos-1))
+			 LineVarChars = Right$(LineVarChars, Len(LineVarChars) - StrPos)
+			 StrPos = InStr(1, LineVarChars, ",")
+			 Py = Val(left$(LineVarChars, StrPos-1))
+	       
+	     objpolyline = createPoint(Px, Py)
+	     alter object objpolyline info OBJ_INFO_Symbol, strsymbol        
+       Insert Into sNewFileN (Obj) Values (objpolyline)
+							
+       				j = 1
+							Do while j < IntNumCol + 1			
+                  Update sNewFileN  
+                  Set "Col" + j = ColumnAtt(j)
+                  Where Rowid = CounnterRowId				
+									j = j + 1
+							Loop
+ 			
+       i = 1
+       CounnterRowId = CounnterRowId + 1
+
+'find polyline
+
+elseif InStr(1, LineVarChars, "<LineStyle>") > 1 then 
+polylineflag = "FlagUp"
+k = 1
+
+else 
+       polylineflag = "FlagdDown"	
+       if InStr(1, LineVarChars, "</coordinates>") = 1 then 
+			 
+			 if k > 2 then     
+       Px = ObjectNodeX(objpolyline, 1, 1) ' read longitude of first node
+       Py = ObjectNodeY(objpolyline, 1, 1) ' read latitude of first node
+       If Px = ObjectNodeX(objpolyline, 1, k-1) ' read longitude of last node
+       and Py = ObjectNodeY(objpolyline, 1, k-1) ' read latitude of last node
+       then objpolyline = ConvertToRegion(objpolyline) 'if both are equal turn it to a polygone
+			     alter object objpolyline info OBJ_INFO_Brush, strBrush
+ 	  	else
+     	  	 alter object objpolyline info OBJ_INFO_PEN, strpen
+			 end if
+			 end if
+			 
+			 Insert Into sNewFileN (Obj) values (objpolyline)
+       				j = 1
+							Do while j < IntNumCol + 1			
+                  Update sNewFileN  
+                  Set "Col" + j = ColumnAtt(j)
+                  Where Rowid = CounnterRowId				
+									j = j + 1
+							Loop
+     
+       i = 1
+       CounnterRowId = CounnterRowId + 1
+
+
+       else
+  		 StrPos = InStr(1, LineVarChars, ",")
+			 Px = Val(left$(LineVarChars, StrPos-1))
+			 LineVarChars = Right$(LineVarChars, len(LineVarChars) - StrPos)
+			 StrPos = InStr(1, LineVarChars, ",")
+			 Py = Val(left$(LineVarChars, StrPos-1))
+	     if k = 1 then Create Pline Into Variable objpolyline 0 end if
+
+       Alter Object objpolyline
+		   Node Add Position 1,k ( Px, Py ) 	
+       k = k + 1
+       End if
+end if
+Loop
+
+Select * from sNewFileN where rowid = CounnterRowId-1 into tempx
+delete from tempx
+close table tempx
+commit table sNewFileN
+Pack Table sNewFileN Graphic Data
+commit table sNewFileN
+call fieldsizer
+End sub
+
+
+
+
+
+
+
+
+
+
+'*********************************************CreateTable2**********************************************************
+sub CreateTable2
+
+dim i as smallint
+'Create the Table
+
+Do while i < 5000
+If FileExists(left$(NewFilePath, len(NewFilePath)- len(NewFileN)) + left$(NewFileN, len(NewFileN)-4) + i + "_KML" + ".TAB") Then
+i = i + 1
+else
+exit do
+end if
+Loop
+
+'Create the Table
+sNewFileN = left$(NewFileN, len(NewFileN)-4) + i + "_KML"
+sNewFilePath = left$(NewFilePath, len(NewFilePath)- len(NewFileN))
+Create Table sNewFileN (name Char(254),description Char(254)) File sNewFilePath + sNewFileN + ".TAB" TYPE NATIVE Charset "WindowsLatin1" 'Temporary Fiel will be deleted at the end.
+Create Map For sNewFileN CoordSys Earth Projection 1, 0 
+
+call convers2
+
+end sub
+'*********************************************Convers2**********************************************************
+sub Convers2
+
+Open file NewFilePath for input as #1
+dim LineVarChars as String ' Var that will read each line in the KML.
+dim j as Integer ' Counter mainly for trim and add attributes
+dim StrPos as smallint ' Position pour enlevé espace
+dim objflag as string
+dim i as integer
+i = 0
+j = 0
+CounnterRowId = 0
+ObjString = ""
+objflag = ""
+' Ajouter les attributs champs
+
+Do While Not EOF(1)
+
+' Call Space
+
+line input #1,LineVarChars ' Line One and 2 is not necesary title and stuff.....
+
+         j = 0  'Have to revome space in string
+         Do while j < 5000 ' Random Number....less then 5000 space before line
+                  StrPos = InStr(1, LineVarChars, " ")
+                  If StrPos = 1 then LineVarChars = Right$(LineVarChars, len(LineVarChars) -1)
+									else exit do
+									end if
+				 Loop
+				 
+StrPos = InStr(1, LineVarChars, "</Placemark>")
+If StrPos >= 1 then objflag = "Off"
+end if
+
+if objflag = "Off" then call CreateObj
+objflag = "Null"
+end if
+
+StrPos = InStr(1, LineVarChars, "<Placemark>")
+If StrPos >= 1 then objflag = "On" CounnterRowId = CounnterRowId + 1
+end if
+
+if objflag = "On" then ObjString = ObjString + LineVarChars
+end if
+
+Loop
+
+call fieldsizer
+
+
+end sub
+
+
+
+
+
+
+
+
+
+
+
+'**********************************************CreateObject************************************************************
+Sub CreateObj
+
+dim spos1 as integer
+dim spos2 as integer
+dim strpos as integer
+dim strname as string 'xml object name
+dim strdescription as string 'xml object description
+dim strcoordinates as string 'xml coordinate value
+dim comma_count as integer 'number of comma per string
+dim c_count as integer ' Coodinate paire
+dim i as Integer ' Counter to store attribute
+dim objpolyline as object
+dim Px as Float
+dim Py as Float
+
+'OnError GoTo ErrorOccured
+
+spos1 = Instr(1, ObjString, "<name>")
+spos2 = Instr(1, ObjString, "</name>")
+if spos2 <> 0 then
+strname = Right$(ObjString, len(ObjString) - (spos1 + 5))
+strname = Left$(strname, spos2 - (spos1 + 6))
+else strname = "" 
+end if
+
+spos1 = Instr(1, ObjString, "<description>")
+spos2 = Instr(1, ObjString, "</description>")
+if spos2 <> 0 then
+strdescription = Right$(ObjString, len(ObjString) - (spos1 + 12))
+strdescription = Left$(strdescription, spos2 - (spos1 + 13))
+else strdescription = "" 
+end if
+
+spos1 = Instr(1, ObjString, "<coordinates>")
+spos2 = Instr(1, ObjString, "</coordinates>")
+if spos2 <> 0 then
+strcoordinates = Right$(ObjString, len(ObjString) - (spos1 + 12))
+strcoordinates = Left$(strcoordinates, spos2 - (spos1 + 13))
+else strcoordinates = ""
+end if
+
+for i=1 to len(strcoordinates)
+		if(mid$(strcoordinates,i,1)=",") then comma_count=comma_count+1 end if
+		next
+		c_count = comma_count/2
+	
+		if c_count = 1 then 'if point then
+		
+		   StrPos = InStr(1, strcoordinates, ",")
+			 Px = Val(left$(strcoordinates, StrPos-1))
+			 strcoordinates = Right$(strcoordinates, Len(strcoordinates) - StrPos)
+			 StrPos = InStr(1, strcoordinates, ",")
+			 Py = Val(left$(strcoordinates, StrPos-1))
+	         
+	     objpolyline = createPoint(Px, Py)
+	     alter object objpolyline info OBJ_INFO_Symbol, strsymbol        
+       Insert Into sNewFileN (Obj) Values (objpolyline)
+	    
+	  				      Update sNewFileN  
+                  Set "Col1" = strname 
+                  Where Rowid = CounnterRowId
+                  Update sNewFileN
+                  Set "Col2" = strdescription
+                  Where Rowid = CounnterRowId				
+
+
+				
+		elseif comma_count > 1 and comma_count mod 2 = 0 then 'if polyline/polygone then 		
+			i=0
+			Create Pline Into Variable objpolyline 0
+
+			do while i < c_count
+			Px=val(strcoordinates)
+			strcoordinates=right$(strcoordinates,len(strcoordinates)-instr(1,strcoordinates,","))
+			Py=val(strcoordinates)
+	
+			strcoordinates=right$(strcoordinates,len(strcoordinates)-instr(1,strcoordinates," "))
+			i=i+1
+			Alter Object objpolyline
+			Node Add Position 1,i  ( Px, Py ) 
+			loop
+
+	  	   	if i > 2 then     
+    	   			Px = ObjectNodeX(objpolyline, 1, 1) ' read longitude of first node
+    	   			Py = ObjectNodeY(objpolyline, 1, 1) ' read latitude of first node
+    	  	If Px = ObjectNodeX(objpolyline, 1, i) ' read longitude of last node
+    	   			and Py = ObjectNodeY(objpolyline, 1, i) ' read latitude of last node
+     	  			then objpolyline = ConvertToRegion(objpolyline) 'if both are equal turn it to a polygone
+     	  			alter object objpolyline info OBJ_INFO_Brush, strBrush
+     	  	else
+     	  			alter object objpolyline info OBJ_INFO_PEN, strpen
+			 		end if
+					end if
+			 
+			 Insert Into sNewFileN (Obj) values (objpolyline)
+       					  Update sNewFileN  
+                  Set "Col1" = strname 
+                  Where Rowid = CounnterRowId
+                  Update sNewFileN
+                  Set "Col2" = strdescription
+                  Where Rowid = CounnterRowId		
+                  
+     end if
+     
+commit table sNewFileN 
+ErrorOccured:
+ObjString = ""
+End Sub
+
+
+
+
+
+
+
+
+
+
+
+'**********************************************Update Field************************************************************
+sub fieldsizer
+
+dim i as smallint
+dim colnum as smallint
+dim fieldlenth as integer
+dim newfieldlenth as integer
+dim strfieldlenth as string
+dim Acolnom() as string
+
+Close table sNewFileN
+Open table sNewFilePath + sNewFileN as kml_table
+i = 0 
+fieldlenth = 0
+colnum = TableInfo(kml_table, TAB_INFO_NCOLS)
+
+Redim Acolnom(colnum)
+
+Do while i < colnum
+i = i + 1
+Acolnom(i) = ColumnInfo(kml_table, "Col" + i, COL_INFO_NAME )
+print Acolnom(i)
+Loop
+
+i = 1 
+Do while i < colnum + 1
+
+Fetch First From kml_table
+Do While Not EOT(kml_table)
+   strfieldlenth = kml_table.col(i)
+   print strfieldlenth 
+   newfieldlenth = len(strfieldlenth)
+   print newfieldlenth
+      if newfieldlenth >= fieldlenth then fieldlenth = newfieldlenth
+      else fieldlenth = fieldlenth
+      end if
+Fetch Next From kml_table
+Loop
+
+Alter Table kml_table ( modify Acolnom(i) Char(fieldlenth) ) Interactive
+i = i + 1
+fieldlenth = 0
+Loop
+
+commit table kml_table
+close table kml_table
+Open table sNewFilePath + sNewFileN
+Map from sNewFileN
+Close File #1
+end sub
+
+
+
+
+
+
+'*********************************************Sub exit************************************************************
+sub exitt
+alter menu bar remove "KML Converter"
+end sub
+
+
+
+
+
+'*********************************************infoz************************************************************
+sub infoz
+
+dialog
+Title "Info"
+Width 320
+Height 67
+
+Control statictext
+Title "                          Tool to convert a KML made by the Google Earth Connection" 
+Position 10,10
+
+Control statictext
+Title "                                         Utility TM or Google Earth back into .Tab file"
+Position 10,20
+
+Control statictext
+Title "If a field has more then 254 characters it will be shorten to the 254st and some data will be missing"
+Position 6,30
+
+Control OkButton
+Position 138, 47
+
+End Sub
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'---------------------------------------------------
+' this checks if the table to be imported is open, if it is, it closes it
+'---------------------------------------------------
+Sub prepare_kml_sub(ByVal tab_name As String)
+
+OnError GoTo closed1
+	If TableInfo(tab_name, TAB_INFO_NAME) <> "" Then
+		Drop Table tab_name
+		Exit Sub
+	End  If	 
+returnpoint1:
+OnError GoTo closed2
+	If TableInfo(test, TAB_INFO_NAME) <> "" Then
+		Drop Table test
+		Exit Sub
+	End  If	 
+returnpoint2:
+OnError GoTo closed3
+	If TableInfo(query1, TAB_INFO_NAME) <> "" Then
+		Close Table query1
+		Exit Sub
+	End  If	 
+returnpoint3:
+	Exit Sub
+
+'----------------------------
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+closed3:
+Resume returnpoint3
+
+End Sub
+'---------------------------------------------------
+
+

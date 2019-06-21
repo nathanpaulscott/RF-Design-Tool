@@ -1,0 +1,28 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+Declare Sub check_template_and_status_sub
+Declare Sub default_status_sub
+Declare Sub default_templates_sub
+
+'---------------------------------------------------
+' this checks that the templates and status's have values, if not it loads defaults
+'---------------------------------------------------
+Sub check_template_and_status_sub
+Dim i As Integer
+	
+	If status_value(1) = "" Then
+		Call default_status_sub
+	End If
+
+	If t_names(1) = "" Then
+		load_t_values_only_flag = True
+		Call default_templates_sub
+		load_t_values_only_flag = False
+	End If
+
+End Sub
+'---------------------------------------------------
+

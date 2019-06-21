@@ -1,0 +1,895 @@
+Include "MAPBASIC.DEF"
+Include "ICONS.DEF"
+Include "MENU.DEF"
+Include "globals.def"
+
+
+Declare Sub Main
+Declare Sub active_template_rightclick_1_sub	
+Declare Sub active_template_rightclick_10_sub	
+Declare Sub active_template_rightclick_11_sub	
+Declare Sub active_template_rightclick_12_sub	
+Declare Sub active_template_rightclick_13_sub	
+Declare Sub active_template_rightclick_14_sub	
+Declare Sub active_template_rightclick_15_sub	
+Declare Sub active_template_rightclick_16_sub	
+Declare Sub active_template_rightclick_17_sub	
+Declare Sub active_template_rightclick_18_sub	
+Declare Sub active_template_rightclick_19_sub	
+Declare Sub active_template_rightclick_2_sub	
+Declare Sub active_template_rightclick_20_sub	
+Declare Sub active_template_rightclick_3_sub	
+Declare Sub active_template_rightclick_4_sub	
+Declare Sub active_template_rightclick_5_sub	
+Declare Sub active_template_rightclick_6_sub	
+Declare Sub active_template_rightclick_7_sub	
+Declare Sub active_template_rightclick_8_sub	
+Declare Sub active_template_rightclick_9_sub	
+Declare Sub add_nbr_sub	
+Declare Sub add_site_sub	
+Declare Sub adj_sub	
+Declare Sub apply_display_sub	
+Declare Sub area_redraw_sub	
+Declare Sub calc_az_sub	
+Declare Sub cell_edit_sub	
+Declare Sub change_az_sub	
+Declare Sub check_layers_sub	
+Declare Sub check_pairs2check_sub	
+Declare Sub check_tables_sub	
+Declare Sub check_template_and_status_sub	
+Declare Sub choose_host_sub	
+Declare Sub choose_nbr_pos_sub (desired_pos as integer) 	
+Declare Sub co_sub	
+Declare Sub date_check_sub	
+Declare Sub default_status_sub	
+Declare Sub default_templates_sub	
+Declare Sub define_ant_pat_0_sub	
+Declare Sub define_ant_pat_1_sub	
+Declare Sub define_ant_pat_10_sub	
+Declare Sub define_ant_pat_2_sub	
+Declare Sub define_ant_pat_3_sub	
+Declare Sub define_ant_pat_4_sub	
+Declare Sub define_ant_pat_5_sub	
+Declare Sub define_ant_pat_6_sub	
+Declare Sub define_ant_pat_7_sub	
+Declare Sub define_ant_pat_8_sub	
+Declare Sub define_ant_pat_9_sub	
+Declare Sub del_nbr_sub	
+Declare Sub delete_site_sub	
+Declare Sub edit_project_settings_sub 	
+Declare Sub export_sub	
+Declare Sub find_site_sub 	
+Declare Sub get_pass_sub (ps as string) 	
+Declare Sub global_redraw_sub	
+Declare Sub google_export_sub	
+Declare Sub hide_con_nbr_line_sub	
+Declare Sub import_sub	
+Declare Sub initial_dialog_sub	
+Declare Sub load_project_file_sub 	
+Declare Sub mod_display_sub	
+Declare Sub move_sub	
+Declare Sub nbr_edit_sub 	
+Declare Sub pre_add_site_sub	
+Declare Sub pre_area_redraw_sub	
+Declare Sub pre_calc_az_sub	
+Declare Sub pre_cell_edit_sub	
+Declare Sub pre_change_az_sub 	
+Declare Sub pre_delete_site_sub	
+Declare Sub pre_edit_project_settings_sub 	
+Declare Sub pre_export_sub	
+Declare Sub pre_find_site_sub	
+Declare Sub pre_global_redraw_sub	
+Declare Sub pre_google_export_sub	
+Declare Sub pre_import_sub	
+Declare Sub pre_move_sub	
+Declare Sub pre_nbr_edit_sub 	
+Declare Sub pre_prepare_nbr_sub 	
+Declare Sub pre_show_BCCH_BSIC_sub 	
+Declare Sub pre_show_co_pn_sub 	
+Declare Sub pre_show_SC_sub 	
+Declare Sub pre_undo_sub	
+Declare Sub prepare_cr_load_pf_sub 	
+Declare Sub prepare_cr_sub 	
+Declare Sub prepare_nbrs_DB_sub
+Declare Sub prepare_nbr_sub 	
+Declare Sub reset_sub	
+Declare Sub save_project_file_sub 	
+Declare Sub save_tables_sub 	
+Declare Sub saveas_project_file_sub	
+Declare Sub scan_choose_data_type_sub	
+Declare Sub scan_import_2G_scan_sub	
+Declare Sub scan_import_3G_scan_sub	
+Declare Sub scan_manage_scan_tables_sub	
+Declare Sub set_display_sub	
+Declare Sub set_qd_templates_sub	
+Declare Sub set_search_prop_sub	
+Declare Sub set_thermatic_display_sub	
+Declare Sub set_user_path_sub	
+Declare Sub set_z_sub	
+Declare Sub show_BCCH_BSIC_sub	
+Declare Sub show_co_pn_sub 	
+Declare Sub show_con_nbr_line_sub	
+Declare Sub show_SC_sub	
+Declare Sub snap2grid_sub	
+Declare Sub test_nbrq1_sub 	
+Declare Sub toolbar_sub	
+Declare Sub undo_az_sub	
+Declare Sub undo_delete_site_sub	
+Declare Sub undo_move_sub	
+Declare Sub x_factor_sub	
+Declare Sub x_factor2_sub	
+'-----------------------------------------
+
+
+
+Sub Main
+Dim sector1, center, endpnt, bore, site1 As Object
+Dim count, i, j, k, h As Integer
+Dim proj, inputfilename, ps As String
+
+
+	'This initialises the global array vars
+	'-----------------------------
+	check_map_display = False
+	For i = 1 to 10
+		For j = 1 to 10
+			g_nl_max_size((i-1)*10+j) = 32
+		Next
+
+		sys(i) = ""
+
+		cells_sys(i) = ""
+		ok_cells_sys(i) = "Off"
+		is_open_cells_sys(i) = "Off"
+		is_in_mapper_cells_sys(i) = False
+		is_display_cells_sys(i) = False
+		cells_map_status(i) = False
+		cells_display_status(i) = False
+
+		sites_sys(i) = ""
+		ok_sites_sys(i) = "Off"
+		is_open_sites_sys(i) = "Off"
+		is_in_mapper_sites_sys(i) = False
+		is_display_sites_sys(i) = False
+		sites_map_status(i) = False
+		sites_display_status(i) = False
+
+		If i = 1 Then
+			g_ft_source_sysind(i) = True
+			g_ft_target_sysind(i) = True
+		Else
+			g_ft_source_sysind(i) = False
+			g_ft_target_sysind(i) = False
+		End If
+	Next
+
+	For i = 1 to 200
+		undo_cell_data(i) = "null"
+	Next
+
+
+	'this sets some global flags and vars
+	'--------------------------------
+	'#####################################
+	'this is for location protection
+	'#####################################
+	'NOTE: the x_factor and x_factor2 macros that use this are called from the import_project_file sub and the import sub
+	protect_lon = 106.806907   	'lon of center point
+	protect_lat = -6.212975		'lat of center point	
+	protect_dist = 5000  	  	'kms from center
+	'#####################################
+
+	'This defines the standard antenna pattern custom variable
+	'--------------------------------------------------------
+	Call define_ant_pat_0_sub
+	Call define_ant_pat_1_sub
+	Call define_ant_pat_2_sub
+	Call define_ant_pat_3_sub
+	Call define_ant_pat_4_sub
+	Call define_ant_pat_5_sub
+	Call define_ant_pat_6_sub
+	Call define_ant_pat_7_sub
+	Call define_ant_pat_8_sub
+	Call define_ant_pat_9_sub
+	Call define_ant_pat_10_sub
+	'--------------------------------------------------------
+
+	Call check_template_and_status_sub
+
+	find_co_type = "PCI"
+	find_co_use_pci_mod = True
+	find_co_use_zcrs_count = True
+	find_co_show_adj_pn = False
+	find_co_incl_bsic	 = False
+	find_co_show_adj_bcch = False
+	find_co_dist = 10
+	find_adj_dist	= 10
+	find_co_pci_mod = 6
+	find_co_pn_inc = 2
+
+	no_sys_nbrs_flag = False
+	snap2grid = False
+	toolbar_position_x = 0
+	toolbar_position_y = 1
+	enable_pairs2check_arrows = false
+	pairs2check_pointer = 0
+	scan_save_cw_flag = False
+	scan_tab_delete_flag = True
+	scan_create_best_server_table_flag = False
+	scan_overshooter_anal_flag = False
+	scan_best_is_strongest_flag = True
+	scan_overshoot_min_dist = 2
+	label_toggle = 4
+	EcIo_or_RSCP = ""
+	SINR_or_RSRP = ""
+	undo_delete_flag = False
+	redraw_cell = False
+	redraw_sym = False
+	redraw_font = False
+	dont_redraw = False
+	g_nl_stats_source_sysind = 1
+	g_nl_stats_target_sysind = 1
+	nbr_enforce_max_size_flag = True
+	nbr_lines_flag = True
+	mutual_flag = True
+	co_toggle_counter = 0
+	check_x_flag = "On"
+	check_cr_flag = "On"
+	set_z_flag = "On"
+	add_nbr_flag = "Off"
+	del_nbr_flag = "Off"
+	undo_shiftx = 0
+	undo_shifty = 0
+	undo_cell_table = "null"
+	old_row_id = 0              ' this sets the value of old_row_id, a parameter used in the NL checking algorithm
+	ch_az_got_sector_flag = "Off"
+	pf_filename = ""
+	pf_bypass = False
+	pf_error = False
+	enable_toolbar = False
+	table_for_2G_scan = ""
+	table_for_3G_scan = ""
+	table_for_4G_scan = ""
+	table_for_nbrlist = ""
+	user_path_scan_2G = "not set"
+	user_path_scan_3G = "not set"
+	user_path_scan_4G = "not set"
+	user_path_nbrlist = "not set"
+	get_table_name_flag = False
+	load_display_only = False
+	load_status_only = False
+	load_templates_only = False
+	load_settings_only = False
+	adj_inc = 0
+	draw_subset_flag = False
+	active_template = ""
+	draw_cells_type = "pies"		'can be pies/hexagons/footprints
+	new_site_pointer = 1
+	hex2cell = hex2cell_default
+	omni_factor = 4
+	g_ibs_factor = 2
+	Z_x = 105000
+	Z_y = 105000
+	load_t_values_only_flag = False
+
+	'FT vars
+	'---------------
+	g_roc_perc = 30
+	g_pie_width = 10
+	g_ignore_dist0 = 20000
+	g_ignore_dist1 = 5000
+	g_border_dist = 10000
+	g_min_dist0 = 100
+	g_area_red_factor = 0.9
+	g_ibs_prop_range = 100
+	g_draw_triangles = False
+	g_big_gap_angle = 80
+	g_cell_overlap_factor = 0.35
+	g_ft_indicate_not_in_nl = False
+	ft_only_onair_flag = True
+	ft_draw_host_flag = False
+	nbr_show_ft_flag = False
+
+
+	'Sets all the default symbols, pens and bushes for each system
+	'----------------------------------------------------------------
+	sym_scan = MakeFontSymbol(41,0,10,"MapInfo Cartographic",0,0)
+	sym_nbr_edit = MakeSymbol(35,0,12)
+	pen_select = makepen(3,2,BLACK)
+	circle_brush = MakeBrush (1,0,16777215)
+	pen_for_search = MakePen (2,54,16711680)
+	font_for_search = MakeFont ("Arial",257,10,Red,White)
+	pen_for_search = MakePen (2,54,16711680)
+	font_for_interferer = MakeFont ("Arial",257,10,Red,White)
+	font_for_server = MakeFont ("Arial",257,10,D_Green,White)
+	pen_for_interferer = MakePen (1,2,0)
+	pen_for_server = MakePen (1,2,0)
+	brush_for_interferer = MakeBrush (2 , L_Red , -1)
+	brush_for_server = MakeBrush (2 , D_Green , -1)
+
+	sym_on_air(1) = MakeSymbol (34, 65280, 8)
+	sym_not_on_air(1) = MakeSymbol (34, 0, 8)
+	pen_on_air(1) = MakePen (1, 2, 0)
+	brush_on_air(1) = MakeBrush ( 15 , 10551200 , -1 )
+	pen_not_on_air(1) = MakePen (1, 2, 0)
+	brush_not_on_air(1) = MakeBrush ( 15 , 14737632 , -1 )
+	font_for_cells(1) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(1) = MakeFont ("Arial",257,6,0,16777215)
+	pen_nbr(1) = MakePen (1, 2, 0)
+	brush_nbr(1) = MakeBrush ( 2 , 16770192 , 16777215 )
+	pen_connector(1) = MakePen (2, 3, 0)
+	pen_host(1) = MakePen (1, 2, 0)
+	brush_host(1) = MakeBrush ( 2 , 16756912 , 16777215 )
+
+	sym_on_air(2) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(2) = MakeSymbol (36, 0, 10)
+	pen_on_air(2) = MakePen (1, 2, 0)
+	brush_on_air(2) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(2) = MakePen (1, 2, 0)
+	brush_not_on_air(2) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(2) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(2) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(2) = MakePen (1, 2, 0)
+	brush_nbr(2) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(2) = MakePen (2, 3, 0)
+	pen_host(2) = MakePen (1, 2, 0)
+	brush_host(2) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(3) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(3) = MakeSymbol (36, 0, 10)
+	pen_on_air(3) = MakePen (1, 2, 0)
+	brush_on_air(3) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(3) = MakePen (1, 2, 0)
+	brush_not_on_air(3) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(3) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(3) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(3) = MakePen (1, 2, 0)
+	brush_nbr(3) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(3) = MakePen (2, 3, 0)
+	pen_host(3) = MakePen (1, 2, 0)
+	brush_host(3) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(4) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(4) = MakeSymbol (36, 0, 10)
+	pen_on_air(4) = MakePen (1, 2, 0)
+	brush_on_air(4) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(4) = MakePen (1, 2, 0)
+	brush_not_on_air(4) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(4) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(4) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(4) = MakePen (1, 2, 0)
+	brush_nbr(4) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(4) = MakePen (2, 3, 0)
+	pen_host(4) = MakePen (1, 2, 0)
+	brush_host(4) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(5) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(5) = MakeSymbol (36, 0, 10)
+	pen_on_air(5) = MakePen (1, 2, 0)
+	brush_on_air(5) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(5) = MakePen (1, 2, 0)
+	brush_not_on_air(5) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(5) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(5) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(5) = MakePen (1, 2, 0)
+	brush_nbr(5) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(5) = MakePen (2, 3, 0)
+	pen_host(5) = MakePen (1, 2, 0)
+	brush_host(5) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(6) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(6) = MakeSymbol (36, 0, 10)
+	pen_on_air(6) = MakePen (1, 2, 0)
+	brush_on_air(6) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(6) = MakePen (1, 2, 0)
+	brush_not_on_air(6) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(6) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(6) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(6) = MakePen (1, 2, 0)
+	brush_nbr(6) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(6) = MakePen (2, 3, 0)
+	pen_host(6) = MakePen (1, 2, 0)
+	brush_host(6) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(7) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(7) = MakeSymbol (36, 0, 10)
+	pen_on_air(7) = MakePen (1, 2, 0)
+	brush_on_air(7) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(7) = MakePen (1, 2, 0)
+	brush_not_on_air(7) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(7) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(7) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(7) = MakePen (1, 2, 0)
+	brush_nbr(7) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(7) = MakePen (2, 3, 0)
+	pen_host(7) = MakePen (1, 2, 0)
+	brush_host(7) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(8) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(8) = MakeSymbol (36, 0, 10)
+	pen_on_air(8) = MakePen (1, 2, 0)
+	brush_on_air(8) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(8) = MakePen (1, 2, 0)
+	brush_not_on_air(8) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(8) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(8) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(8) = MakePen (1, 2, 0)
+	brush_nbr(8) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(8) = MakePen (2, 3, 0)
+	pen_host(8) = MakePen (1, 2, 0)
+	brush_host(8) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(9) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(9) = MakeSymbol (36, 0, 10)
+	pen_on_air(9) = MakePen (1, 2, 0)
+	brush_on_air(9) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(9) = MakePen (1, 2, 0)
+	brush_not_on_air(9) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(9) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(9) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(9) = MakePen (1, 2, 0)
+	brush_nbr(9) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(9) = MakePen (2, 3, 0)
+	pen_host(9) = MakePen (1, 2, 0)
+	brush_host(9) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	sym_on_air(10) = MakeSymbol (36, 65280, 10)
+	sym_not_on_air(10) = MakeSymbol (36, 0, 10)
+	pen_on_air(10) = MakePen (1, 2, 0)
+	brush_on_air(10) = MakeBrush ( 15 , 7405424 , -1 )
+	pen_not_on_air(10) = MakePen (1, 2, 0)
+	brush_not_on_air(10) = MakeBrush ( 15 , 11579568 , -1 )
+	font_for_cells(10) = MakeFont ("Arial",257,6,0,16776960)
+	font_for_sites(10) = MakeFont ("Arial",257,6,0,16776960)
+	pen_nbr(10) = MakePen (1, 2, 0)
+	brush_nbr(10) = MakeBrush ( 2 , 16767072 , 16777215 )
+	pen_connector(10) = MakePen (2, 3, 0)
+	pen_host(10) = MakePen (1, 2, 0)
+	brush_host(10) = MakeBrush ( 2 , 16748688 , 16777215 )
+
+	'Does the range colours for the thematic maps
+	'----------------------------------------------
+	g_range_colour(1) = MakeBrush ( 2 , Red , -1 )
+	g_range_colour(2) = MakeBrush ( 2 , White , -1 )
+	g_range_colour(3) = MakeBrush ( 2 , Yellow , -1 )
+	g_range_colour(4) = MakeBrush ( 2 , Green , -1 )
+	g_range_colour(5) = MakeBrush ( 2 , Cyan , -1 )
+	g_range_colour(6) = MakeBrush ( 2 , Blue , -1 )
+	g_range_colour(7) = MakeBrush ( 2 , White , -1 )
+	g_range_colour(8) = MakeBrush ( 2 , Black , -1 )
+	g_range_colour(9) = MakeBrush ( 2 , Black , -1 )
+	g_range_colour(10) = MakeBrush ( 2 , Black , -1 )
+	g_current_thematic_ranges = "default"
+'---------------------------------------------------
+	
+
+'-------------------- Start of actual program commands---------------------------------
+	Set ProgressBars Off
+
+	Set Distance Units "km"
+
+	Call test_nbrq1_sub
+	If q1_exists = "On" Then Close Table Query1 End If   'This closes Query1 if it is open before we start the program, if we don't close it, it will crash
+
+	'This does the date check
+	'---------------------------------------------------
+	Call date_check_sub
+
+	'This gets a password from the user
+
+	'---------------------------------------------------
+'	ps = "snoop"
+'	Call get_pass_sub (ps)
+
+	'this closes any open neighbor tables
+	'----------------------------------------
+ 	Call prepare_nbr_sub
+
+
+	'This creates a submenu for the quick design option
+	'-------------------------------------------
+	Create Menu "QD" As "" ID 1010
+	Create Menu "QDT" As	"" ID 1012
+	Call set_qd_templates_sub
+
+	'this adds items to the right click menu when a mapper is the front window
+	'---------------------------------------------------
+	Alter Menu ID 17 Remove	ID 1000
+	Alter Menu ID 17 Add	"(-", "Clear Nbrs Table from Mapper"  ID 1000 Calling prepare_nbr_sub
+	Alter Menu ID 17 Remove	ID 1001
+	Alter Menu ID 17 Add	"(-", "Search for Site, Cell or Param"  ID 1001 Calling pre_find_site_sub
+	Alter Menu ID 17 Remove	ID 1002
+	Alter Menu ID 17 Add	"(-", "Scan Data Switch" ID 1002 Calling scan_choose_data_type_sub 
+	Alter Menu ID 17 Remove	ID 1004
+	Alter Menu ID 17 Add	"Manage Scan Tables" ID 1004 Calling scan_manage_scan_tables_sub
+	Alter Menu ID 17 Remove	ID 1005
+	Alter Menu ID 17 Add	"(-", "!Choose New Host on Left Click" ID 1005 Calling choose_host_sub
+	Alter Menu ID 17 Remove	ID 1006
+	Alter Menu ID 17 Add	"!Add Neighbors on Left Click" ID 1006 Calling add_nbr_sub
+	Alter Menu ID 17 Remove	ID 1007
+	Alter Menu ID 17 Add	"!Delete Neighbors on Left Click" ID 1007 Calling del_nbr_sub
+	Alter Menu ID 17 Remove	ID 1008
+	Alter Menu ID 17 Add	"(-", "Quick Design" ID 1008 As "QD"
+
+	Alter Menu Item ID 1005 Check  	'choose_host_sub Check
+	Alter Menu Item ID 1006 UnCheck 	'add_nbr_sub UnCheck
+	Alter Menu Item ID 1007 UnCheck	'del_nbr_sub UnCheck
+	Alter Menu Item ID 1006 Disable	'add_nbr_sub Disable
+	Alter Menu Item ID 1007 Disable	'del_nbr_sub Disable
+	'---------------------------------------------------
+
+	Call toolbar_sub
+
+End Sub
+'------------------------------------------End of Main-----------------------------------------------------------------------------------
+'------------------------------------------End of Main-----------------------------------------------------------------------------------
+'------------------------------------------End of Main-----------------------------------------------------------------------------------
+'------------------------------------------End of Main-----------------------------------------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+' Adds the site templates to the quick design 'QD' menu => Q: what is the 20 for?
+'---------------------------------------------------
+Sub set_qd_templates_sub
+Dim i, j As Integer
+
+
+	For i = 1 to 20
+		j = 1011 + i			'sets the ID of the menu item, will be 1012 to 1032
+		Alter Menu "QDT" Remove ID j
+	Next
+	For i = 1 to 20
+		j = 1011 + i
+		If t_names(i) = "" Then
+			Exit For
+		End If
+		If i = active_template_pointer Then
+			Run Command "Alter Menu ""QDT"" Add ""!+" & t_names(i) & """ ID " & j & " Calling active_template_rightclick_" & i & "_sub"
+		Else
+			Run Command "Alter Menu ""QDT"" Add ""!" & t_names(i) & """ ID " & j & " Calling active_template_rightclick_" & i & "_sub"
+		End If
+	Next
+
+	Alter Menu "QD" Remove ID 1010
+	Alter Menu "QD" Add "Choose Active Template"  ID 1010 As "QDT", "(-" 
+	Alter Menu "QD" Remove ID 1011
+	Alter Menu "QD" Add "!Snap to Grid is ON^Snap to Grid is OFF" ID 1011 Calling snap2grid_sub
+	If snap2grid Then
+		Alter Menu Item ID 1011 Check
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' toggles the add site mode between snap to grid on and off
+'---------------------------------------------------
+Sub snap2grid_sub
+Dim i, j As Integer
+
+
+	If snap2grid Then
+		snap2grid = False
+		Alter Menu Item ID 1011 UnCheck
+	Else
+		snap2grid = True
+		Alter Menu Item ID 1011 Check
+	End If
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this checks if the cr table is open, then closes it, makes sure it exists in the working dir and then either opens it or creates one
+'---------------------------------------------------
+Sub prepare_cr_load_pf_sub
+
+	OnError GoTo closed
+	If TableInfo(change_request, TAB_INFO_NAME) <> "" Then
+		Close Table change_request
+	End If
+returnpoint:
+	If FileExists(pf_user_path + "change_request.tab") = True and FileExists(pf_user_path + "change_request.dat") = True and Ask("RFDT.  Do you want to keep the exisitng project 'change request' table or reset it?","Keep","Reset") = True Then
+		Open Table pf_user_path + "change_request.tab"
+	Else 
+		Create Table change_request (Action char(50), Host_Cell char(20), Parameter char(30), Comment char(100)) File pf_user_path + "change_request.tab" 	
+	End If
+	Exit Sub
+
+closed:
+Resume returnpoint
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this checks if the cr table is open, if it isn't it looks for the files in the working dir and opens it if it is there, if it isn't it creates one, if the cr file is opne, it does nothing
+'---------------------------------------------------
+Sub prepare_cr_sub
+
+OnError GoTo closed
+	If TableInfo(change_request, TAB_INFO_NAME) <> "" Then
+		Exit Sub
+	End If
+returnpoint:
+	If FileExists(pf_user_path + "change_request.tab") And FileExists(pf_user_path + "change_request.dat") Then
+		Open Table pf_user_path + "change_request.tab"
+	Else 
+		Create Table change_request (Action char(50), Host_Cell char(20), Parameter char(30), Comment char(100)) File pf_user_path + "change_request.tab" 	
+	End If
+
+	Exit Sub
+
+closed:
+Resume returnpoint
+End Sub
+'---------------------------------------------------
+
+
+
+
+'---------------------------------------------------
+' this checks if the nbrs_DB table is open, if it isn't it looks for the files in the working dir and opens it if it is there, if it isn't it creates one, if the nbrs_DB file is open, it does nothing
+'---------------------------------------------------
+Sub prepare_nbrs_DB_sub
+
+OnError GoTo closed
+	If TableInfo(nbrs_DB, TAB_INFO_NAME) <> "" Then
+		If PathToDirectory$(TableInfo("nbrs_DB",TAB_INFO_TABFILE)) <> pf_user_path Then		'the file is open but in a different directory, so close it and treat it as if it is closed
+			Close Table nbrs_DB
+		Else
+			Exit Sub
+		End If
+	End If
+returnpoint:
+	If FileExists(pf_user_path + "nbrs_DB.tab") And FileExists(pf_user_path + "nbrs_DB.dat") And FileExists(pf_user_path + "nbrs_DB.ind") Then
+		Open Table pf_user_path + "nbrs_DB.tab"
+	Else 
+		Create Table nbrs_DB (Host_Cell char(100), Host_Sys Integer, Nbr_Cell char(100), Nbr_Sys Integer) File pf_user_path + "nbrs_DB.tab" 	
+		Set Table nbrs_DB Fastedit On
+		Create Index On nbrs_DB (Host_Cell)
+		Create Index On nbrs_DB (Host_Sys)
+		Create Index On nbrs_DB (Nbr_Cell)
+		Create Index On nbrs_DB (Nbr_Sys)
+		Commit Table nbrs_DB
+	End If
+
+	Exit Sub
+'-----------------------
+closed:
+Resume returnpoint
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this is the engine for getting the password
+'---------------------------------------------------
+Sub get_pass_sub (ps as string)
+	dim pass as string
+	
+	Dialog
+	Title "Password Control"
+	Control StaticText
+
+	Title "Please Enter Password:"
+	Control EditText
+	Value pass
+	Into pass
+	Password
+	Control OKButton
+	Control CancelButton
+	If CommandInfo(CMD_INFO_DLG_OK) Then
+		If pass <> ps Then
+			End Program
+		End If
+	End If
+End Sub
+'---------------------------------------------------
+
+
+'---------------------------------------------------
+
+
+
+' this deals with a reset button press during the database import dialog
+'---------------------------------------------------
+Sub reset_sub
+	'goto jump
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+
+'---------------------------------------------------
+Sub pre_prepare_nbr_sub
+
+	Call prepare_nbr_sub
+
+	Set Map Redraw On
+	Set Map Redraw Off
+
+End Sub
+
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' this checks if the neighbor table is open, if it is, it closes it, otherwise it does nothing
+'---------------------------------------------------
+Sub prepare_nbr_sub
+
+OnError GoTo closed
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		Close Table nbrs_RFDT
+		add_nbr_flag = "Off"
+		del_nbr_flag = "Off"
+		If pf_user_path = "" Then
+			pf_error = True
+			Call set_user_path_sub
+			Call main
+		End If
+		Exit Sub
+	End  If	 
+returnpoint:
+
+	Exit Sub
+'---------------------
+closed:
+Resume returnpoint
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this checks if the pairs2check table is open and sets a flag
+'---------------------------------------------------
+Sub check_pairs2check_sub
+
+	pairs2check_statusflag = False
+	OnError GoTo closed
+	If TableInfo(pairs2check, TAB_INFO_NAME) <> "" Then
+		pairs2check_statusflag = True
+		Exit Sub
+	End  If	 
+returnpoint:
+	Exit Sub
+
+closed:
+Resume returnpoint
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+
+'---------------------------------------------------
+' this checks if the neighbor table is open, if it isn't it sets a flag, does the same for query1, query2 and query3
+'---------------------------------------------------
+Sub test_nbrq1_sub
+
+	nbrs_exists = "Off"
+	q1_exists = "Off"
+	q2_exists = "Off"
+	q3_exists = "Off"
+
+OnError GoTo closed1
+	If TableInfo(nbrs_RFDT, TAB_INFO_NAME) <> "" Then
+		nbrs_exists = "On"
+	End  If
+
+returnpoint1:
+	 
+OnError GoTo closed2
+	If TableInfo(query1, TAB_INFO_NAME) <> "" Then
+		q1_exists = "On"
+	End  If
+	 
+returnpoint2:
+
+OnError GoTo closed3
+	If TableInfo(query2, TAB_INFO_NAME) <> "" Then
+		q2_exists = "On"
+	End  If
+	 
+returnpoint3:
+
+OnError GoTo closed4
+	If TableInfo(query3, TAB_INFO_NAME) <> "" Then
+		q3_exists = "On"
+	End  If
+
+	 
+returnpoint4:
+	Exit Sub
+
+closed1:
+Resume returnpoint1
+
+closed2:
+Resume returnpoint2
+
+closed3:
+Resume returnpoint3
+
+closed4:
+Resume returnpoint4
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
+'---------------------------------------------------
+' Saves tables if they have been edited
+'---------------------------------------------------
+Sub save_tables_sub
+Dim i As Integer
+
+
+	For i = 1 to 10
+		If is_open_cells_sys(i) = "On" Then
+			If TableInfo(cells_sys(i), TAB_INFO_EDITED) = True Then
+				Commit Table cells_sys(i)
+			End If
+		End If
+
+		If is_open_sites_sys(i) = "On" Then
+			If TableInfo(sites_sys(i), TAB_INFO_EDITED) = True Then
+				Commit Table sites_sys(i)
+			End If
+		End If
+	Next
+
+	If TableInfo(nbrs_DB, TAB_INFO_EDITED) = True Then
+		Commit Table nbrs_DB
+	End If
+
+	If TableInfo(change_request, TAB_INFO_EDITED) = True Then
+		Commit Table change_request
+	End If
+
+
+End Sub
+'---------------------------------------------------
+
+
+
+
+
