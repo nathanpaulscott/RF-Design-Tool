@@ -5,4 +5,4 @@ It allows you to import a cellular network and it draws it in mapinfo, or in goo
 
 While the coding is definitely not perfect, at least it is quite modular, which helps in maintainability.
 
-I would appreciate if you do not use this without my permission, but I can't stop you.
+I would appreciate if you do not use this without my permission, but Im not going to stop you.
