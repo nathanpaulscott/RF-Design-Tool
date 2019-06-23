@@ -25,9 +25,6 @@ Major: on create a new project, it throws misleading errors, when the extra cols
 
 
 
-abcd
-
-
 NOTE:
 ---------------
 put note in that the omni size reduction factor min = 1, not 0.  At 1 there is no reduction!???,, 0 will crash
@@ -39,8 +36,6 @@ Huawei MR output can be .csv.  Each file has one row per latlon point with the b
 1) import HW MR data
 2) show HW MR data per cell => you click on a cell and it shows a thermatic map of the item.  You will need to set the system and the item from a pulldown list.  The thermatic map can be fixed for EcIo and RSCP and you can store it for other items also
 
-
-testing....
 
 CRash report
 -----------------
