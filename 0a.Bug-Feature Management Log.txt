@@ -38,7 +38,7 @@ Huawei MR output can be .csv.  Each file has one row per latlon point with the b
 2) show HW MR data per cell => you click on a cell and it shows a thermatic map of the item.  You will need to set the system and the item from a pulldown list.  The thermatic map can be fixed for EcIo and RSCP and you can store it for other items also
 
 
-
+testing....
 
 CRash report
 -----------------
