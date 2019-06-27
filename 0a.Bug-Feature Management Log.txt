@@ -1,3 +1,5 @@
+NOTE: this is my ongoing feature/bug tracking list, it has not been updated for a long time as most issues turn out to be from other software.  I am just leaving the uneditied messy version here, if I was to get back into this tool, my first job would be to go through this list and check off items and clean it up.
+
 *********************************************************
 *********************************************************
 CRITICAL
@@ -8,16 +10,16 @@ The dialog to manage scan tabs and save scan tabs as cw files is fxxxed, it does
 *********************************************************
 *********************************************************
 
-FIX THAT fxxxING BUG THAT CAUSES SECTORS TO DISSAPPEAR WHEN MOVING AZIMUTH, IT IS REALLY REALLY fxxxING ANNOYING, JUST fxxxING FIx IT
-FIX THE BUG IMPORTING 3G SCAN DATA WHERE IT CRASHES IF IT DOESN'T FIND A FIELD, LIKE THE LATITUDE COL, JUST GIVE THE ERROR MSG AND QUIT THAT SUB FOR fxxxS SAKE
-FIx THE BUG WHERE IF ACCEIDENTALLY CLICK ON THE IMPORT 2G SCAN DATA, IT CLOSES ALL THE 3G SCAN DATA IMMEDIATELY FOR fxxxS SAKE
+FIX THAT INTERMITTENT BUG THAT CAUSES SECTORS TO DISSAPPEAR WHEN MOVING AZIMUTH, IT IS REALLY ANNOYING, JUST FIX IT
+FIX THE BUG IMPORTING 3G SCAN DATA WHERE IT CRASHES IF IT DOESN'T FIND A FIELD, LIKE THE LATITUDE COL, JUST GIVE THE ERROR MSG AND QUIT
+FIx THE BUG WHERE IF ACCEIDENTALLY CLICK ON THE IMPORT 2G SCAN DATA, IT CLOSES ALL THE 3G SCAN DATA IMMEDIATELY
 
 
 ################################################################################################
 ################################################################################################
 ################################################################################################
 ################################################################################################
-Major: on create a new project, it throws misleading errors, when the extra cols you may have added to the csv file have spaces or other restricted chars in them.  FIX THIS sxxx SO IT GIVES CLEAR ERROR MESSAGES, WASTED A LOT OF TIME TRYING TO WORK THIS OUT.
+Major: on create a new project, it throws misleading errors, when the extra cols you may have added to the csv file have spaces or other restricted chars in them.  FIX THIS SO IT GIVES CLEAR ERROR MESSAGES, WASTED A LOT OF TIME TRYING TO WORK THIS OUT.
 ################################################################################################
 ################################################################################################
 ################################################################################################
@@ -30,7 +32,7 @@ NOTE:
 put note in that the omni size reduction factor min = 1, not 0.  At 1 there is no reduction!???,, 0 will crash
 
 
-Imporvement
+Improvement
 ---------------
 Huawei MR output can be .csv.  Each file has one row per latlon point with the best server by cell_id and many parameters, like EcIo RSCP, number of different types of RABs and some other things.  All we do is make 2 new buttons:
 1) import HW MR data
@@ -71,12 +73,6 @@ apr14
 ----------
 make KML export not export IBS cells, only IBS sites
 make kml export have option to split in to regions or groups based on a user defined column
-
-Come up with a plan to make it handle large project sizes => like 70K cells I have here in Thailand.
-!!!What I see is that when I click on edit a site, it is very slow to respond, the response delay is not the SQL query.  That is very fast.  There is somehting else delaying things, could be screen redraw or something, will require some checking....
-
-
-
 
 
 
