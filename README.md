@@ -4,3 +4,5 @@ This is a custom Mapinfo-SQL-Mapbasic based cellular geo-RF Design, Deployment, 
 It allows you to import a cellular network and it draws it in mapinfo, or in google earth, allows you to import, view, edit neighbours, drive test data, kpi statistics.  It allows you to to do quick planning and many other things.
 
 While the coding is definitely not perfect, at least it is quite modular, which helps in maintainability.
+
+FYI - the code modules are in .mb files, the link file is .mbp
