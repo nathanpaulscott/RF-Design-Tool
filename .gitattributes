@@ -1,1 +1,4 @@
-*.mb linguist-language=Basic
+# Auto detect text files and perform LF normalization
+* text=auto
+* linguist-vendored
+*.mb linguist-vendored=false
